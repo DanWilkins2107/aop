@@ -1,7 +1,6 @@
-import { useState } from "react";
-import type { EventView, MessageRow, NodeView, StagesView } from "../../../../src/shared/api.js";
+import type { EventView, NodeView, StagesView } from "../../../../src/shared/api.js";
 import { api } from "../../lib/api.js";
-import { humanize } from "../../lib/format.js";
+import { humanize, toTarget } from "../../lib/format.js";
 import { FINISHED_STAGES, cardKind } from "../../lib/stageStyle.js";
 import { MoveForm } from "./MoveForm.js";
 import { useAction } from "./useAction.js";
@@ -16,31 +15,6 @@ function entryReason(events: EventView[], via: string): string | null {
   });
   const reason = (event?.data as Record<string, unknown> | undefined)?.["reason"];
   return typeof reason === "string" ? reason : null;
-}
-
-const toTarget = (label: string, target: string | null) => (target ? `${label} → ${humanize(target)}` : label);
-
-function AnswerForm({ node, messages, reload }: { node: NodeView; messages: MessageRow[]; reload: Reload }) {
-  const [answer, setAnswer] = useState("");
-  const { busy, error, run } = useAction(reload);
-  const question = [...messages].reverse().find((m) => m.stage === "ask_human_question" && m.author === "agent");
-  return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault();
-        void run(() => api.answer(node.id, answer));
-      }}
-    >
-      <p className="action-text prose">{question?.body ?? "The agent asked a question."}</p>
-      <textarea rows={3} value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder="Your answer" aria-label="Your answer" />
-      <div className="action-row">
-        <button type="submit" className="btn-primary" disabled={busy || answer.trim() === ""}>
-          {toTarget("Answer", node.return_stage)}
-        </button>
-      </div>
-      {error ? <div className="form-error">{error}</div> : null}
-    </form>
-  );
 }
 
 /** One line saying what's going on, and the one button that deals with it. */
@@ -99,13 +73,11 @@ function Outcomes({ node, reload }: { node: NodeView; reload: Reload }) {
 function Content({
   node,
   stages,
-  messages,
   events,
   reload,
 }: {
   node: NodeView;
   stages: StagesView;
-  messages: MessageRow[];
   events: EventView[];
   reload: Reload;
 }) {
@@ -119,7 +91,7 @@ function Content({
   }
   switch (node.stage) {
     case "ask_human_question":
-      return <AnswerForm node={node} messages={messages} reload={reload} />;
+      return <p className="action-text">The agent asked a question. Answer it in the message box below.</p>;
     case "failed":
       return (
         <SingleAction
@@ -166,11 +138,11 @@ function Content({
   return <p className="action-text muted">This stage has no outcomes. It moves on by itself, or by hand.</p>;
 }
 
-/** What the current stage offers. Keyed by stage so that a half-typed answer can't carry over. */
-export function MovingOn(props: { node: NodeView; stages: StagesView; messages: MessageRow[]; events: EventView[]; reload: Reload }) {
+/** What the current stage offers. */
+export function MovingOn(props: { node: NodeView; stages: StagesView; events: EventView[]; reload: Reload }) {
   return (
-    <section className="section moving-on" aria-label="Moving on" key={props.node.stage}>
+    <div className="panel-part moving-on" aria-label="Moving on" role="group" key={props.node.stage}>
       <Content {...props} />
-    </section>
+    </div>
   );
 }

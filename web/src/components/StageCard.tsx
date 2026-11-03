@@ -19,7 +19,7 @@ export function StageCard({ data }: NodeProps<StageCardNode>) {
         style={{
           background: look.background,
           color: look.text,
-          border: `1px ${kind === "invalidated" ? "dashed" : "solid"} ${look.border}`,
+          border: `${look.borderWidth}px ${kind === "invalidated" ? "dashed" : "solid"} ${look.border}`,
           ...(look.accent ? { borderLeft: `5px solid ${look.accent}` } : {}),
           opacity: look.opacity,
         }}

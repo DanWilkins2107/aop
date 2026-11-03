@@ -211,17 +211,19 @@ label {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 16px;
-  border-bottom: 1px solid var(--border);
+  padding: 7px 16px;
+  background: #1f2226;
+  color: #e9ecef;
   flex: 0 0 auto;
 }
 .brand {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-weight: 600;
-  font-size: 13px;
-  color: var(--text);
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.6px;
+  color: #f1f3f5;
 }
 .brand:hover {
   text-decoration: none;
@@ -237,12 +239,15 @@ label {
 .quiet-link:hover {
   color: var(--text);
 }
-.live {
-  font-size: 12px;
-  color: var(--muted);
+.topbar .quiet-link {
+  color: #adb5bd;
 }
-.live-offline {
-  color: var(--danger);
+.topbar .quiet-link:hover {
+  color: #f1f3f5;
+}
+.connection-notice {
+  font-size: 12px;
+  color: #adb5bd;
 }
 .main {
   flex: 1;
@@ -547,16 +552,72 @@ label {
   border-radius: 50%;
   background: currentColor;
 }
+.card-node .claim-dot {
+  width: 8px;
+  height: 8px;
+  background: #2f9e44;
+  border: 1px solid #ffffff;
+}
 .card-handle {
   opacity: 0;
   pointer-events: none;
 }
 
-/* ---- node page: one column, sections divided by a line ---- */
+/* ---- node page: one column of broad cards, with smaller parts inside ---- */
 
-.node-meta {
-  margin-top: 8px;
-  padding-bottom: 14px;
+.node-canvas {
+  flex: 1 0 auto;
+  background: var(--canvas);
+}
+.node-page {
+  max-width: 860px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.panel > h2 {
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+.panel-part {
+  border-top: 1px solid var(--hairline);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+.pipeline-part > summary,
+.detail-part > summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  user-select: none;
+}
+.pipeline-part[open] > summary {
+  margin-bottom: 8px;
+}
+.pipeline-note {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+.detail-part {
+  border-top: 1px solid var(--hairline);
+  padding: 8px 0;
+}
+.detail-part:last-child {
+  padding-bottom: 0;
+}
+.detail-status {
+  margin-left: 8px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.detail-body {
+  padding: 8px 0 4px;
 }
 .title-dead {
   color: var(--muted);
@@ -613,19 +674,6 @@ label {
 .section-text {
   margin: 0;
 }
-.section > h2 {
-  margin-bottom: 6px;
-}
-details.section > summary {
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-  user-select: none;
-}
-details.section[open] > summary {
-  margin-bottom: 8px;
-}
-
 /* ---- pipeline ---- */
 
 .pipeline-scroll {
@@ -647,6 +695,9 @@ details.section[open] > summary {
 .moving-on > div > .action-row:first-child {
   margin-top: 0;
 }
+.panel-part.moving-on .action-text:last-child {
+  margin-bottom: 0;
+}
 .action-text {
   margin: 0 0 8px;
 }
@@ -657,10 +708,15 @@ p.action-text:last-child {
 /* ---- messages ---- */
 
 .message {
-  padding: 6px 0 8px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
 }
-.message + .message {
-  border-top: 1px solid var(--hairline);
+.message-agent {
+  background: #e7f1fc;
+  border-color: #c9dcf2;
 }
 .message-meta {
   display: flex;
@@ -672,25 +728,19 @@ p.action-text:last-child {
 .message-author {
   font-weight: 600;
 }
+.message-context {
+  color: #495057;
+}
 .message-body {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 .composer {
-  padding-top: 6px;
+  margin-bottom: 12px;
 }
 
-/* ---- admin ---- */
+/* ---- details ---- */
 
-.admin-row {
-  padding: 8px 0;
-}
-.admin-row + .admin-row {
-  border-top: 1px solid var(--hairline);
-}
-.admin-row > .action-row:first-of-type {
-  margin-top: 0;
-}
 .edge-list {
   list-style: none;
   margin: 0 0 8px;

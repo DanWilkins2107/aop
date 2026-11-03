@@ -8,6 +8,9 @@ export function humanize(name: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
+/** A button's label, with where it leads when that's known. */
+export const toTarget = (label: string, target: string | null) => (target ? `${label} → ${humanize(target)}` : label);
+
 /** Every stage a type lists, grouped by type, for a dropdown. Values are JSON of `{ stage, type }`. */
 export function stageOptionGroups(stages: StagesView): { group: string; options: { label: string; value: string }[] }[] {
   return stages.types.map((type) => ({

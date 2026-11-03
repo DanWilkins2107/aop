@@ -24,7 +24,7 @@ export function Description({ node, reload }: { node: NodeView; reload: () => Pr
   }
 
   return (
-    <section className="section">
+    <section className="panel" aria-label="Description">
       <div className="section-head">
         <h2>Description</h2>
         {draft === null ? (

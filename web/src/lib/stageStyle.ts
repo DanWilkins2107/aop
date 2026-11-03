@@ -39,12 +39,16 @@ export function isInvalidated(node: NodeView): boolean {
   return node.stage === "invalidated" || node.invalidated_by_parent;
 }
 
-/** `inactive` is everything that isn't for picking up: blocked, held or finished. */
-export type CardKind = "human" | "agent" | "inactive" | "invalidated";
+/**
+ * `inactive` is what isn't for picking up right now: blocked, held or done. `broken_down` and
+ * `invalidated` recede further, because nothing more will happen on those cards.
+ */
+export type CardKind = "human" | "agent" | "inactive" | "broken_down" | "invalidated";
 
 export interface CardLook {
   background: string;
   border: string;
+  borderWidth: number;
   /** A small mark of the stage's colour, on cards that aren't filled with it. */
   accent: string | null;
   text: string;
@@ -55,6 +59,9 @@ export interface CardLook {
 const INK = "#1f2226";
 const SURFACE = "#ffffff";
 const INACTIVE_OPACITY = 0.7;
+const RECEDED_OPACITY = 0.45;
+/** Work in progress or waiting on a human, which the eye should find first. */
+const LIVE_BORDER_WIDTH = 2;
 
 /** The fill that means a human needs to act: the stage's own colour, without any alpha from config. */
 export const fillOf = (color: string) => mix(color, color, 0);
@@ -66,14 +73,18 @@ export function lookOf(kind: CardKind, color: string): CardLook {
   switch (kind) {
     case "human": {
       const background = fillOf(color);
-      return { background, border: mix(background, "#000000", 0.2), accent: null, text: readableText(background), opacity: 1, struck: false };
+      return { background, border: mix(background, "#000000", 0.45), borderWidth: LIVE_BORDER_WIDTH, accent: null, text: readableText(background), opacity: 1, struck: false };
     }
-    case "agent":
-      return { background: SURFACE, border: "#d5d9de", accent: accentOf(color), text: INK, opacity: 1, struck: false };
+    case "agent": {
+      const accent = accentOf(color);
+      return { background: SURFACE, border: accent, borderWidth: LIVE_BORDER_WIDTH, accent, text: INK, opacity: 1, struck: false };
+    }
     case "inactive":
-      return { background: "#e9ecef", border: "#ced4da", accent: null, text: "#343a40", opacity: INACTIVE_OPACITY, struck: false };
+      return { background: "#e9ecef", border: "#ced4da", borderWidth: 1, accent: null, text: "#343a40", opacity: INACTIVE_OPACITY, struck: false };
+    case "broken_down":
+      return { ...lookOf("inactive", color), opacity: RECEDED_OPACITY };
     case "invalidated":
-      return { background: SURFACE, border: "#adb5bd", accent: null, text: "#5c636a", opacity: 1, struck: true };
+      return { background: SURFACE, border: "#adb5bd", borderWidth: 1, accent: null, text: "#343a40", opacity: RECEDED_OPACITY, struck: true };
   }
 }
 
@@ -81,6 +92,7 @@ export function lookOf(kind: CardKind, color: string): CardLook {
 export function cardKind(node: NodeView): CardKind {
   if (isInvalidated(node)) return "invalidated";
   if (!node.stage_exists) return "human";
+  if (node.stage === "broken_down") return "broken_down";
   if (FINISHED_STAGES.includes(node.stage) || node.blocked_by.length > 0 || node.held) return "inactive";
   return node.turn === "human" ? "human" : "agent";
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { EdgeRow, EventView, NodeView, StagesView } from "../../../../src/shared/api.js";
 import { ClaimMark } from "../../components/ClaimMark.js";
 import { Dialog } from "../../components/Dialog.js";
@@ -90,7 +90,20 @@ function ClaimControls({ node, reload }: { node: NodeView; reload: Reload }) {
   );
 }
 
-export function Admin({
+/** A small part of the Details card, closed until wanted. `status` keeps its state readable while closed. */
+function Part({ title, status, children }: { title: string; status?: ReactNode; children: ReactNode }) {
+  return (
+    <details className="detail-part">
+      <summary>
+        {title}
+        {status !== undefined ? <span className="detail-status">{status}</span> : null}
+      </summary>
+      <div className="detail-body">{children}</div>
+    </details>
+  );
+}
+
+export function Details({
   node,
   edges,
   nodes,
@@ -111,22 +124,19 @@ export function Admin({
   const canBlock = !FINISHED_STAGES.includes(node.stage) && !invalidated && node.stage !== "externally_blocked";
 
   return (
-    <div className="admin">
-      <div className="admin-row">
-        <h3>Edges</h3>
+    <section className="panel" aria-label="Details">
+      <h2>Details</h2>
+      <Part title="Edges" status={edges.length}>
         <Edges node={node} edges={edges} nodes={nodes} reload={reload} />
-      </div>
-      <div className="admin-row">
-        <h3>History</h3>
+      </Part>
+      <Part title="History" status={events.length}>
         <History events={events} titleOf={titleOf} />
-      </div>
-      <div className="admin-row">
-        <h3>Claim</h3>
+      </Part>
+      <Part title="Claim" status={node.claimed_by ?? "none"}>
         <ClaimControls node={node} reload={reload} />
-      </div>
+      </Part>
       {!invalidated ? (
-        <div className="admin-row">
-          <h3>Invalidate or block</h3>
+        <Part title="Invalidate or block">
           <div className="action-row">
             <ReasonButton
               label="Invalidate…"
@@ -150,14 +160,13 @@ export function Admin({
               />
             ) : null}
           </div>
-        </div>
+        </Part>
       ) : null}
       {node.stage_exists ? (
-        <div className="admin-row">
-          <h3>Move by hand</h3>
+        <Part title="Move by hand">
           <MoveForm node={node} stages={stages} reload={reload} />
-        </div>
+        </Part>
       ) : null}
-    </div>
+    </section>
   );
 }

@@ -31,7 +31,7 @@ describe("colour", () => {
 
   it("keeps every card's text legible, whatever the colour", () => {
     for (const color of COLORS) {
-      for (const kind of ["human", "agent", "inactive", "invalidated"] as const) {
+      for (const kind of ["human", "agent", "inactive", "broken_down", "invalidated"] as const) {
         const look = lookOf(kind, color);
         expect(contrast(look.text, look.background)).toBeGreaterThanOrEqual(4.5);
       }
@@ -51,19 +51,33 @@ describe("colour", () => {
     expect(lookOf("human", "#12b886aa").background).toBe("#12b886");
   });
 
-  it("greys out inactive cards whatever the colour, and strikes invalidated ones without fading them", () => {
+  it("greys out inactive cards whatever the colour, and fades finished-for-good ones further", () => {
     const inactive = lookOf("inactive", "#57b56f");
     expect(inactive.accent).toBeNull();
     expect(inactive.opacity).toBeLessThan(1);
     expect(lookOf("inactive", "#e91e63")).toEqual(inactive);
     const invalidated = lookOf("invalidated", "#57b56f");
     expect(invalidated.struck).toBe(true);
-    expect(invalidated.opacity).toBe(1);
+    expect(invalidated.opacity).toBeLessThan(inactive.opacity);
+    const brokenDown = lookOf("broken_down", "#57b56f");
+    expect(brokenDown.opacity).toBe(invalidated.opacity);
+    expect(brokenDown.accent).toBeNull();
+  });
+
+  it("gives cards that are live a stronger border in the stage's colour family", () => {
+    for (const color of ["#ffc107", "#7088e0", "#35a98b", "#d96aa6", "#4263eb"]) {
+      const agent = lookOf("agent", color);
+      expect(agent.borderWidth).toBeGreaterThan(lookOf("inactive", color).borderWidth);
+      expect(contrast(agent.border, agent.background)).toBeGreaterThanOrEqual(3);
+      const human = lookOf("human", color);
+      expect(human.borderWidth).toBeGreaterThan(lookOf("inactive", color).borderWidth);
+      expect(contrast(human.border, human.background)).toBeGreaterThanOrEqual(2);
+    }
   });
 
   it("uses a stage's colour as a fill only when a human needs to act", () => {
     expect(lookOf("human", "#e91e63").background).not.toBe(lookOf("human", "#12b886").background);
-    for (const kind of ["agent", "inactive", "invalidated"] as const) {
+    for (const kind of ["agent", "inactive", "broken_down", "invalidated"] as const) {
       expect(lookOf(kind, "#e91e63").background).toBe(lookOf(kind, "#12b886").background);
     }
   });
@@ -76,7 +90,7 @@ describe("default stage colours", () => {
 
   it("stay legible on every card", () => {
     for (const color of defaults) {
-      for (const kind of ["human", "agent", "inactive", "invalidated"] as const) {
+      for (const kind of ["human", "agent", "inactive", "broken_down", "invalidated"] as const) {
         const look = lookOf(kind, color);
         expect(contrast(look.text, look.background)).toBeGreaterThanOrEqual(4.5);
       }
@@ -260,7 +274,7 @@ describe("card kind", () => {
 
   it("greys out what isn't for picking up, even on a human's turn, and strikes out dead ones", () => {
     expect(cardKind(nodeAt("done", { turn: null }))).toBe("inactive");
-    expect(cardKind(nodeAt("broken_down", { turn: null }))).toBe("inactive");
+    expect(cardKind(nodeAt("broken_down", { turn: null }))).toBe("broken_down");
     expect(cardKind(nodeAt("beta", { turn: "human", blocked_by: ["x"] }))).toBe("inactive");
     expect(cardKind(nodeAt("beta", { turn: "human", held: true }))).toBe("inactive");
     expect(cardKind(nodeAt("invalidated", { turn: null }))).toBe("invalidated");
@@ -415,16 +429,22 @@ describe("history text", () => {
 });
 
 describe("waiting and hidden cards", () => {
-  it("greys blocked, held, done and broken_down cards to the same opacity", () => {
+  it("greys blocked, held and done cards to one opacity, and recedes broken_down and invalidated further", () => {
     const opacity = (node: NodeView) => cardLook(node, null).opacity;
     const greyed = [
       nodeAt("beta", { held: true }),
       nodeAt("beta", { blocked_by: ["x"] }),
       nodeAt("done", { turn: null }),
-      nodeAt("broken_down", { turn: null }),
     ].map(opacity);
     expect(new Set(greyed).size).toBe(1);
     expect(greyed[0]).toBeLessThan(1);
+    const receded = [
+      nodeAt("broken_down", { turn: null }),
+      nodeAt("invalidated", { turn: null }),
+      nodeAt("beta", { invalidated_by_parent: true }),
+    ].map(opacity);
+    expect(new Set(receded).size).toBe(1);
+    expect(receded[0]).toBeLessThan(greyed[0]!);
     expect(opacity(nodeAt("beta"))).toBe(1);
   });
 
