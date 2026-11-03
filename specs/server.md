@@ -20,11 +20,11 @@ Every table has `id TEXT PRIMARY KEY` and `created_at TEXT NOT NULL`. All foreig
 | `events` | `node_id` FK; `actor` CHECK in `human`, `agent`, `system`; `kind` NOT NULL; `data` JSON NOT NULL. Append-only: triggers reject UPDATE and DELETE |
 | `runs` | `node_id` FK; `stage` NOT NULL; `status` CHECK in `running`, `exited`; `pid` nullable; `exit_code` nullable; `log_path` NOT NULL; `ended_at` nullable; only one `running` row per node (partial UNIQUE index) |
 
-`type` and `stage` are plain text because they come from config. Nodes and messages are never deleted.
+`type` and `stage` are plain text because they come from config. Nodes and messages are never deleted, except when their whole project is deleted.
 
 ## Edges
 - `subtask`: parent to child.
-- `blocks`: AOP won't start an agent on a node while a node blocking it is unfinished. An edge that would create a `blocks` cycle is refused. `done` and `broken_down` count as finished. An `invalidated` blocker still blocks, so a human has to decide what to do.
+- `blocks`: AOP won't start an agent on a node while a node blocking it is unfinished. An edge that would create a `blocks` cycle is refused. `done` counts as finished. An `invalidated` blocker still blocks, so a human has to decide what to do.
 
 ## Search
 `aop search <query>` is how agents find related work. It uses SQLite full-text search over node titles, bodies, messages and invalidation reasons. It covers the current project, or all of them with `--all`. Results show each node's stage, and invalidated nodes are included.

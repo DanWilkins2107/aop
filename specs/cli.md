@@ -6,7 +6,7 @@
 AOP sets `AOP_NODE_ID` when it launches an agent, so commands act on that agent's node without an ID.
 
 ```
-aop show [<id>]             # description, messages, links, available outcomes
+aop context [<id>]          # where the node sits in the tree, its description, messages, links and outcomes
 aop next <outcome>
 aop ask "..."
 aop message "..." [--node <id>]
@@ -15,6 +15,7 @@ aop search <query>
 aop node create --title ... [--body ...] [--parent ...] [--type ... | --stage ...]
 aop node edit [<id>] [--title ...] [--body ...]
 aop edge add blocks <from> <to>
+aop edge remove blocks <from> <to>
 aop split start
 aop split finish
 ```
