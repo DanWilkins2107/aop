@@ -62,7 +62,7 @@ function ReasonButton({
   );
 }
 
-/** Only a human's claim can be released here: an agent's ends with its run. */
+/** A human can release their own claim here. An agent's ends with its run, which can be stopped. */
 function ClaimControls({ node, reload }: { node: NodeView; reload: Reload }) {
   const { busy, error, run } = useAction(reload);
   return (
@@ -76,7 +76,12 @@ function ClaimControls({ node, reload }: { node: NodeView; reload: Reload }) {
             </button>
           </>
         ) : null}
-        {node.claimed_by === null ? (
+        {node.run_id ? (
+          <button type="button" disabled={busy} onClick={() => void run(() => api.stopRun(node.run_id as string))}>
+            Stop run
+          </button>
+        ) : null}
+        {node.claimed_by === null && !node.run_id ? (
           <>
             <span className="muted">Not claimed</span>
             <button type="button" disabled={busy} onClick={() => void run(() => api.claim(node.id))}>
@@ -85,6 +90,9 @@ function ClaimControls({ node, reload }: { node: NodeView; reload: Reload }) {
           </>
         ) : null}
       </div>
+      {node.run_id ? (
+        <p className="field-hint">The node stays on this stage, claimed by you. Release the claim to start the stage again.</p>
+      ) : null}
       {error ? <div className="form-error">{error}</div> : null}
     </>
   );

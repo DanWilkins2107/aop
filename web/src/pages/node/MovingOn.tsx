@@ -94,13 +94,22 @@ function Content({
       return <p className="action-text">The agent asked a question. Answer it in the message box below.</p>;
     case "failed":
       return (
-        <SingleAction
-          text={["The agent stopped without finishing.", entryReason(events, "fail")].filter(Boolean).join(" ")}
-          label={toTarget("Retry", node.return_stage)}
-          primary
-          action={() => api.retry(node.id)}
-          reload={reload}
-        />
+        <>
+          <SingleAction
+            text={["The agent stopped without finishing.", entryReason(events, "fail")].filter(Boolean).join(" ")}
+            label={toTarget("Retry", node.return_stage)}
+            primary
+            action={() => api.retry(node.id)}
+            reload={reload}
+          />
+          {node.last_run_id ? (
+            <p className="action-text">
+              <a className="inline-link" href={`/api/runs/${encodeURIComponent(node.last_run_id)}/log`} target="_blank" rel="noreferrer">
+                View log
+              </a>
+            </p>
+          ) : null}
+        </>
       );
     case "externally_blocked":
       return (

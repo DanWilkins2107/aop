@@ -82,6 +82,7 @@ export const api = {
   addMessage: (id: string, body: string) => send<MessageRow>("POST", `${nodePath(id)}/messages`, { body }),
   addEdge: (sourceId: string, targetId: string, kind: EdgeRow["kind"]) =>
     send<EdgeRow>("POST", `${nodePath(sourceId)}/edges`, { target_id: targetId, kind }),
+  stopRun: (runId: string) => send<NodeView>("POST", `/runs/${encodeURIComponent(runId)}/stop`),
   removeEdge: (edgeId: string) => send<EdgeRow>("DELETE", `/edges/${encodeURIComponent(edgeId)}`),
 };
 

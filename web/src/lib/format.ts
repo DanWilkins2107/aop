@@ -32,6 +32,14 @@ export function timeAgo(iso: string, now = Date.now()): string {
   return `${Math.round(hours / 24)}d ago`;
 }
 
+const RUN_ENDINGS: Record<string, string> = {
+  reported: "it reported an outcome",
+  failed: "it didn't finish",
+  stopped: "it was stopped",
+  held: "a parent was invalidated",
+  shutdown: "AOP closed",
+};
+
 function text(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
@@ -83,6 +91,10 @@ export function describeEvent(event: EventView, titleOf: (id: string) => string)
       return `Claimed by ${data["holder"] === "agent" ? "an agent run" : "a human"}`;
     case "claim_released":
       return `Claim released by ${data["holder"] === "agent" ? "an agent run" : "a human"}`;
+    case "run_started":
+      return `Agent run ${text(data["run_id"]).slice(0, 8)} started`;
+    case "run_ended":
+      return `Agent run ${text(data["run_id"]).slice(0, 8)} ended: ${RUN_ENDINGS[text(data["reason"])] ?? text(data["reason"])}`;
     case "link_added":
       return `${data["kind"] === "pr" ? "PR" : "Ticket"} linked: ${text(data["url"])}`;
     case "edge_added":

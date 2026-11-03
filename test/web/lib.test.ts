@@ -83,6 +83,14 @@ describe("colour", () => {
   });
 });
 
+describe("run history", () => {
+  const event = (kind: string, data: unknown) => ({ id: "e", created_at: "", node_id: "n", actor: "system" as const, kind, data });
+  it("names runs by the start of their ID, and says how they ended", () => {
+    expect(describeEvent(event("run_started", { run_id: "12345678-aaaa" }), String)).toBe("Agent run 12345678 started");
+    expect(describeEvent(event("run_ended", { run_id: "12345678-aaaa", reason: "stopped" }), String)).toBe("Agent run 12345678 ended: it was stopped");
+  });
+});
+
 describe("default stage colours", () => {
   const demo = parse(readFileSync("demo/config/stages.yaml", "utf8")) as { stages: Record<string, { color: string }> };
   const BUILT_INS = ["done", "broken_down", "invalidated", "scheduled", "ask_human_question", "failed", "externally_blocked", "splitting"];
@@ -108,6 +116,8 @@ describe("default stage colours", () => {
 
 function nodeAt(stage: string, extra: Partial<NodeView> = {}): NodeView {
   return {
+    run_id: null,
+    last_run_id: null,
     id: "n",
     created_at: "2026-01-01T00:00:00Z",
     project_id: "p",
