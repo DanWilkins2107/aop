@@ -411,6 +411,7 @@ label {
   flex: 1;
   min-height: 0;
   position: relative;
+  background: var(--bg);
 }
 .graph-filter {
   display: inline-flex;
@@ -450,11 +451,11 @@ label {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  box-shadow: 0 1px 3px rgba(20, 22, 26, 0.18);
+  box-shadow: 0 1px 3px rgba(20, 22, 26, 0.14);
   transition: box-shadow 0.12s ease;
 }
 .card-node:hover .card-body {
-  box-shadow: 0 3px 12px rgba(20, 22, 26, 0.32);
+  box-shadow: 0 3px 12px rgba(20, 22, 26, 0.24);
 }
 .card-link {
   position: absolute;
@@ -503,6 +504,9 @@ label {
 .card-title-short {
   -webkit-line-clamp: 1;
 }
+.card-title-struck {
+  text-decoration: line-through;
+}
 .card-claim {
   font-size: 10.5px;
   font-weight: 600;
@@ -512,53 +516,6 @@ label {
 .card-handle {
   opacity: 0;
   pointer-events: none;
-}
-
-.legend {
-  background: rgba(255, 255, 255, 0.96);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 12px;
-  font-size: 12px;
-  width: 210px;
-  box-shadow: 0 1px 4px rgba(20, 22, 26, 0.08);
-}
-.legend-toggle {
-  display: flex;
-  justify-content: space-between;
-  width: 100%;
-  padding: 0;
-  border: none;
-  background: none;
-  font-weight: 700;
-  font-size: 12px;
-}
-.legend-body {
-  margin-top: 4px;
-  max-height: calc(100vh - 190px);
-  overflow-y: auto;
-}
-.legend-heading {
-  font-weight: 700;
-  color: var(--muted);
-  font-size: 11px;
-  margin: 9px 0 4px;
-}
-.legend-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 7px;
-  margin-bottom: 3px;
-}
-.legend-row svg {
-  flex: 0 0 auto;
-}
-.legend-swatch {
-  width: 14px;
-  height: 12px;
-  border-radius: 3px;
-  flex: 0 0 auto;
 }
 
 /* ---- node page ---- */
@@ -762,7 +719,7 @@ p.action-text:last-child {
 }
 .question {
   background: #fff4e6;
-  border-left: 4px solid #ff9800;
+  border-left: 4px solid #eba23f;
   border-radius: 4px;
   padding: 7px 10px;
   margin-bottom: 8px;

@@ -31,12 +31,12 @@ export function StageCard({ data }: NodeProps<StageCardNode>) {
         style={{
           background: look.background,
           color: look.text,
-          border: `2px solid ${look.border}`,
-          borderLeft: look.accent ? `6px solid ${look.accent}` : `2px solid ${look.border}`,
+          border: `${look.borderWidth}px ${look.borderStyle} ${look.border}`,
+          ...(look.accent ? { borderLeft: `6px solid ${look.accent}` } : {}),
           opacity: look.opacity,
         }}
       >
-        <div className={`card-title${node.claimed_by ? " card-title-short" : ""}`}>{node.title}</div>
+        <div className={`card-title${node.claimed_by ? " card-title-short" : ""}${look.struck ? " card-title-struck" : ""}`}>{node.title}</div>
         {node.claimed_by ? (
           <div className="card-claim" data-claimed-by={node.claimed_by}>
             {node.claimed_by === "agent" ? "Agent run holds this" : "Claimed by a human"}

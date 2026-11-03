@@ -1,8 +1,7 @@
-import { Background, Controls, MarkerType, Panel, ReactFlow, useReactFlow } from "@xyflow/react";
+import { Background, Controls, MarkerType, ReactFlow, useReactFlow } from "@xyflow/react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ErrorNotice } from "../components/ErrorNotice.js";
-import { Legend } from "../components/Legend.js";
 import { NewNodeDialog } from "../components/NewNodeDialog.js";
 import { RoutedEdge, type RoutedEdgeType } from "../components/RoutedEdge.js";
 import { StageCard, type StageCardNode } from "../components/StageCard.js";
@@ -17,9 +16,9 @@ const edgeTypes = { routed: RoutedEdge };
 const SUBTASK_STROKE = "#868e96";
 const BLOCKS_STROKE = "#e03131";
 
-// Keeps cards out from under the legend, which sits top right.
+// The left side clears the zoom controls.
 const FIT = {
-  padding: { top: "28px", right: "244px", bottom: "28px", left: "56px" },
+  padding: { top: "28px", right: "56px", bottom: "28px", left: "56px" },
   maxZoom: 1,
 } as const;
 
@@ -170,9 +169,6 @@ export function GraphPage() {
             <Background gap={22} size={1.5} color="#d5d9de" />
             <Controls showInteractive={false} position="bottom-left" />
             <FitWhenCountChanges count={flowNodes.length} />
-            <Panel position="top-right">
-              <Legend stages={data.stages} nodes={data.nodes} />
-            </Panel>
           </ReactFlow>
         ) : null}
       </div>

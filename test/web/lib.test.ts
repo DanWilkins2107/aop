@@ -1,10 +1,12 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { parse } from "yaml";
 import type { EventView, NodeView, TypeView } from "../../src/shared/api.js";
 import { contrast, ensureBright, luminance, parseHex, readableText, visibleOn } from "../../web/src/lib/color.js";
 import { CARD_HEIGHT, CARD_WIDTH, layoutGraph, smoothPath } from "../../web/src/lib/layout.js";
 import { pipelineFor, shapeOf } from "../../web/src/lib/pipeline.js";
 import { describeEvent, humanize, stageOptionGroups } from "../../web/src/lib/format.js";
-import { cardKind, cardLook, isInvalidated, lookOf } from "../../web/src/lib/stageStyle.js";
+import { cardKind, cardLook, isInvalidated, lookOf, stageColor } from "../../web/src/lib/stageStyle.js";
 
 const COLORS = ["#ffc107", "#cddc39", "#000000", "#ffffff", "#123", "#4263eb", "#e91e63", "#808080", "#12b886aa"];
 
@@ -33,11 +35,62 @@ describe("colour", () => {
 
   it("keeps every card's text and pill legible, whatever the colour", () => {
     for (const color of COLORS) {
-      for (const kind of ["bright", "dark", "muted", "dimmed"] as const) {
+      for (const kind of ["human", "agent", "finished", "invalidated"] as const) {
         const look = lookOf(kind, color);
         expect(contrast(look.text, look.background)).toBeGreaterThanOrEqual(4.5);
         expect(contrast(look.pillText, look.pillBackground)).toBeGreaterThanOrEqual(4.5);
       }
+    }
+  });
+
+  it("keeps agent cards white, with an accent that shows", () => {
+    for (const color of COLORS) {
+      const look = lookOf("agent", color);
+      expect(look.background).toBe("#ffffff");
+      expect(contrast(look.accent!, "#ffffff")).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("keeps human cards coloured, and softer than the stage's own colour", () => {
+    for (const color of ["#ffc107", "#4263eb", "#e91e63", "#12b886"]) {
+      const { background } = lookOf("human", color);
+      expect(background).not.toBe("#ffffff");
+      expect(luminance(background)).toBeGreaterThan(luminance(color));
+    }
+  });
+
+  it("tells settled cards apart from live ones and from each other", () => {
+    const finished = lookOf("finished", "#57b56f");
+    const invalidated = lookOf("invalidated", "#8f969d");
+    expect(finished.background).not.toBe("#ffffff");
+    expect(finished.accent).toBeNull();
+    expect(invalidated.borderStyle).toBe("dashed");
+    expect(invalidated.struck).toBe(true);
+    expect(finished.struck).toBe(false);
+  });
+});
+
+describe("default stage colours", () => {
+  const demo = parse(readFileSync("demo/config/stages.yaml", "utf8")) as { stages: Record<string, { color: string }> };
+  const BUILT_INS = ["done", "broken_down", "invalidated", "scheduled", "ask_human_question", "failed", "externally_blocked", "splitting"];
+  const defaults = [...Object.values(demo.stages).map((s) => s.color), ...BUILT_INS.map((s) => stageColor(s, null))];
+
+  it("stay legible as pills and on every card", () => {
+    for (const color of defaults) {
+      expect(contrast(readableText(color), color)).toBeGreaterThanOrEqual(4.5);
+      for (const kind of ["human", "agent", "finished", "invalidated"] as const) {
+        const look = lookOf(kind, color);
+        expect(contrast(look.text, look.background)).toBeGreaterThanOrEqual(4.5);
+        expect(contrast(look.pillText, look.pillBackground)).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  it("are all different, and none is a fully saturated colour", () => {
+    expect(new Set(defaults).size).toBe(defaults.length);
+    for (const color of defaults) {
+      const { r, g, b } = parseHex(color)!;
+      expect(Math.max(r, g, b) - Math.min(r, g, b)).toBeLessThan(180);
     }
   });
 });
@@ -197,22 +250,22 @@ describe("pipeline", () => {
 });
 
 describe("card kind", () => {
-  it("is bright for any human turn, including built-ins it doesn't know", () => {
-    expect(cardKind(nodeAt("anything", { turn: "human" }))).toBe("bright");
-    expect(cardKind(nodeAt("externally_blocked", { turn: "human" }))).toBe("bright");
-    expect(cardKind(nodeAt("splitting", { turn: "agent" }))).toBe("dark");
-    expect(cardKind(nodeAt("scheduled", { turn: null }))).toBe("dark");
+  it("is coloured for any human turn, including built-ins it doesn't know", () => {
+    expect(cardKind(nodeAt("anything", { turn: "human" }))).toBe("human");
+    expect(cardKind(nodeAt("externally_blocked", { turn: "human" }))).toBe("human");
+    expect(cardKind(nodeAt("splitting", { turn: "agent" }))).toBe("agent");
+    expect(cardKind(nodeAt("scheduled", { turn: null }))).toBe("agent");
   });
 
-  it("mutes finished nodes and dims dead ones", () => {
-    expect(cardKind(nodeAt("done", { turn: null }))).toBe("muted");
-    expect(cardKind(nodeAt("broken_down", { turn: null }))).toBe("muted");
-    expect(cardKind(nodeAt("invalidated", { turn: null }))).toBe("dimmed");
-    expect(cardKind(nodeAt("beta", { turn: "human", invalidated_by_parent: true }))).toBe("dimmed");
+  it("settles finished nodes and strikes out dead ones", () => {
+    expect(cardKind(nodeAt("done", { turn: null }))).toBe("finished");
+    expect(cardKind(nodeAt("broken_down", { turn: null }))).toBe("finished");
+    expect(cardKind(nodeAt("invalidated", { turn: null }))).toBe("invalidated");
+    expect(cardKind(nodeAt("beta", { turn: "human", invalidated_by_parent: true }))).toBe("invalidated");
   });
 
   it("makes a removed stage demand attention", () => {
-    expect(cardKind(nodeAt("gone", { turn: null, stage_exists: false }))).toBe("bright");
+    expect(cardKind(nodeAt("gone", { turn: null, stage_exists: false }))).toBe("human");
   });
 });
 
