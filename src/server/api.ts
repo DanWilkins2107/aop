@@ -12,7 +12,7 @@ import type { Db } from "./db.js";
 import { ApiError, badRequest, ConfigError } from "./errors.js";
 import * as nodes from "./nodes.js";
 import { loadConfig } from "./config.js";
-import { addProject, getProject, listProjects } from "./projects.js";
+import { addProject, deleteProject, getProject, listProjects, updateProject } from "./projects.js";
 import { describeStages } from "./stages.js";
 
 const BUILT_WEB_DIR = fileURLToPath(new URL("../../dist/web", import.meta.url));
@@ -25,6 +25,9 @@ const nonBlank = z.string().refine((s) => s.trim().length > 0, "must not be blan
 const title = nonBlank.refine((s) => [...s].length <= 200, "must be at most 200 characters");
 
 const addProjectBody = z.strictObject({ repo_path: nonBlank, name: title.optional() });
+const updateProjectBody = z
+  .strictObject({ name: title.optional(), repo_path: nonBlank.optional() })
+  .refine((edit) => edit.name !== undefined || edit.repo_path !== undefined, "must include name or repo_path");
 const createNodeBody = z.strictObject({
   type: nonBlank.optional(),
   stage: nonBlank.optional(),
@@ -171,6 +174,10 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
     const body = await readBody(c, addProjectBody);
     return c.json(addProject(db, body.repo_path, body.name), 201);
   });
+  app.patch("/api/projects/:id", async (c) =>
+    c.json(updateProject(db, c.req.param("id"), await readBody(c, updateProjectBody))),
+  );
+  app.delete("/api/projects/:id", (c) => c.json(deleteProject(db, c.req.param("id"))));
 
   // The one process, shared by all projects. Read from disk every time.
   app.get("/api/stages", (c) => c.json(describeStages(loadConfig().graph)));

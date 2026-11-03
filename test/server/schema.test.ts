@@ -1,8 +1,8 @@
-import { mkdtempSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdtempSync } from "node:fs";
+import { dirname, join } from "node:path";
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { openDb, type Db } from "../../src/server/db.js";
+import { allowProjectDeletion, openDb, type Db } from "../../src/server/db.js";
 import { migrations } from "../../src/server/migrations.js";
 import { aopHome } from "../../src/server/paths.js";
 
@@ -281,6 +281,87 @@ describe("runs", () => {
     expect(() =>
       db.prepare("INSERT INTO runs (id, created_at, node_id, stage, status) VALUES ('x', ?, 'n1', 's', 'exited')").run(T),
     ).toThrow(/NOT NULL/);
+  });
+});
+
+describe("the delete guards", () => {
+  beforeEach(() => {
+    node("foreign", "p2");
+    event("e1");
+    db.prepare("INSERT INTO events (id, created_at, node_id, actor, kind, data) VALUES ('fe', ?, 'foreign', 'human', 'x', '{}')").run(T);
+    db.prepare("INSERT INTO messages (id, created_at, node_id, stage, author, body) VALUES ('m1', ?, 'n1', 's', 'human', 'hi')").run(T);
+    db.prepare("INSERT INTO messages (id, created_at, node_id, stage, author, body) VALUES ('fm', ?, 'foreign', 's', 'human', 'hi')").run(T);
+  });
+
+  const count = (table: string) => (db.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n;
+
+  it("refuse a stray delete of any row, in or out of a transaction", () => {
+    expect(() => db.exec("DELETE FROM events")).toThrow(/append-only/);
+    expect(() => db.exec("DELETE FROM messages")).toThrow(/never deleted/);
+    expect(() => db.exec("DELETE FROM nodes")).toThrow(/never deleted/);
+    expect(() => db.transaction(() => db.exec("DELETE FROM events"))()).toThrow(/append-only/);
+    expect([count("events"), count("messages"), count("nodes")]).toEqual([2, 2, 3]);
+  });
+
+  it("let the allowed project's rows through, and only those", () => {
+    allowProjectDeletion(db, "p1", () => {
+      expect(() => db.exec("DELETE FROM events")).toThrow(/append-only/);
+      expect(() => db.exec("DELETE FROM events WHERE id = 'fe'")).toThrow(/append-only/);
+      expect(() => db.exec("DELETE FROM messages WHERE id = 'fm'")).toThrow(/never deleted/);
+      expect(() => db.exec("DELETE FROM nodes WHERE id = 'foreign'")).toThrow(/never deleted/);
+      db.exec("DELETE FROM events WHERE id = 'e1'");
+      db.exec("DELETE FROM messages WHERE id = 'm1'");
+      db.exec("DELETE FROM nodes WHERE project_id = 'p1'");
+    });
+    expect([count("events"), count("messages"), count("nodes")]).toEqual([1, 1, 1]);
+  });
+
+  it("still refuse changing an event while a deletion is allowed", () => {
+    expect(() =>
+      allowProjectDeletion(db, "p1", () => db.exec("UPDATE events SET kind = 'changed' WHERE id = 'e1'")),
+    ).toThrow(/append-only/);
+  });
+
+  it("close again after a deletion, whether it succeeded or failed", () => {
+    allowProjectDeletion(db, "p1", () => db.exec("DELETE FROM events WHERE id = 'e1'"));
+    expect(() => db.exec("DELETE FROM messages WHERE id = 'm1'")).toThrow(/never deleted/);
+
+    expect(() =>
+      allowProjectDeletion(db, "p1", () => {
+        db.exec("DELETE FROM messages WHERE id = 'm1'");
+        throw new Error("part-way");
+      }),
+    ).toThrow("part-way");
+    expect(count("messages")).toBe(2);
+    expect(() => db.exec("DELETE FROM messages WHERE id = 'm1'")).toThrow(/never deleted/);
+  });
+
+  it("can't be opened from SQL: the function only reads", () => {
+    expect(db.prepare("SELECT aop_project_being_deleted() AS p").get()).toEqual({ p: null });
+    expect(() => db.prepare("SELECT aop_project_being_deleted('p1')").get()).toThrow();
+  });
+
+  it("refuse a delete from a connection that didn't come through openDb", () => {
+    const other = new Database(file);
+    try {
+      expect(() => other.exec("DELETE FROM events")).toThrow();
+      expect(() => other.exec("DELETE FROM nodes")).toThrow();
+    } finally {
+      other.close();
+    }
+    expect([count("events"), count("nodes")]).toEqual([2, 3]);
+  });
+
+  it("are still in force after reopening", () => {
+    db.close();
+    db = openDb(file);
+    expect(() => db.exec("DELETE FROM events")).toThrow(/append-only/);
+  });
+
+  it("doesn't create a missing folder for the database", () => {
+    const missing = join(aopHome(), "not-created", "aop.db");
+    expect(() => openDb(missing)).toThrow();
+    expect(existsSync(dirname(missing))).toBe(false);
   });
 });
 

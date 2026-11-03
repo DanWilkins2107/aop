@@ -4,12 +4,28 @@ import { dbPath } from "./paths.js";
 
 export type Db = Database.Database;
 
+const projectBeingDeleted = new WeakMap<Db, string>();
+
+/**
+ * Runs `work` in one transaction, during which the delete guards on nodes, messages and events let
+ * through this project's rows and still refuse every other project's.
+ */
+export function allowProjectDeletion<T>(db: Db, projectId: string, work: () => T): T {
+  projectBeingDeleted.set(db, projectId);
+  try {
+    return db.transaction(work)();
+  } finally {
+    projectBeingDeleted.delete(db);
+  }
+}
+
 /** The folder must already exist: creating `~/.aop` is the job of `aop init`, not the server. */
 export function openDb(file: string = dbPath()): Db {
   const db = new Database(file);
   try {
     db.pragma("foreign_keys = ON");
     db.pragma("journal_mode = WAL");
+    db.function("aop_project_being_deleted", { deterministic: false }, () => projectBeingDeleted.get(db) ?? null);
     migrate(db);
     return db;
   } catch (error) {

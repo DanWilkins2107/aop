@@ -47,8 +47,12 @@ export interface Loaded<T> {
   reload: () => Promise<void>;
 }
 
-/** An invalid `stages.yaml` must replace the page: old data would hide that nothing works. */
-const dropsOldData = (error: unknown) => error instanceof ApiFailure && error.code === "config_invalid";
+/**
+ * An invalid `stages.yaml` must replace the page, because old data would hide that nothing works.
+ * So must a project or node that has been deleted.
+ */
+const dropsOldData = (error: unknown) =>
+  error instanceof ApiFailure && (error.code === "config_invalid" || error.code === "not_found");
 
 /**
  * Loads data, then loads it again whenever the server reports a change or the window regains

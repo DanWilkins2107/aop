@@ -116,6 +116,10 @@ button:disabled {
   color: #fff;
   font-weight: 600;
 }
+.btn-danger:hover:not(:disabled) {
+  background: #c92a2a;
+  border-color: #c92a2a;
+}
 .btn-danger-outline {
   color: #c92a2a;
   border-color: #eeb4b4;
@@ -332,24 +336,45 @@ label {
   margin: 14px 0 0;
   padding: 0;
 }
-.project-card {
+.projects-head {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.project-row {
+  display: flex;
+  align-items: center;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 13px 16px;
   margin-bottom: 8px;
+}
+.project-row:hover {
+  border-color: var(--accent);
+}
+.project-card {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 13px 16px;
   color: var(--text);
 }
 .project-card:hover {
-  border-color: var(--accent);
   text-decoration: none;
+}
+.project-actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 6px;
+  padding-right: 14px;
 }
 .project-name {
   font-weight: 700;
   font-size: 15px;
+  overflow-wrap: anywhere;
 }
 .project-path {
   color: var(--muted);
@@ -955,6 +980,10 @@ p.action-text:last-child {
   flex-direction: column;
   gap: 12px;
   box-shadow: 0 12px 40px rgba(20, 22, 26, 0.3);
+}
+.dialog-text {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 .dialog h2 {
   font-size: 16px;

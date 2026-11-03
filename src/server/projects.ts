@@ -1,7 +1,7 @@
 import { realpathSync, statSync } from "node:fs";
 import { basename, isAbsolute } from "node:path";
 import type { ProjectRow } from "../shared/api.js";
-import type { Db } from "./db.js";
+import { allowProjectDeletion, type Db } from "./db.js";
 import { ApiError, notFound } from "./errors.js";
 import { newId, now } from "./records.js";
 
@@ -57,5 +57,41 @@ export function listProjects(db: Db): ProjectRow[] {
 export function getProject(db: Db, id: string): ProjectRow {
   const project = db.prepare("SELECT * FROM projects WHERE id = ?").get(id) as ProjectRow | undefined;
   if (!project) throw notFound(`No project ${id}`);
+  return project;
+}
+
+/** Renames a project or points it at another folder. */
+export function updateProject(db: Db, id: string, changes: { name?: string; repo_path?: string }): ProjectRow {
+  const project = getProject(db, id);
+  const name = changes.name?.trim() ?? project.name;
+  const repoPath = changes.repo_path === undefined ? project.repo_path : existingFolder(changes.repo_path.trim());
+  refuseIfRegistered(db, repoPath, id);
+
+  db.prepare("UPDATE projects SET name = ?, repo_path = ? WHERE id = ?").run(name, repoPath, id);
+  return { ...project, name, repo_path: repoPath };
+}
+
+/** Stops any agent processes working on a project. There are none yet: the orchestrator fills this in. */
+export function stopProjectAgents(_db: Db, _projectId: string): void {}
+
+/**
+ * Permanently deletes a project and everything recorded about it, or nothing if any step fails.
+ * Only touches the database: the repo folder is the user's.
+ */
+export function deleteProject(db: Db, id: string): ProjectRow {
+  const project = getProject(db, id);
+  stopProjectAgents(db, id);
+
+  const projectNodes = "(SELECT id FROM nodes WHERE project_id = @id)";
+  allowProjectDeletion(db, id, () => {
+    for (const table of ["links", "messages", "events", "runs"]) {
+      db.prepare(`DELETE FROM ${table} WHERE node_id IN ${projectNodes}`).run({ id });
+    }
+    db.prepare(`DELETE FROM edges WHERE source_id IN ${projectNodes} OR target_id IN ${projectNodes}`).run({ id });
+    // ON DELETE RESTRICT fires straight away, even for two nodes leaving in the same statement.
+    db.prepare(`UPDATE nodes SET spawned_by = NULL WHERE spawned_by IN ${projectNodes}`).run({ id });
+    db.prepare("DELETE FROM nodes WHERE project_id = @id").run({ id });
+    db.prepare("DELETE FROM projects WHERE id = @id").run({ id });
+  });
   return project;
 }

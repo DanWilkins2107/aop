@@ -125,4 +125,26 @@ ALTER TABLE nodes ADD COLUMN claimed_by TEXT
     CHECK (stage NOT IN ('externally_blocked', 'splitting') OR return_stage IS NOT NULL);
 `,
   },
+  {
+    version: 3,
+    // Deleting a whole project is the one exception to these guards. The function is registered on
+    // each connection by `openDb` and only `allowProjectDeletion` can make it return anything, so
+    // no SQL can open the guards: to plain SQL they still refuse every row.
+    sql: `
+DROP TRIGGER nodes_no_delete;
+CREATE TRIGGER nodes_no_delete BEFORE DELETE ON nodes
+WHEN OLD.project_id IS NOT aop_project_being_deleted()
+BEGIN SELECT RAISE(ABORT, 'nodes are never deleted'); END;
+
+DROP TRIGGER messages_no_delete;
+CREATE TRIGGER messages_no_delete BEFORE DELETE ON messages
+WHEN (SELECT project_id FROM nodes WHERE id = OLD.node_id) IS NOT aop_project_being_deleted()
+BEGIN SELECT RAISE(ABORT, 'messages are never deleted'); END;
+
+DROP TRIGGER events_no_delete;
+CREATE TRIGGER events_no_delete BEFORE DELETE ON events
+WHEN (SELECT project_id FROM nodes WHERE id = OLD.node_id) IS NOT aop_project_being_deleted()
+BEGIN SELECT RAISE(ABORT, 'events are append-only'); END;
+`,
+  },
 ];

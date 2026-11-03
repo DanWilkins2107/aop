@@ -49,6 +49,10 @@ const projectPath = (id: string) => `/projects/${encodeURIComponent(id)}`;
 
 export const api = {
   projects: () => send<ProjectRow[]>("GET", "/projects"),
+  addProject: (name: string, repoPath: string) => send<ProjectRow>("POST", "/projects", { name, repo_path: repoPath }),
+  updateProject: (id: string, changes: { name?: string; repo_path?: string }) =>
+    send<ProjectRow>("PATCH", projectPath(id), changes),
+  deleteProject: (id: string) => send<ProjectRow>("DELETE", projectPath(id)),
   nodes: (projectId: string) => send<NodeView[]>("GET", `${projectPath(projectId)}/nodes`),
   projectEdges: (projectId: string) => send<EdgeRow[]>("GET", `${projectPath(projectId)}/edges`),
   stages: () => send<StagesView>("GET", "/stages"),
