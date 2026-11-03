@@ -33,5 +33,5 @@ aop steer <node>                # runs sandboxed_command
 aop steer <node> --no-sandbox   # runs non_sandboxed_command
 ```
 
-- `aop steer` opens your own session on a node, in `open_from`, with `AOP_NODE_ID` set so the commands above work. It claims the node for you, and errors if an agent run holds it. See claims in [orchestrator.md](orchestrator.md).
+- `aop steer` opens your own session on a node, in the project's path or `open_from`, with `AOP_NODE_ID` set so the commands above work. It claims the node for you, and errors if an agent run holds it. See claims in [orchestrator.md](orchestrator.md).
 - Human stages can only be passed from the UI. `aop next` is refused on them, including in a steered session.

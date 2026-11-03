@@ -19,7 +19,7 @@ Launched agents run `sandboxed_command` plus `agent_args`. AOP won't launch agen
 ## Running a stage
 1. A node entering an agent stage is queued.
 2. It starts once it's unclaimed, no `blocks` edge holds it and it isn't invalidated by a parent. There is no limit on how many agents run at once.
-3. Each stage is a fresh process, started in `open_from`. Its prompt goes in on stdin, built from a short instruction to load the plugin's `aop-context` and `aop-rulebook` skills, the output of `aop context` for the node, and the stage's prompt file. AOP generates that output itself, so an agent always knows where it is in the tree.
+3. Each stage is a fresh process, started in the project's path, or `open_from` if it has none. Its prompt goes in on stdin, built from a short instruction to load the plugin's `aop-context` and `aop-rulebook` skills, the output of `aop context` for the node, and the stage's prompt file. AOP generates that output itself, so an agent always knows where it is in the tree.
 4. The agent finishes with `aop next <outcome>`, `aop ask "..."` or by exiting. Only outcomes in that stage's `next` are accepted.
 5. Exiting without either, or running past `agent_timeout_minutes`, moves the node to `failed`. Nothing retries automatically.
 
