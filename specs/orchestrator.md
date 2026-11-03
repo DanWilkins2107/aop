@@ -8,7 +8,7 @@ sandboxed_command: sandboxed-claude
 non_sandboxed_command: claude
 agent_args: -p                  # added when AOP launches an agent; the prompt arrives on stdin
 # sandbox: false                # launch agents with non_sandboxed_command instead
-open_from: .                    # where launched agents and aop steer start, relative to the repo root
+open_from: ~/code              # default place to open agents and aop steer, for projects with no path
 agent_timeout_minutes: 60
 stages: ./stages.yaml           # link to the stages config, which can be anywhere
 ```

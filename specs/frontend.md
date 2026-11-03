@@ -16,7 +16,8 @@ One column at every screen size, with nothing side by side, and it must look fin
 
 ## Emphasis
 Colour is for what needs attention, and most of the page should be neutral.
-- A filled colour on a graph card means a human needs to act. Everything else is white or grey, with the stage colour only as a small accent.
+- A bold filled colour on a graph card means a human needs to act. Agent cards are white with a clear stage colour accent. No shadows on cards.
+- A claim is a small dot with the holder or run ID next to it, not a sentence.
 - Each node page has one primary button. Other actions are neutral.
 - Avoid badges and pills unless they are really needed, and keep any that remain neutral.
 - No animations, including zooming in when a project opens.
@@ -29,4 +30,10 @@ View-only drawing of each type's graph from `stages.yaml`, with a note that glob
 A legend, phone-specific features, a "needs me" list, a canvas and progress on `broken_down` nodes.
 
 ## Projects page
-Add a project by repo path, rename it, change its path, and delete it. Delete is permanent, requires typing the project's name, stops its agents first, and never touches the repo.
+A list of projects with a low-emphasis "Add project". Adding needs only a name; the path is optional.
+
+## Project settings
+Each project has a settings page for its name, optional path and delete, instead of buttons on the list. Delete is permanent, requires typing the project's name, stops its agents first, and never touches the repo.
+
+## AOP settings
+A read-only view of `config.yaml`, with a note to edit `~/.aop/config.yaml` to change it. Agents can reach the API, so nothing in the UI can change commands or the sandbox.

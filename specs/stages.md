@@ -6,7 +6,7 @@ Defines the whole process in one file, shared by all projects. `~/.aop/config.ya
 start: triage                 # the type new nodes start in
 
 stages:                       # pool of every stage
-  assess:         { turn: agent, color: "#5c7cfa", prompt: ./prompts/assess.md }
+  awaiting_agent_breakdown: { turn: agent, color: "#5c7cfa", prompt: ./prompts/awaiting_agent_breakdown.md }
   split_proposed: { turn: human, color: "#ffc107" }
   split_approved: { turn: agent, color: "#4263eb", prompt: ./prompts/split_approved.md }
   human_only_action: { turn: human, color: "#ff9800" }
@@ -16,11 +16,11 @@ stages:                       # pool of every stage
 
 types:                        # a mini graph for each part of the workflow
   triage:
-    start: assess
+    start: awaiting_agent_breakdown
     stages:
-      assess:         { next: { ready: dev, split: split_proposed, human_only: human_only_action } }
+      awaiting_agent_breakdown: { next: { ready: dev, split: split_proposed, human_only: human_only_action } }
       human_only_action: { next: { done: done } }
-      split_proposed: { next: { approve: split_approved, reject: assess } }
+      split_proposed: { next: { approve: split_approved, reject: awaiting_agent_breakdown } }
       split_approved: { next: {} }    # finishes through `aop split finish`
   dev:
     start: implement
