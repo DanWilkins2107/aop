@@ -1,25 +1,24 @@
-import type { NodeView, StagesView, TypeView } from "../../../src/shared/api.js";
-import { readableText } from "../lib/color.js";
+import type { NodeView, TypeView } from "../../../src/shared/api.js";
 import { humanize } from "../lib/format.js";
 import { smoothPath } from "../lib/layout.js";
 import { stageDrawing, type BoxKind } from "../lib/stageGraph.js";
-import { MISSING_STAGE_COLOR, fillOf, stageColor } from "../lib/stageStyle.js";
 
 const ARROW_ID = "pipeline-arrow";
-const LINK_COLOR = "#868e96";
+const LINK_COLOR = "#888888";
 // Small graphs keep their natural size. Bigger ones shrink to fit, then scroll inside their own box.
 const MIN_SCALE = 0.72;
 
-function boxLook(kind: BoxKind, color: string) {
+/** Greys and black only: the stage colour belongs to the header's band. */
+function boxLook(kind: BoxKind) {
   switch (kind) {
     case "current":
-      return { fill: fillOf(color), stroke: fillOf(color), strokeWidth: 1, text: readableText(fillOf(color)), weight: 700 };
+      return { fill: "#ffffff", stroke: "#000000", strokeWidth: 2.5, text: "#000000", weight: 700 };
     case "return":
-      return { fill: "#ffffff", stroke: "#495057", strokeWidth: 2, text: "#1f2226", weight: 400 };
+      return { fill: "#ffffff", stroke: "#4d4d4d", strokeWidth: 1.5, text: "#1a1a1a", weight: 400 };
     case "exit":
-      return { fill: "#f1f3f5", stroke: "#f1f3f5", strokeWidth: 1, text: "#667079", weight: 400 };
+      return { fill: "#f0f0f0", stroke: "#f0f0f0", strokeWidth: 1, text: "#666666", weight: 400 };
     case "stage":
-      return { fill: "#ffffff", stroke: "#ced4da", strokeWidth: 1, text: "#1f2226", weight: 400 };
+      return { fill: "#ffffff", stroke: "#cccccc", strokeWidth: 1, text: "#1a1a1a", weight: 400 };
   }
 }
 
@@ -27,18 +26,15 @@ function boxLook(kind: BoxKind, color: string) {
 export function PipelineGraph({
   node,
   type,
-  stages,
   returnTo,
 }: {
   node: NodeView;
   type: TypeView | undefined;
-  stages: StagesView;
   /** Set when the node is on a global stage: the stage it goes back to. */
   returnTo: string | null;
 }) {
   if (!type) return <p className="muted section-text">Type "{node.type}" isn't in stages.yaml, so there's no pipeline to draw.</p>;
   const drawing = stageDrawing(type, node.stage, returnTo);
-  const color = node.stage_exists ? stageColor(node.stage, stages) : MISSING_STAGE_COLOR;
   const returnDrawn = drawing.boxes.some((box) => box.kind === "return");
 
   return (
@@ -59,7 +55,7 @@ export function PipelineGraph({
             <path key={link.id} d={smoothPath(link.points)} fill="none" stroke={LINK_COLOR} strokeWidth={1.25} markerEnd={`url(#${ARROW_ID})`} />
           ))}
           {drawing.boxes.map((box) => {
-            const look = boxLook(box.kind, color);
+            const look = boxLook(box.kind);
             return (
               <g key={box.name} data-stage={box.name} data-box={box.kind}>
                 <rect
@@ -87,7 +83,7 @@ export function PipelineGraph({
                 dy="0.35em"
                 textAnchor="middle"
                 fontSize={10.5}
-                fill="#667079"
+                fill="#666666"
                 stroke="#ffffff"
                 strokeWidth={3}
                 paintOrder="stroke"

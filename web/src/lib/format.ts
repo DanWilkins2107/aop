@@ -49,7 +49,7 @@ export function describeEvent(event: EventView, titleOf: (id: string) => string)
         case "next":
           return `${humanize(text(data["outcome"]))}: ${from} → ${to}`;
         case "move":
-          return `Moved by hand: ${from} → ${to}`;
+          return `Forced stage: ${from} → ${to}`;
         case "ask":
           return `Asked a question at ${from}`;
         case "answer":
