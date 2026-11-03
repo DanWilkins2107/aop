@@ -13,6 +13,8 @@ Standard statuses with AOP-defined behaviour. They aren't in the pool, and their
 | `splitting` | Agent | `aop split start` from an agent stage | `aop split finish` |
 | `scheduled` | AOP | Listed in a type | Never moves |
 
+**Global stages** can be reached from anywhere and live outside the pipeline: `invalidated`, `externally_blocked`, `ask_human_question` and `failed`.
+
 Only `done` and `broken_down` can be `next` targets. `scheduled` can be a type's `start`. The rest are entered through their own actions, and the UI offers them at the stages where they apply.
 
 ## Behaviour

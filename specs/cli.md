@@ -26,7 +26,8 @@ aop split finish
 
 ## Humans
 ```
-aop init
+aop init                        # one-time machine setup: commands, sandbox, plugin, ~/.aop
+aop project add <path>
 aop serve
 aop steer <node>                # runs sandboxed_command
 aop steer <node> --no-sandbox   # runs non_sandboxed_command

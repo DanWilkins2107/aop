@@ -2,7 +2,8 @@
 
 One TypeScript Node process per machine serves the API and the built Vite app, on localhost only.
 
-- `~/.aop/aop.db` holds all state, accessed with `better-sqlite3` (Node's built-in SQLite has no full-text search). Each repo with a `.aop` folder is a project, registered by `aop init`.
+- `~/.aop/aop.db` holds all state, accessed with `better-sqlite3` (Node's built-in SQLite has no full-text search).
+- A project is just a name and a repo path. AOP never writes to the repo.
 - The `aop` CLI only talks to the server over HTTP. Every stage change is checked there against `stages.yaml`.
 - `actor` on API calls is self-reported for now.
 - A node on a stage that no longer exists in `stages.yaml` is flagged for a human to move.

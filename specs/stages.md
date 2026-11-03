@@ -1,6 +1,6 @@
 # stages.yaml
 
-Defines the whole process in one file. `.aop/config.yaml` points to it.
+Defines the whole process in one file, shared by all projects. `~/.aop/config.yaml` links to it, and it can live anywhere.
 
 ```yaml
 start: triage                 # the type new nodes start in

@@ -3,19 +3,18 @@
 The server starts agents. No agent or LLM decides what runs next.
 
 ```yaml
-# .aop/config.yaml
+# ~/.aop/config.yaml, one config shared by all projects
 sandboxed_command: sandboxed-claude
 non_sandboxed_command: claude
 agent_args: -p                  # added when AOP launches an agent; the prompt arrives on stdin
 # sandbox: false                # launch agents with non_sandboxed_command instead
 open_from: .                    # where launched agents and aop steer start, relative to the repo root
 agent_timeout_minutes: 60
-stages: ./stages.yaml
+stages: ./stages.yaml           # link to the stages config, which can be anywhere
 ```
 
 Launched agents run `sandboxed_command` plus `agent_args`. AOP won't launch agents if `sandboxed_command` is missing, unless `sandbox: false` opts out explicitly. AOP doesn't ship a sandbox or check that the command is one.
 
-`.aop/config.local.yaml` overrides any of these for one person. `aop init` gitignores it.
 
 ## Running a stage
 1. A node entering an agent stage is queued.
@@ -48,5 +47,3 @@ Launched agents run `sandboxed_command` plus `agent_args`. AOP won't launch agen
 ## Workspaces
 AOP has no workspace feature and doesn't require git. Where an agent works is up to the human, through their commands and prompts.
 
-## Trust
-AOP asks for approval before running any of these commands in a repo for the first time, and again whenever one changes. Approvals are stored per machine in `aop.db`.
