@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import type { ProjectRow } from "../../../src/shared/api.js";
 import { api, failureText } from "../lib/api.js";
+import { useLiveData } from "../lib/live.js";
 import { Dialog } from "./Dialog.js";
 
 interface NewProjectProps {
@@ -31,10 +33,21 @@ function useSave(onDone: () => void) {
   return { busy, error, save };
 }
 
+/** Says where agents start without a repo path, once the config has said. */
+export function RepoPathHint({ openFrom }: { openFrom: string | null }) {
+  if (!openFrom) return null;
+  return (
+    <p className="field-hint">
+      With no path, they start in <code>{openFrom}</code> - this is set in your <Link to="/settings">global config</Link>.
+    </p>
+  );
+}
+
 export function AddProjectDialog({ onClose, onDone }: NewProjectProps) {
   const [name, setName] = useState("");
   const [path, setPath] = useState("");
   const { busy, error, save } = useSave(onDone);
+  const { data: config } = useLiveData(() => api.config(), "config");
   return (
     <Dialog
       title="Add project"
@@ -55,7 +68,7 @@ export function AddProjectDialog({ onClose, onDone }: NewProjectProps) {
         </span>
         <input className="mono" spellCheck={false} value={path} onChange={(e) => setPath(e.target.value)} />
       </label>
-      <p className="field-hint">The full path of an existing folder. AOP doesn't write anything to it.</p>
+      <RepoPathHint openFrom={config?.settings?.open_from_path ?? null} />
     </Dialog>
   );
 }
@@ -78,11 +91,6 @@ export function DeleteProjectDialog({ project, onClose, onDone }: ProjectProps) 
         This permanently deletes <strong>{project.name}</strong> from AOP, with all its nodes, edges, links, messages,
         events and runs. It can't be undone.
       </p>
-      {project.repo_path ? (
-        <p className="dialog-text">
-          The repo folder isn't touched: <code>{project.repo_path}</code>
-        </p>
-      ) : null}
       <label>
         Type the project's name to confirm
         <input autoFocus autoComplete="off" spellCheck={false} value={typed} onChange={(e) => setTyped(e.target.value)} />

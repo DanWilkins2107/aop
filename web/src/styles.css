@@ -185,6 +185,7 @@ label {
   margin: -4px 0 0;
   color: var(--muted);
   font-size: 13px;
+  overflow-wrap: anywhere;
 }
 .hint {
   font-size: 12px;
