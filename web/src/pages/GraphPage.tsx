@@ -6,7 +6,7 @@ import { NewNodeDialog } from "../components/NewNodeDialog.js";
 import { RoutedEdge, type RoutedEdgeType } from "../components/RoutedEdge.js";
 import { StageCard, type StageCardNode } from "../components/StageCard.js";
 import { api } from "../lib/api.js";
-import { CARD_HEIGHT, CARD_WIDTH, NARROW_ASPECT, WIDE_ASPECT, fittedViewport, layoutGraph, type FitOptions } from "../lib/layout.js";
+import { CARD_HEIGHT, CARD_WIDTH, fittedViewport, layoutGraph, type FitOptions } from "../lib/layout.js";
 import { useLiveData } from "../lib/live.js";
 import { isInvalidated } from "../lib/stageStyle.js";
 
@@ -16,11 +16,11 @@ const edgeTypes = { routed: RoutedEdge };
 const SUBTASK_STROKE = "#adb5bd";
 const BLOCKS_STROKE = "#495057";
 
-/** Below this the canvas is a small window: fewer cards to a row, and big enough to read. */
+/** Below this the canvas is a small window, so cards stay big enough to read. */
 const NARROW_WIDTH = 640;
 
-// The left side clears the zoom controls.
-const WIDE_FIT: FitOptions = { padding: { x: 56, y: 24 }, minZoom: 0.1, maxZoom: 1 };
+// The left side clears the zoom controls. A project too wide to read at this zoom pans instead.
+const WIDE_FIT: FitOptions = { padding: { x: 56, y: 24 }, minZoom: 0.5, maxZoom: 1 };
 const NARROW_FIT: FitOptions = { padding: { x: 16, y: 16 }, minZoom: 0.7, maxZoom: 1 };
 // What the fit button does: the whole graph, however small.
 const FIT_ALL = { padding: "16px", maxZoom: 1 } as const;
@@ -95,11 +95,7 @@ export function GraphPage() {
     const nodes = hideInvalidated ? data.nodes.filter((n) => !isInvalidated(n)) : data.nodes;
     const shown = new Set(nodes.map((n) => n.id));
     const edges = data.edges.filter((e) => shown.has(e.source_id) && shown.has(e.target_id));
-    const { positions, routes } = layoutGraph(
-      nodes.map((n) => n.id),
-      edges,
-      narrow ? NARROW_ASPECT : WIDE_ASPECT,
-    );
+    const { positions, routes } = layoutGraph(nodes.map((n) => n.id), edges);
     const stageOf = new Map(nodes.map((n) => [n.id, n.stage]));
     const flowNodes: StageCardNode[] = nodes.map((node) => ({
       id: node.id,

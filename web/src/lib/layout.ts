@@ -4,10 +4,6 @@ import type { EdgeRow } from "../../../src/shared/api.js";
 export const CARD_WIDTH = 236;
 export const CARD_HEIGHT = 66;
 
-/** Roughly a desktop canvas, so that unconnected work fills the view instead of one long row. */
-export const WIDE_ASPECT = 1.9;
-/** Roughly a small window, where rows must stay short enough to read without much panning. */
-export const NARROW_ASPECT = 0.6;
 const GROUP_GAP = 56;
 
 type LayoutEdge = Pick<EdgeRow, "id" | "source_id" | "target_id" | "kind">;
@@ -26,7 +22,6 @@ export interface GraphLayout {
 
 interface Group extends GraphLayout {
   width: number;
-  height: number;
 }
 
 /** Nodes joined by any edge, biggest group first and otherwise in the order given. */
@@ -60,51 +55,35 @@ function layoutGroup(nodeIds: string[], edges: LayoutEdge[]): Group {
   const positions = new Map<string, Point>();
   const routes = new Map<string, Point[]>();
   let width = 0;
-  let height = 0;
   for (const id of nodeIds) {
     const { x, y } = graph.node(id);
     positions.set(id, { x: x - CARD_WIDTH / 2, y: y - CARD_HEIGHT / 2 });
     width = Math.max(width, x + CARD_WIDTH / 2);
-    height = Math.max(height, y + CARD_HEIGHT / 2);
   }
   for (const edge of edges) {
     const points: Point[] = graph.edge({ v: edge.source_id, w: edge.target_id, name: edge.id }).points ?? [];
     routes.set(edge.id, points);
   }
-  return { positions, routes, width, height };
+  return { positions, routes, width };
 }
 
 /**
- * Lays cards out top to bottom over both kinds of edge. Dagre would line every unconnected group
- * up along the top, so each is laid out alone and then packed into rows.
+ * Lays cards out top to bottom over both kinds of edge, so only an edge ever adds depth. Each
+ * unconnected group is laid out alone, then they all sit side by side along the top.
  */
-export function layoutGraph(nodeIds: string[], edges: LayoutEdge[], aspect = WIDE_ASPECT): GraphLayout {
+export function layoutGraph(nodeIds: string[], edges: LayoutEdge[]): GraphLayout {
   const known = new Set(nodeIds);
   const usable = edges.filter((edge) => known.has(edge.source_id) && known.has(edge.target_id));
-  const groups = connectedGroups(nodeIds, usable).map((ids) => {
-    const members = new Set(ids);
-    return layoutGroup(ids, usable.filter((edge) => members.has(edge.source_id)));
-  });
-
-  const area = groups.reduce((sum, g) => sum + (g.width + GROUP_GAP) * (g.height + GROUP_GAP), 0);
-  const widest = groups.reduce((most, g) => Math.max(most, g.width), 0);
-  const rowWidth = Math.max(widest, Math.sqrt(area * aspect));
 
   const positions = new Map<string, Point>();
   const routes = new Map<string, Point[]>();
   let x = 0;
-  let y = 0;
-  let rowHeight = 0;
-  for (const group of groups) {
-    if (x > 0 && x + group.width > rowWidth) {
-      x = 0;
-      y += rowHeight + GROUP_GAP;
-      rowHeight = 0;
-    }
-    for (const [id, at] of group.positions) positions.set(id, { x: at.x + x, y: at.y + y });
-    for (const [id, points] of group.routes) routes.set(id, points.map((p) => ({ x: p.x + x, y: p.y + y })));
+  for (const ids of connectedGroups(nodeIds, usable)) {
+    const members = new Set(ids);
+    const group = layoutGroup(ids, usable.filter((edge) => members.has(edge.source_id)));
+    for (const [id, at] of group.positions) positions.set(id, { x: at.x + x, y: at.y });
+    for (const [id, points] of group.routes) routes.set(id, points.map((p) => ({ x: p.x + x, y: p.y })));
     x += group.width + GROUP_GAP;
-    rowHeight = Math.max(rowHeight, group.height);
   }
   return { positions, routes };
 }
@@ -135,7 +114,7 @@ export function fittedViewport(
   const zoom = Math.min(maxZoom, Math.max(minZoom, fit));
   const offset = (space: number, size: number, pad: number, start: number) => {
     const free = space - size * zoom;
-    return (free >= 2 * pad ? free / 2 : pad) - start * zoom;
+    return (fit >= minZoom && free >= 2 * pad ? free / 2 : pad) - start * zoom;
   };
   return { x: offset(canvas.width, width, padding.x, left), y: offset(canvas.height, height, padding.y, top), zoom };
 }

@@ -321,14 +321,24 @@ describe("graph layout", () => {
     expect([...routes.keys()].sort()).toEqual(["1", "2"]);
   });
 
-  it("wraps unconnected nodes into rows, and keeps routes with their moved cards", () => {
-    const ids = ["p", "c", ...Array.from({ length: 12 }, (_, i) => `solo${i}`)];
-    const { positions, routes } = layoutGraph(ids, [edge("1", "p", "c", "subtask")]);
-    const ys = new Set([...positions.values()].map((at) => at.y));
-    expect(ys.size).toBeGreaterThan(2);
-    const points = routes.get("1") ?? [];
-    expect(points[0]?.y).toBeGreaterThanOrEqual(positions.get("p")!.y);
-    expect(points[points.length - 1]?.y).toBeLessThanOrEqual(positions.get("c")!.y + CARD_HEIGHT);
+  it("keeps unconnected nodes in one row, however many there are", () => {
+    const ids = Array.from({ length: 60 }, (_, i) => `solo${i}`);
+    const at = [...layoutGraph(ids, []).positions.values()];
+    expect(new Set(at.map((p) => p.y))).toEqual(new Set([0]));
+    expect(new Set(at.map((p) => p.x)).size).toBe(60);
+  });
+
+  it("starts connected groups on the same row, side by side, with routes kept to their cards", () => {
+    const ids = ["solo0", "p", "c", "solo1", "b1", "b2"];
+    const { positions, routes } = layoutGraph(ids, [edge("1", "p", "c", "subtask"), edge("2", "b1", "b2", "blocks")]);
+    const at = (id: string) => positions.get(id)!;
+    for (const id of ["solo0", "solo1", "p", "b1"]) expect(at(id).y).toBe(0);
+    for (const id of ["c", "b2"]) expect(at(id).y).toBeGreaterThan(0);
+    expect(new Set(ids.filter((id) => at(id).y === 0).map((id) => at(id).x)).size).toBe(4);
+
+    const route = routes.get("2") ?? [];
+    expect(route[0]!.x).toBeCloseTo(at("b1").x + CARD_WIDTH / 2, 0);
+    expect(route[route.length - 1]!.x).toBeCloseTo(at("b2").x + CARD_WIDTH / 2, 0);
   });
 
   it("routes a long edge around a card in its way", () => {
@@ -339,12 +349,6 @@ describe("graph layout", () => {
       const inside = point.x > b.x && point.x < b.x + CARD_WIDTH && point.y > b.y && point.y < b.y + CARD_HEIGHT;
       expect(inside).toBe(false);
     }
-  });
-
-  it("packs unconnected nodes into narrower rows for a narrower aspect", () => {
-    const ids = Array.from({ length: 12 }, (_, i) => `solo${i}`);
-    const widest = (aspect: number) => Math.max(...[...layoutGraph(ids, [], aspect).positions.values()].map((p) => p.x));
-    expect(widest(0.6)).toBeLessThan(widest(1.9));
   });
 
   it("fits every card in view, centred", () => {
@@ -362,6 +366,12 @@ describe("graph layout", () => {
     const { x, zoom } = fittedViewport([{ x: 0, y: 0 }], { width: 1000, height: 600 }, { padding: { x: 20, y: 20 }, minZoom: 0.1, maxZoom: 1 });
     expect(zoom).toBe(1);
     expect(x).toBe((1000 - CARD_WIDTH) / 2);
+  });
+
+  it("starts a row too wide to read at the top left, even though its height would fit", () => {
+    const options = { padding: { x: 56, y: 24 }, minZoom: 0.5, maxZoom: 1 };
+    const row = Array.from({ length: 40 }, (_, i) => ({ x: i * 292, y: 0 }));
+    expect(fittedViewport(row, { width: 1400, height: 800 }, options)).toEqual({ x: 56, y: 24, zoom: 0.5 });
   });
 
   it("starts at the top left when the graph is too big to read at once", () => {
