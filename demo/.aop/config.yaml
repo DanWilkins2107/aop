@@ -1,0 +1,4 @@
+# Demo only. Nothing runs agents yet, and this command is a placeholder.
+agent_command: echo "{{prompt}}"
+stages: ./stages.yaml
+max_agents: 1

@@ -1,0 +1,23 @@
+# The example from specs/stages.md, without its top-level `start` key, which the server doesn't
+# accept yet.
+stages:
+  assess:         { turn: agent, color: "#5c7cfa", prompt: ./prompts/assess.md }
+  split_proposed: { turn: human, color: "#ffc107" }
+  split_approved: { turn: agent, color: "#4263eb", prompt: ./prompts/split_approved.md }
+  implement:      { turn: agent, color: "#12b886", prompt: ./prompts/implement.md }
+  pr_review:      { turn: human, color: "#9775fa" }
+  second_human_review: { turn: human, color: "#e91e63" }
+
+types:
+  triage:
+    start: assess
+    stages:
+      assess:         { next: { ready: dev, split: split_proposed } }
+      split_proposed: { next: { approve: split_approved, reject: assess } }
+      split_approved: { next: {} }
+  dev:
+    start: implement
+    stages:
+      implement:           { next: { pr_raised: pr_review } }
+      pr_review:           { next: { approve: second_human_review, changes: implement } }
+      second_human_review: { next: { merged: done, changes: implement } }
