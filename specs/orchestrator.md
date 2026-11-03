@@ -4,16 +4,14 @@ The server starts agents. No agent or LLM decides what runs next.
 
 ```yaml
 # ~/.aop/config.yaml, one config shared by all projects
-sandboxed_command: sandboxed-claude
-non_sandboxed_command: claude
-agent_args: -p                  # added when AOP launches an agent; the prompt arrives on stdin
-# sandbox: false                # launch agents with non_sandboxed_command instead
-open_from: ~/code              # default place to open agents and aop steer, for projects with no path
+agent_session_command: sandboxed-claude   # required
+out_of_sandbox_command: claude            # optional, only for aop steer --no-sandbox
+open_from: ~/code                         # where sessions start for projects with no path
 agent_timeout_minutes: 60
-stages: ./stages.yaml           # link to the stages config, which can be anywhere
+stages: ./stages.yaml                     # link to the stages config, which can be anywhere
 ```
 
-Launched agents run `sandboxed_command` plus `agent_args`. AOP won't launch agents if `sandboxed_command` is missing, unless `sandbox: false` opts out explicitly. AOP doesn't ship a sandbox or check that the command is one.
+Launched agents run `agent_session_command`, and AOP adds what it needs to run without a terminal: `-p`, with the prompt on stdin. AOP doesn't ship a sandbox or check that the command is one.
 
 
 ## Running a stage
