@@ -21,7 +21,7 @@ types:                        # a mini graph for each part of the workflow
       awaiting_agent_breakdown: { next: { ready: dev, split: split_proposed, human_only: human_only_action } }
       human_only_action: { next: { done: done } }
       split_proposed: { next: { approve: split_approved, reject: awaiting_agent_breakdown } }
-      split_approved: { next: {} }    # finishes through `aop split finish`
+      split_approved: { next: { done: broken_down } }
   dev:
     start: implement
     stages:
