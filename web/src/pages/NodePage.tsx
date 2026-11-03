@@ -22,7 +22,7 @@ async function loadNode(nodeId: string) {
     api.events(nodeId),
     api.edges(nodeId),
     api.links(nodeId),
-    api.stages(node.project_id),
+    api.stages(),
     api.nodes(node.project_id),
     api.projectEdges(node.project_id),
     api.projects(),

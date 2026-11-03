@@ -91,7 +91,7 @@ describe("creating nodes in the right place", () => {
   });
 
   it("reports the start in the stages view", async () => {
-    const res = await h.call("GET", `/api/projects/${h.projectId}/stages`);
+    const res = await h.call("GET", "/api/stages");
     expect(res.body["start"]).toBe("triage");
   });
 });

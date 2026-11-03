@@ -4,7 +4,7 @@ import { createApp } from "../../src/server/api.js";
 import { openDb, type Db } from "../../src/server/db.js";
 import type { NodeView } from "../../src/server/nodes.js";
 import { aopHome } from "../../src/server/paths.js";
-import { registerProject } from "../../src/server/projects.js";
+import { addProject } from "../../src/server/projects.js";
 
 /** The process from specs/stages.md, plus a stage reused by two types. */
 export const STAGES_YAML = `
@@ -44,9 +44,12 @@ types:
 `;
 
 export const CONFIG_YAML = `
-agent_command: claude -p "{{prompt}}"
+sandboxed_command: sandboxed-claude
+non_sandboxed_command: claude
+agent_args: -p
+open_from: .
+agent_timeout_minutes: 30
 stages: ./stages.yaml
-max_agents: 3
 `;
 
 export const PROMPTS = ["assess", "split_approved", "write_spec", "implement"];
@@ -60,14 +63,22 @@ export function writeFiles(root: string, files: Record<string, string>): void {
   }
 }
 
-export function makeRepo(overrides: Record<string, string> = {}): string {
-  const repo = mkdtempSync(join(aopHome(), "repo-"));
-  writeFiles(repo, {
-    ".aop/config.yaml": CONFIG_YAML,
-    ".aop/stages.yaml": STAGES_YAML,
-    ...Object.fromEntries(PROMPTS.map((p) => [`.aop/prompts/${p}.md`, `Do ${p}.`])),
+/** A folder set up the way `~/.aop` is. `overrides` can replace or add files by relative path. */
+export function makeHome(overrides: Record<string, string> = {}): string {
+  const home = mkdtempSync(join(aopHome(), "home-"));
+  writeFiles(home, {
+    "config.yaml": CONFIG_YAML,
+    "stages.yaml": STAGES_YAML,
+    ...Object.fromEntries(PROMPTS.map((p) => [`prompts/${p}.md`, `Do ${p}.`])),
     ...overrides,
   });
+  return home;
+}
+
+/** A project's repo is any folder. */
+export function makeRepo(): string {
+  const repo = mkdtempSync(join(aopHome(), "repo-"));
+  writeFiles(repo, { "README.md": "A repo.\n" });
   return repo;
 }
 
@@ -88,12 +99,14 @@ export interface Harness {
   close(): void;
 }
 
-/** A fresh database and repo inside the temp AOP_HOME, driven through the real Hono app. */
+/** Fresh state, with AOP_HOME pointing at it until `close`, driven through the real Hono app. */
 export function harness(): Harness {
-  const home = mkdtempSync(join(aopHome(), "db-"));
-  const db = openDb(join(home, "aop.db"));
+  const outerHome = process.env["AOP_HOME"];
+  const home = makeHome();
+  process.env["AOP_HOME"] = home;
+  const db = openDb();
   const repo = makeRepo();
-  const { project } = registerProject(db, repo);
+  const project = addProject(db, repo);
   const app = createApp(db);
 
   const call: Harness["call"] = async <T,>(method: string, path: string, body?: unknown) => {
@@ -125,10 +138,11 @@ export function harness(): Harness {
       return (await call<NodeView>("GET", `/api/nodes/${nodeId}`)).body;
     },
     rewriteStages(yaml) {
-      writeFiles(repo, { ".aop/stages.yaml": yaml });
+      writeFiles(home, { "stages.yaml": yaml });
     },
     close() {
       db.close();
+      process.env["AOP_HOME"] = outerHome;
       rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
     },
   };

@@ -20,7 +20,7 @@ export const notFound = (message: string) => new ApiError(404, "not_found", mess
 export const refused = (message: string, details?: unknown) =>
   new ApiError(409, "refused", message, details);
 
-/** `.aop` config or `stages.yaml` is invalid. Carries every problem, not just the first. */
+/** `config.yaml` or `stages.yaml` is invalid. Carries every problem, not just the first. */
 export class ConfigError extends Error {
   constructor(readonly problems: string[]) {
     super(`Invalid AOP config:\n${problems.map((p) => `  - ${p}`).join("\n")}`);

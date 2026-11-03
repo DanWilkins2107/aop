@@ -1,4 +1,4 @@
-# The example from specs/stages.md.
+# The example from specs/stages.md, copied into a throwaway AOP_HOME by demo/start.ts.
 start: triage                 # the type new nodes start in
 
 stages:                       # pool of every stage

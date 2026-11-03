@@ -1,25 +1,27 @@
 import { request } from "node:http";
-import { mkdtempSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { rmSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { openDb, type Db } from "../../src/server/db.js";
-import { aopHome } from "../../src/server/paths.js";
 import { HOSTNAME, startServer, type RunningServer } from "../../src/server/server.js";
-import { makeRepo } from "./helpers.js";
+import { makeHome, makeRepo } from "./helpers.js";
 
 let db: Db;
 let server: RunningServer;
 let home: string;
+let outerHome: string | undefined;
 
 beforeAll(async () => {
-  home = mkdtempSync(join(aopHome(), "http-"));
-  db = openDb(join(home, "aop.db"));
+  home = makeHome();
+  outerHome = process.env["AOP_HOME"];
+  process.env["AOP_HOME"] = home;
+  db = openDb();
   server = await startServer(db, 0);
 });
 
 afterAll(async () => {
   await server.close();
   db.close();
+  process.env["AOP_HOME"] = outerHome;
   rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 

@@ -1,11 +1,12 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { cpSync, mkdtempSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createApp } from "../src/server/api.js";
+import { loadConfig } from "../src/server/config.js";
 import { openDb } from "../src/server/db.js";
 import { aopHome } from "../src/server/paths.js";
-import { registerProject } from "../src/server/projects.js";
+import { addProject } from "../src/server/projects.js";
 import { HOSTNAME, startServer } from "../src/server/server.js";
 import { seed } from "./seed.js";
 
@@ -16,9 +17,12 @@ const home = mkdtempSync(join(tmpdir(), "aop-demo-"));
 process.env["AOP_HOME"] = home;
 if (resolve(aopHome()) === resolve(homedir(), ".aop")) throw new Error("The demo must not use the real ~/.aop");
 
-const repo = dirname(fileURLToPath(import.meta.url));
+const here = dirname(fileURLToPath(import.meta.url));
+cpSync(join(here, "config"), home, { recursive: true });
+loadConfig();
+
 const db = openDb();
-const { project } = registerProject(db, repo, "Demo project");
+const project = addProject(db, here, "Demo project");
 await seed(createApp(db), db, project.id);
 
 const server = await startServer(db, Number(process.env["AOP_PORT"] ?? DEFAULT_PORT));

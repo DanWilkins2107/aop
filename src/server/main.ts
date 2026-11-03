@@ -1,8 +1,8 @@
 import { parseArgs } from "node:util";
+import { loadConfig } from "./config.js";
 import { openDb, type Db } from "./db.js";
 import { ConfigError } from "./errors.js";
-import { dbPath } from "./paths.js";
-import { registerProject } from "./projects.js";
+import { configPath, dbPath } from "./paths.js";
 import { HOSTNAME, startServer } from "./server.js";
 
 const DEFAULT_PORT = 4317;
@@ -12,9 +12,8 @@ async function main(): Promise<void> {
     allowPositionals: true,
     options: { port: { type: "string" } },
   });
-  const [repoPath] = positionals;
-  if (repoPath === undefined || positionals.length > 1) {
-    console.error("Usage: npm start -- <repo-path> [--port <port>]");
+  if (positionals.length > 0) {
+    console.error("Usage: npm start -- [--port <port>]");
     process.exitCode = 2;
     return;
   }
@@ -28,11 +27,12 @@ async function main(): Promise<void> {
 
   let db: Db | undefined;
   try {
+    // First, because a missing config is how a machine with no AOP_HOME folder stops here.
+    loadConfig();
     db = openDb();
-    const { project } = registerProject(db, repoPath);
     const server = await startServer(db, port);
     console.log(`AOP listening on http://${HOSTNAME}:${server.port}`);
-    console.log(`Project "${project.name}" (${project.id}) at ${project.repo_path}`);
+    console.log(`Config: ${configPath()}`);
     console.log(`Database: ${dbPath()}`);
 
     const shutdown = () => {

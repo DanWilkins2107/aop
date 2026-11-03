@@ -60,7 +60,7 @@ export function GraphPage() {
     const [nodes, edges, stages, projects] = await Promise.all([
       api.nodes(projectId),
       api.projectEdges(projectId),
-      api.stages(projectId),
+      api.stages(),
       api.projects(),
     ]);
     return { nodes, edges, stages, project: projects.find((p) => p.id === projectId) ?? null };

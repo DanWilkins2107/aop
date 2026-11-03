@@ -51,7 +51,7 @@ export const api = {
   projects: () => send<ProjectRow[]>("GET", "/projects"),
   nodes: (projectId: string) => send<NodeView[]>("GET", `${projectPath(projectId)}/nodes`),
   projectEdges: (projectId: string) => send<EdgeRow[]>("GET", `${projectPath(projectId)}/edges`),
-  stages: (projectId: string) => send<StagesView>("GET", `${projectPath(projectId)}/stages`),
+  stages: () => send<StagesView>("GET", "/stages"),
   createNode: (projectId: string, body: { type?: string; stage?: string; title: string; body: string; cron?: string }) =>
     send<NodeView>("POST", `${projectPath(projectId)}/nodes`, body),
 

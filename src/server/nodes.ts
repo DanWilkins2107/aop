@@ -1,6 +1,6 @@
+import { loadConfig } from "./config.js";
 import type { Db } from "./db.js";
 import { badRequest, notFound, refused } from "./errors.js";
-import { projectConfig } from "./projects.js";
 import type { EdgeRow, EventView, LinkRow, MessageRow, NodeRow, NodeView, Turn } from "../shared/api.js";
 import { appendEvent, newId, now, type Actor } from "./records.js";
 import { isBuiltIn, type StageGraph } from "./stages.js";
@@ -13,8 +13,9 @@ export function getNodeRow(db: Db, id: string): NodeRow {
   return node;
 }
 
-function graphForNode(db: Db, nodeId: string): StageGraph {
-  return projectConfig(db, getNodeRow(db, nodeId).project_id).graph;
+/** Read from disk every time, so edits to `stages.yaml` apply without a restart. */
+function currentGraph(): StageGraph {
+  return loadConfig().graph;
 }
 
 /** Whether a node of this type can sit on this stage under the current `stages.yaml`. */
@@ -111,11 +112,11 @@ function toView(db: Db, graph: StageGraph, node: NodeRow): NodeView {
 }
 
 export function getNode(db: Db, id: string): NodeView {
-  return toView(db, graphForNode(db, id), getNodeRow(db, id));
+  return toView(db, currentGraph(), getNodeRow(db, id));
 }
 
 export function listNodes(db: Db, projectId: string): NodeView[] {
-  const { graph } = projectConfig(db, projectId);
+  const graph = currentGraph();
   const rows = db.prepare("SELECT * FROM nodes WHERE project_id = ? ORDER BY rowid").all(projectId) as NodeRow[];
   return rows.map((node) => toView(db, graph, node));
 }
@@ -168,7 +169,7 @@ export function createNode(
     actor: Actor;
   },
 ): NodeView {
-  const { graph } = projectConfig(db, projectId);
+  const graph = currentGraph();
   const { type, stage } = resolveStart(graph, input);
   if (stage === "scheduled") {
     if (input.cron === undefined) throw badRequest("A node starting at scheduled requires a cron");
@@ -332,7 +333,7 @@ function returnPlacement(
 }
 
 export function next(db: Db, nodeId: string, input: { outcome: string; actor: Actor }): NodeView {
-  const graph = graphForNode(db, nodeId);
+  const graph = currentGraph();
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
@@ -400,7 +401,7 @@ export function move(
   nodeId: string,
   input: { stage: string; type?: string | undefined; cron?: string | undefined },
 ): NodeView {
-  const graph = graphForNode(db, nodeId);
+  const graph = currentGraph();
 
   assertNoOwnAction(input.stage);
   if (input.cron !== undefined) {
@@ -433,7 +434,7 @@ function postMessage(db: Db, nodeId: string, stage: string, author: Actor, body:
 }
 
 export function ask(db: Db, nodeId: string, input: { question: string }): NodeView {
-  const graph = graphForNode(db, nodeId);
+  const graph = currentGraph();
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
@@ -451,7 +452,7 @@ export function ask(db: Db, nodeId: string, input: { question: string }): NodeVi
 }
 
 export function answer(db: Db, nodeId: string, input: { answer: string }): NodeView {
-  const graph = graphForNode(db, nodeId);
+  const graph = currentGraph();
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
@@ -470,7 +471,7 @@ export function fail(
   nodeId: string,
   input: { actor: Actor; reason?: string | undefined },
 ): NodeView {
-  const graph = graphForNode(db, nodeId);
+  const graph = currentGraph();
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
@@ -488,7 +489,7 @@ export function fail(
 }
 
 export function retry(db: Db, nodeId: string): NodeView {
-  const graph = graphForNode(db, nodeId);
+  const graph = currentGraph();
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
@@ -519,7 +520,7 @@ export function invalidate(db: Db, nodeId: string, input: { reason: string; acto
 
 /** Returns an invalidated node to where it was, read from the event that invalidated it. */
 export function restore(db: Db, nodeId: string): NodeView {
-  const graph = graphForNode(db, nodeId);
+  const graph = currentGraph();
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
@@ -580,7 +581,7 @@ export function block(db: Db, nodeId: string, input: { reason: string; actor: Ac
 /** Returns a blocked node to where it was, including that stage's own `return_stage`. */
 export function unblock(db: Db, nodeId: string, input: { actor: Actor }): NodeView {
   assertHuman(input.actor, "unblock a node");
-  const graph = graphForNode(db, nodeId);
+  const graph = currentGraph();
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
@@ -601,7 +602,7 @@ export function unblock(db: Db, nodeId: string, input: { actor: Actor }): NodeVi
 
 /** Lets an agent create children and edges without any of them starting early. */
 export function splitStart(db: Db, nodeId: string): NodeView {
-  const graph = graphForNode(db, nodeId);
+  const graph = currentGraph();
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);

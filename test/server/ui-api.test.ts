@@ -8,7 +8,7 @@ import { openDb, type Db } from "../../src/server/db.js";
 import { aopHome } from "../../src/server/paths.js";
 import { startServer, type RunningServer } from "../../src/server/server.js";
 import type { EdgeRow, EventView, NodeView, StagesView } from "../../src/shared/api.js";
-import { harness, makeRepo, STAGES_YAML, type Harness } from "./helpers.js";
+import { harness, makeHome, makeRepo, STAGES_YAML, type Harness } from "./helpers.js";
 
 describe("UI API", () => {
   let h: Harness;
@@ -17,8 +17,8 @@ describe("UI API", () => {
   });
   afterEach(() => h.close());
 
-  it("describes a project's stages in file order, without prompt paths", async () => {
-    const res = await h.call<StagesView>("GET", `/api/projects/${h.projectId}/stages`);
+  it("describes the shared stages in file order, without prompt paths", async () => {
+    const res = await h.call<StagesView>("GET", "/api/stages");
     expect(res.status).toBe(200);
     expect(res.body.stages[0]).toEqual({ name: "assess", turn: "agent", color: "#5c7cfa" });
     expect(res.body.types.map((t) => t.name)).toEqual(["triage", "dev", "hotfix", "nightly"]);
@@ -30,20 +30,20 @@ describe("UI API", () => {
 
   it("returns null for a stage with no colour", async () => {
     h.rewriteStages(STAGES_YAML.replace('spec_review: { turn: human, color: "#cddc39" }', "spec_review: { turn: human }"));
-    const res = await h.call<StagesView>("GET", `/api/projects/${h.projectId}/stages`);
+    const res = await h.call<StagesView>("GET", "/api/stages");
     expect(res.body.stages.find((s) => s.name === "spec_review")?.color).toBeNull();
   });
 
   it("lists every problem when stages.yaml goes bad", async () => {
     h.rewriteStages("stages: { a: { turn: agent }, b: { turn: agent } }\ntypes: {}\n");
-    const res = await h.call<{ error: { code: string; details: string[] } }>("GET", `/api/projects/${h.projectId}/stages`);
+    const res = await h.call<{ error: { code: string; details: string[] } }>("GET", "/api/stages");
     expect(res.status).toBe(422);
     expect(res.body.error.code).toBe("config_invalid");
     expect(res.body.error.details).toHaveLength(3);
   });
 
-  it("404s the stages and edges of an unknown project", async () => {
-    expect((await h.call("GET", "/api/projects/nope/stages")).status).toBe(404);
+  it("has no per-project stages any more, and 404s the edges of an unknown project", async () => {
+    expect((await h.call("GET", `/api/projects/${h.projectId}/stages`)).status).toBe(404);
     expect((await h.call("GET", "/api/projects/nope/edges")).status).toBe(404);
   });
 
@@ -96,10 +96,13 @@ describe("change events", () => {
   let projectId: string;
   const changes = new ChangeFeed();
   const open: ClientRequest[] = [];
+  let outerHome: string | undefined;
 
   beforeAll(async () => {
-    home = mkdtempSync(join(aopHome(), "sse-"));
-    db = openDb(join(home, "aop.db"));
+    home = makeHome();
+    outerHome = process.env["AOP_HOME"];
+    process.env["AOP_HOME"] = home;
+    db = openDb();
     server = await startServer(db, 0, { changes });
     const res = await fetch(`http://127.0.0.1:${server.port}/api/projects`, {
       method: "POST",
@@ -116,6 +119,7 @@ describe("change events", () => {
   afterAll(async () => {
     await server.close();
     db.close();
+    process.env["AOP_HOME"] = outerHome;
     rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   });
 

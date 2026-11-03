@@ -76,7 +76,7 @@ export interface EventView {
   data: unknown;
 }
 
-/** A project's `stages.yaml`, in file order. Built-in stages aren't listed unless a type uses one. */
+/** The shared `stages.yaml`, in file order. Built-in stages aren't listed unless a type uses one. */
 export interface StagesView {
   /** The type new nodes enter. */
   start: string;

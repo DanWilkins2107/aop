@@ -1,13 +1,11 @@
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
 import Database from "better-sqlite3";
 import { migrations } from "./migrations.js";
 import { dbPath } from "./paths.js";
 
 export type Db = Database.Database;
 
+/** The folder must already exist: creating `~/.aop` is the job of `aop init`, not the server. */
 export function openDb(file: string = dbPath()): Db {
-  mkdirSync(dirname(file), { recursive: true });
   const db = new Database(file);
   try {
     db.pragma("foreign_keys = ON");

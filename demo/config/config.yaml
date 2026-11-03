@@ -1,0 +1,7 @@
+# Demo only. Nothing runs agents yet, and these commands are placeholders.
+sandboxed_command: echo
+non_sandboxed_command: echo
+agent_args: -p
+open_from: .
+agent_timeout_minutes: 60
+stages: ./stages.yaml

@@ -1,14 +1,15 @@
+import { mkdtempSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { loadProjectConfig } from "../../src/server/config.js";
+import { loadConfig } from "../../src/server/config.js";
 import { ConfigError } from "../../src/server/errors.js";
 import { aopHome, dbPath } from "../../src/server/paths.js";
-import { makeRepo, writeFiles, STAGES_YAML } from "./helpers.js";
+import { CONFIG_YAML, makeHome, writeFiles, STAGES_YAML } from "./helpers.js";
 
-function problemsOf(repo: string): string[] {
+function problemsOf(home: string): string[] {
   try {
-    loadProjectConfig(repo);
+    loadConfig(home);
   } catch (error) {
     if (error instanceof ConfigError) return error.problems;
     throw error;
@@ -17,7 +18,7 @@ function problemsOf(repo: string): string[] {
 }
 
 function stagesProblems(yaml: string, extra: Record<string, string> = {}): string[] {
-  return problemsOf(makeRepo({ ".aop/stages.yaml": yaml, ...extra }));
+  return problemsOf(makeHome({ "stages.yaml": yaml, ...extra }));
 }
 
 const pool = `
@@ -45,57 +46,124 @@ describe("paths", () => {
   });
 });
 
+const ONLY_STAGES = "stages: ./stages.yaml\n";
+
 describe("config loading", () => {
-  it("loads config and resolves stages relative to .aop", () => {
-    const repo = makeRepo();
-    const config = loadProjectConfig(repo);
-    expect(config.max_agents).toBe(3);
-    expect(config.agent_command).toContain("{{prompt}}");
-    expect(config.stagesPath).toBe(join(repo, ".aop", "stages.yaml"));
-    expect(config.graph.types.get("triage")?.start).toBe("assess");
-    expect(config.graph.stages.get("assess")?.prompt).toBe(join(repo, ".aop", "prompts", "assess.md"));
-  });
-
-  it("lets config.local.yaml override key by key", () => {
-    const repo = makeRepo({ ".aop/config.local.yaml": "max_agents: 9\n" });
-    const config = loadProjectConfig(repo);
-    expect(config.max_agents).toBe(9);
-    expect(config.agent_command).toContain("{{prompt}}");
-  });
-
-  it("resolves a stages path set in config.local.yaml relative to .aop", () => {
-    const repo = makeRepo({
-      ".aop/config.local.yaml": "stages: ./custom/process.yaml\n",
-      ".aop/custom/process.yaml": `start: t\nstages: { a: { turn: human } }\ntypes: { t: { start: a, stages: { a: { next: { ok: done } } } } }\n`,
+  it("loads every key and resolves stages and prompts", () => {
+    const home = makeHome();
+    const config = loadConfig(home);
+    expect(config).toMatchObject({
+      sandboxed_command: "sandboxed-claude",
+      non_sandboxed_command: "claude",
+      agent_args: "-p",
+      sandbox: true,
+      open_from: ".",
+      agent_timeout_minutes: 30,
+      stagesPath: join(home, "stages.yaml"),
     });
-    expect(loadProjectConfig(repo).stagesPath).toBe(join(repo, ".aop", "custom", "process.yaml"));
+    expect(config.graph.types.get("triage")?.start).toBe("assess");
+    expect(config.graph.stages.get("assess")?.prompt).toBe(join(home, "prompts", "assess.md"));
   });
 
-  it("reports a missing config.yaml", () => {
-    const repo = makeRepo();
-    expect(problemsOf(join(repo, "no-such-dir")).join()).toContain("file not found");
+  it("reads AOP_HOME by default", () => {
+    const home = makeHome();
+    const saved = process.env["AOP_HOME"];
+    process.env["AOP_HOME"] = home;
+    try {
+      expect(loadConfig().stagesPath).toBe(join(home, "stages.yaml"));
+    } finally {
+      process.env["AOP_HOME"] = saved;
+    }
+  });
+
+  it("follows an absolute stages link, with prompts relative to that file", () => {
+    const shared = makeHome();
+    const home = makeHome({ "config.yaml": `sandboxed_command: s\nstages: ${JSON.stringify(join(shared, "stages.yaml"))}\n` });
+    const config = loadConfig(home);
+    expect(config.stagesPath).toBe(join(shared, "stages.yaml"));
+    expect(config.graph.stages.get("assess")?.prompt).toBe(join(shared, "prompts", "assess.md"));
+  });
+
+  it("defaults the optional keys", () => {
+    const home = makeHome({ "config.yaml": `sandboxed_command: s\n${ONLY_STAGES}` });
+    expect(loadConfig(home)).toMatchObject({ agent_args: "", sandbox: true, open_from: ".", agent_timeout_minutes: 60 });
+  });
+
+  it("requires sandboxed_command unless sandbox is false", () => {
+    expect(problemsOf(makeHome({ "config.yaml": ONLY_STAGES })).join()).toContain("sandboxed_command: required");
+    expect(problemsOf(makeHome({ "config.yaml": `sandbox: true\n${ONLY_STAGES}` })).join()).toContain("sandboxed_command: required");
+    expect(problemsOf(makeHome({ "config.yaml": `sandbox: false\nnon_sandboxed_command: c\n${ONLY_STAGES}` }))).toEqual([]);
+  });
+
+  it("requires non_sandboxed_command when sandbox is false, which has nothing else to launch", () => {
+    const home = makeHome({ "config.yaml": `sandbox: false\nsandboxed_command: s\n${ONLY_STAGES}` });
+    expect(problemsOf(home).join()).toContain("non_sandboxed_command: required");
+  });
+
+  it("no longer accepts the old keys", () => {
+    const home = makeHome({ "config.yaml": `${CONFIG_YAML}agent_command: x\nmax_agents: 3\n` });
+    const problems = problemsOf(home).join();
+    expect(problems).toContain("agent_command");
+    expect(problems).toContain("max_agents");
+  });
+
+  it("checks each key's value", () => {
+    const home = makeHome({
+      "config.yaml": `
+sandboxed_command: "  "
+non_sandboxed_command: 3
+agent_args: [a]
+sandbox: "no"
+open_from: ${JSON.stringify(resolve("/somewhere"))}
+agent_timeout_minutes: 0
+${ONLY_STAGES}`,
+    });
+    const problems = problemsOf(home).join("\n");
+    for (const key of ["sandboxed_command", "non_sandboxed_command", "agent_args", "sandbox", "open_from", "agent_timeout_minutes"]) {
+      expect(problems).toContain(`${key}:`);
+    }
+  });
+
+  it("says what file to create when config.yaml is missing", () => {
+    const home = mkdtempSync(join(aopHome(), "empty-"));
+    const [problem] = problemsOf(home);
+    expect(problem).toContain(join(home, "config.yaml"));
+    expect(problem).toContain("Create it");
+    expect(problem).toContain("sandboxed_command");
+    expect(problem).toContain("stages: ./stages.yaml");
+  });
+
+  it("says what file to create when the stages file is missing", () => {
+    const home = makeHome({ "config.yaml": `sandboxed_command: s\nstages: ./nope.yaml\n` });
+    const [problem] = problemsOf(home);
+    expect(problem).toContain(join(home, "nope.yaml"));
+    expect(problem).toContain("Create it");
+  });
+
+  it("requires a stages link", () => {
+    expect(problemsOf(makeHome({ "config.yaml": "sandboxed_command: s\n" })).join()).toContain("stages");
   });
 
   it("reports config problems together with stages problems", () => {
-    const repo = makeRepo({
-      ".aop/config.yaml": "stages: ./stages.yaml\nmax_agents: 0\nsurprise: 1\n",
-      ".aop/stages.yaml": `${pool}\ntypes: { t: { start: missing, stages: {} } }\n`,
+    const home = makeHome({
+      "config.yaml": `${ONLY_STAGES}agent_timeout_minutes: 0\nsurprise: 1\n`,
+      "stages.yaml": `${pool}\ntypes: { t: { start: missing, stages: {} } }\n`,
     });
-    const problems = problemsOf(repo).join("\n");
-    expect(problems).toContain("agent_command");
-    expect(problems).toContain("max_agents");
+    const problems = problemsOf(home).join("\n");
+    expect(problems).toContain("sandboxed_command");
+    expect(problems).toContain("agent_timeout_minutes");
     expect(problems).toContain("surprise");
     expect(problems).toContain('start "missing"');
   });
 
   it("reports YAML syntax errors", () => {
     expect(stagesProblems("stages: [unclosed").length).toBeGreaterThan(0);
-    expect(problemsOf(makeRepo({ ".aop/config.local.yaml": "- a\n- b\n" })).join()).toContain("mapping");
+    expect(problemsOf(makeHome({ "config.yaml": "- a\n- b\n" })).join()).toContain("mapping");
   });
 
-  it("reports a missing stages file", () => {
-    const repo = makeRepo({ ".aop/config.local.yaml": "stages: ./nope.yaml\n" });
-    expect(problemsOf(repo).join()).toContain("file not found");
+  it("ignores any .aop folder or config.local.yaml", () => {
+    const home = makeHome({ "config.local.yaml": "sandboxed_command: other\n", ".aop/config.yaml": "nonsense: 1\n" });
+    expect(loadConfig(home).sandboxed_command).toBe("sandboxed-claude");
   });
 });
 
@@ -261,9 +329,9 @@ types:
   });
 
   it("re-reads the file each time, so fixing it takes effect", () => {
-    const repo = makeRepo({ ".aop/stages.yaml": "stages: {}\n" });
-    expect(problemsOf(repo).length).toBeGreaterThan(0);
-    writeFiles(repo, { ".aop/stages.yaml": STAGES_YAML });
-    expect(problemsOf(repo)).toEqual([]);
+    const home = makeHome({ "stages.yaml": "stages: {}\n" });
+    expect(problemsOf(home).length).toBeGreaterThan(0);
+    writeFiles(home, { "stages.yaml": STAGES_YAML });
+    expect(problemsOf(home)).toEqual([]);
   });
 });

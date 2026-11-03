@@ -11,7 +11,8 @@ import { ChangeFeed } from "./changes.js";
 import type { Db } from "./db.js";
 import { ApiError, badRequest, ConfigError } from "./errors.js";
 import * as nodes from "./nodes.js";
-import { getProject, listProjects, projectConfig, registerProject } from "./projects.js";
+import { loadConfig } from "./config.js";
+import { addProject, getProject, listProjects } from "./projects.js";
 import { describeStages } from "./stages.js";
 
 const BUILT_WEB_DIR = fileURLToPath(new URL("../../dist/web", import.meta.url));
@@ -23,7 +24,7 @@ const actor = z.enum(["human", "agent", "system"]);
 const nonBlank = z.string().refine((s) => s.trim().length > 0, "must not be blank");
 const title = nonBlank.refine((s) => [...s].length <= 200, "must be at most 200 characters");
 
-const registerProjectBody = z.strictObject({ repo_path: nonBlank, name: nonBlank.optional() });
+const addProjectBody = z.strictObject({ repo_path: nonBlank, name: title.optional() });
 const createNodeBody = z.strictObject({
   type: nonBlank.optional(),
   stage: nonBlank.optional(),
@@ -135,7 +136,7 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
   app.onError((error, c) => {
     if (error instanceof ApiError) return errorResponse(c, error.status, error.code, error.message, error.details);
     if (error instanceof ConfigError) {
-      return errorResponse(c, 422, "config_invalid", "The project's AOP config is invalid", error.problems);
+      return errorResponse(c, 422, "config_invalid", "The AOP config is invalid", error.problems);
     }
     if (error instanceof Database.SqliteError && error.code.startsWith("SQLITE_CONSTRAINT")) {
       return errorResponse(c, 409, "constraint_violation", error.message);
@@ -167,15 +168,13 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
   // Projects
   app.get("/api/projects", (c) => c.json(listProjects(db)));
   app.post("/api/projects", async (c) => {
-    const body = await readBody(c, registerProjectBody);
-    const { project, created } = registerProject(db, body.repo_path, body.name);
-    return c.json(project, created ? 201 : 200);
+    const body = await readBody(c, addProjectBody);
+    return c.json(addProject(db, body.repo_path, body.name), 201);
   });
 
-  app.get("/api/projects/:id/stages", (c) => {
-    const project = getProject(db, c.req.param("id"));
-    return c.json(describeStages(projectConfig(db, project.id).graph));
-  });
+  // The one process, shared by all projects. Read from disk every time.
+  app.get("/api/stages", (c) => c.json(describeStages(loadConfig().graph)));
+
   app.get("/api/projects/:id/edges", (c) => {
     const project = getProject(db, c.req.param("id"));
     return c.json(nodes.listProjectEdges(db, project.id));

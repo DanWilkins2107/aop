@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { holdersOf, type EventView, type NodeView } from "../../src/server/nodes.js";
-import { harness, makeRepo, STAGES_YAML, writeFiles, type Harness } from "./helpers.js";
+import { harness, makeRepo, STAGES_YAML, type Harness } from "./helpers.js";
 
 let h: Harness;
 
@@ -26,32 +26,12 @@ async function child(parent: string, type = "dev"): Promise<NodeView> {
 }
 
 describe("projects", () => {
-  it("registers by repo path and lists", async () => {
-    const repo = makeRepo();
-    const res = await h.call("POST", "/api/projects", { repo_path: repo, name: "Mine" });
+  it("adds by name and path, and lists", async () => {
+    const res = await h.call("POST", "/api/projects", { repo_path: makeRepo(), name: "Mine" });
     expect(res.status).toBe(201);
     expect(res.body["name"]).toBe("Mine");
     const list = await h.call<{ id: string }[]>("GET", "/api/projects");
     expect(list.body.map((p) => p.id)).toContain(res.body["id"]);
-  });
-
-  it("returns the existing project when registered again", async () => {
-    const res = await h.call("POST", "/api/projects", { repo_path: h.repo });
-    expect(res.status).toBe(200);
-    expect(res.body["id"]).toBe(h.projectId);
-  });
-
-  it("refuses a repo with an invalid config, listing every problem", async () => {
-    const repo = makeRepo({ ".aop/stages.yaml": "stages: { a: { turn: agent }, b: { turn: agent } }\ntypes: {}\n" });
-    const res = await h.call("POST", "/api/projects", { repo_path: repo });
-    expect(res.status).toBe(422);
-    expect(errorOf(res).code).toBe("config_invalid");
-    expect(errorOf(res).details).toHaveLength(3);
-  });
-
-  it("refuses a path that doesn't exist or has no .aop", async () => {
-    expect((await h.call("POST", "/api/projects", { repo_path: "Z:/definitely/not/here" })).status).toBe(422);
-    expect((await h.call("POST", "/api/projects", { repo_path: process.cwd() })).status).toBe(422);
   });
 });
 
@@ -381,7 +361,7 @@ types:
     const res = await h.post(node.id, "next", { outcome: "done" });
     expect(res.status).toBe(422);
     expect(errorOf(res).details).toContain('stage "broken": agent stage has no prompt');
-    writeFiles(h.repo, { ".aop/stages.yaml": STAGES_YAML });
+    h.rewriteStages(STAGES_YAML);
     expect((await h.post(node.id, "next", { outcome: "done" })).status).toBe(200);
   });
 });

@@ -7,6 +7,10 @@ export function aopHome(): string {
   return fromEnv ? resolve(fromEnv) : join(homedir(), ".aop");
 }
 
+export function configPath(home: string = aopHome()): string {
+  return join(home, "config.yaml");
+}
+
 export function dbPath(): string {
   return join(aopHome(), "aop.db");
 }
