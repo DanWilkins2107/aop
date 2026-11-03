@@ -4,6 +4,9 @@
   "private": true,
   "description": "Agent orchestration platform",
   "type": "module",
+  "bin": {
+    "aop": "dist/cli/main.js"
+  },
   "engines": {
     "node": ">=22"
   },
