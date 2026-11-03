@@ -22,7 +22,7 @@ cpSync(join(here, "config"), home, { recursive: true });
 loadConfig();
 
 const db = openDb();
-const project = addProject(db, here, "Demo project");
+const project = addProject(db, { name: "Demo project", repo_path: here });
 await seed(createApp(db), db, project.id);
 
 const server = await startServer(db, Number(process.env["AOP_PORT"] ?? DEFAULT_PORT));

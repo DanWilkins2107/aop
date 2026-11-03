@@ -11,6 +11,12 @@ export function configPath(home: string = aopHome()): string {
   return join(home, "config.yaml");
 }
 
+/** Resolves a path written in `config.yaml`: `~` is the user's home, and relative paths start at `home`. */
+export function resolveConfigPath(home: string, path: string): string {
+  const fromUserHome = /^~(?:[\\/](.*))?$/.exec(path);
+  return fromUserHome ? resolve(join(homedir(), fromUserHome[1] ?? "")) : resolve(home, path);
+}
+
 export function dbPath(): string {
   return join(aopHome(), "aop.db");
 }

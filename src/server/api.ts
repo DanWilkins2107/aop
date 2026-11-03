@@ -11,7 +11,7 @@ import { ChangeFeed } from "./changes.js";
 import type { Db } from "./db.js";
 import { ApiError, badRequest, ConfigError } from "./errors.js";
 import * as nodes from "./nodes.js";
-import { loadConfig } from "./config.js";
+import { describeConfig, loadConfig } from "./config.js";
 import { addProject, deleteProject, getProject, listProjects, updateProject } from "./projects.js";
 import { describeStages } from "./stages.js";
 
@@ -24,9 +24,10 @@ const actor = z.enum(["human", "agent", "system"]);
 const nonBlank = z.string().refine((s) => s.trim().length > 0, "must not be blank");
 const title = nonBlank.refine((s) => [...s].length <= 200, "must be at most 200 characters");
 
-const addProjectBody = z.strictObject({ repo_path: nonBlank, name: title.optional() });
+const repoPath = nonBlank.nullable().optional();
+const addProjectBody = z.strictObject({ name: title.optional(), repo_path: repoPath });
 const updateProjectBody = z
-  .strictObject({ name: title.optional(), repo_path: nonBlank.optional() })
+  .strictObject({ name: title.optional(), repo_path: repoPath })
   .refine((edit) => edit.name !== undefined || edit.repo_path !== undefined, "must include name or repo_path");
 const createNodeBody = z.strictObject({
   type: nonBlank.optional(),
@@ -171,8 +172,7 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
   // Projects
   app.get("/api/projects", (c) => c.json(listProjects(db)));
   app.post("/api/projects", async (c) => {
-    const body = await readBody(c, addProjectBody);
-    return c.json(addProject(db, body.repo_path, body.name), 201);
+    return c.json(addProject(db, await readBody(c, addProjectBody)), 201);
   });
   app.patch("/api/projects/:id", async (c) =>
     c.json(updateProject(db, c.req.param("id"), await readBody(c, updateProjectBody))),
@@ -181,6 +181,9 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
 
   // The one process, shared by all projects. Read from disk every time.
   app.get("/api/stages", (c) => c.json(describeStages(loadConfig().graph)));
+
+  // Read-only on purpose. Agents can reach this API, so no route may change commands or the sandbox.
+  app.get("/api/config", (c) => c.json(describeConfig()));
 
   app.get("/api/projects/:id/edges", (c) => {
     const project = getProject(db, c.req.param("id"));

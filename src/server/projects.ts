@@ -1,8 +1,9 @@
 import { realpathSync, statSync } from "node:fs";
 import { basename, isAbsolute } from "node:path";
 import type { ProjectRow } from "../shared/api.js";
+import type { AopConfig } from "./config.js";
 import { allowProjectDeletion, type Db } from "./db.js";
-import { ApiError, notFound } from "./errors.js";
+import { ApiError, badRequest, notFound } from "./errors.js";
 import { newId, now } from "./records.js";
 
 export type { ProjectRow };
@@ -30,17 +31,18 @@ function refuseIfRegistered(db: Db, repoPath: string, exceptId = ""): void {
   }
 }
 
-/** Adds a project. The folder only has to exist: nothing is read from it or written to it. */
-export function addProject(db: Db, repoPath: string, name?: string): ProjectRow {
-  const canonical = existingFolder(repoPath.trim());
-  refuseIfRegistered(db, canonical);
+/**
+ * Adds a project, which needs only a name. A path has to be an existing folder, and nothing is read
+ * from it or written to it. Given only a path, the project is named after the folder.
+ */
+export function addProject(db: Db, input: { name?: string | undefined; repo_path?: string | null | undefined }): ProjectRow {
+  const repoPath = input.repo_path == null ? null : existingFolder(input.repo_path.trim());
+  if (repoPath !== null) refuseIfRegistered(db, repoPath);
 
-  const project: ProjectRow = {
-    id: newId(),
-    created_at: now(),
-    name: name?.trim() ?? (basename(canonical) || canonical),
-    repo_path: canonical,
-  };
+  const name = input.name?.trim() ?? (repoPath === null ? "" : basename(repoPath) || repoPath);
+  if (name === "") throw badRequest("A project needs a name");
+
+  const project: ProjectRow = { id: newId(), created_at: now(), name, repo_path: repoPath };
   db.prepare("INSERT INTO projects (id, created_at, name, repo_path) VALUES (?, ?, ?, ?)").run(
     project.id,
     project.created_at,
@@ -60,15 +62,27 @@ export function getProject(db: Db, id: string): ProjectRow {
   return project;
 }
 
-/** Renames a project or points it at another folder. */
-export function updateProject(db: Db, id: string, changes: { name?: string; repo_path?: string }): ProjectRow {
+/** Renames a project, or points it at another folder or at none (`repo_path: null`). */
+export function updateProject(
+  db: Db,
+  id: string,
+  changes: { name?: string | undefined; repo_path?: string | null | undefined },
+): ProjectRow {
   const project = getProject(db, id);
   const name = changes.name?.trim() ?? project.name;
-  const repoPath = changes.repo_path === undefined ? project.repo_path : existingFolder(changes.repo_path.trim());
-  refuseIfRegistered(db, repoPath, id);
+  let repoPath = project.repo_path;
+  if (changes.repo_path !== undefined) {
+    repoPath = changes.repo_path === null ? null : existingFolder(changes.repo_path.trim());
+  }
+  if (repoPath !== null) refuseIfRegistered(db, repoPath, id);
 
   db.prepare("UPDATE projects SET name = ?, repo_path = ? WHERE id = ?").run(name, repoPath, id);
   return { ...project, name, repo_path: repoPath };
+}
+
+/** Where a project's agents start: its own path if it has one, otherwise the machine's `open_from`. */
+export function agentStartPath(project: Pick<ProjectRow, "repo_path">, config: Pick<AopConfig, "openFromPath">): string {
+  return project.repo_path ?? config.openFromPath;
 }
 
 /** Stops any agent processes working on a project. There are none yet: the orchestrator fills this in. */

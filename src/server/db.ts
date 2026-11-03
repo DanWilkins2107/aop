@@ -40,11 +40,20 @@ function migrate(db: Db): void {
   if (current > latest) {
     throw new Error(`Database is at version ${current}, but this AOP only knows up to ${latest}. Upgrade AOP.`);
   }
-  for (const { version, sql } of migrations) {
+  for (const { version, sql, foreignKeysOff } of migrations) {
     if (version <= current) continue;
-    db.transaction(() => {
-      db.exec(sql);
-      db.pragma(`user_version = ${version}`);
-    })();
+    // SQLite ignores this pragma inside a transaction.
+    if (foreignKeysOff) db.pragma("foreign_keys = OFF");
+    try {
+      db.transaction(() => {
+        db.exec(sql);
+        if ((db.pragma("foreign_key_check") as unknown[]).length > 0) {
+          throw new Error(`Migration ${version} would break foreign keys`);
+        }
+        db.pragma(`user_version = ${version}`);
+      })();
+    } finally {
+      if (foreignKeysOff) db.pragma("foreign_keys = ON");
+    }
   }
 }

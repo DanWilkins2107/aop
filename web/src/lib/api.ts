@@ -1,4 +1,5 @@
 import type {
+  ConfigView,
   EdgeRow,
   EventView,
   LinkRow,
@@ -49,13 +50,14 @@ const projectPath = (id: string) => `/projects/${encodeURIComponent(id)}`;
 
 export const api = {
   projects: () => send<ProjectRow[]>("GET", "/projects"),
-  addProject: (name: string, repoPath: string) => send<ProjectRow>("POST", "/projects", { name, repo_path: repoPath }),
-  updateProject: (id: string, changes: { name?: string; repo_path?: string }) =>
+  addProject: (name: string, repoPath: string | null) => send<ProjectRow>("POST", "/projects", { name, repo_path: repoPath }),
+  updateProject: (id: string, changes: { name?: string; repo_path?: string | null }) =>
     send<ProjectRow>("PATCH", projectPath(id), changes),
   deleteProject: (id: string) => send<ProjectRow>("DELETE", projectPath(id)),
   nodes: (projectId: string) => send<NodeView[]>("GET", `${projectPath(projectId)}/nodes`),
   projectEdges: (projectId: string) => send<EdgeRow[]>("GET", `${projectPath(projectId)}/edges`),
   stages: () => send<StagesView>("GET", "/stages"),
+  config: () => send<ConfigView>("GET", "/config"),
   createNode: (projectId: string, body: { type?: string; stage?: string; title: string; body: string; cron?: string }) =>
     send<NodeView>("POST", `${projectPath(projectId)}/nodes`, body),
 

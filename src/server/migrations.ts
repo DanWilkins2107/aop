@@ -1,5 +1,10 @@
 /** Numbered migrations. Never edit one that has shipped: add the next number instead. */
-export const migrations: readonly { version: number; sql: string }[] = [
+export const migrations: readonly {
+  version: number;
+  sql: string;
+  /** For rebuilding a table that others point at, which foreign keys would otherwise refuse. */
+  foreignKeysOff?: boolean;
+}[] = [
   {
     version: 1,
     sql: `
@@ -145,6 +150,24 @@ DROP TRIGGER events_no_delete;
 CREATE TRIGGER events_no_delete BEFORE DELETE ON events
 WHEN (SELECT project_id FROM nodes WHERE id = OLD.node_id) IS NOT aop_project_being_deleted()
 BEGIN SELECT RAISE(ABORT, 'events are append-only'); END;
+`,
+  },
+  {
+    version: 4,
+    // A project needs only a name. UNIQUE still applies to paths that are set, because SQLite treats
+    // each NULL as distinct. Copying the rowid keeps the order projects are listed in.
+    foreignKeysOff: true,
+    sql: `
+CREATE TABLE projects_new (
+  id         TEXT PRIMARY KEY NOT NULL,
+  created_at TEXT NOT NULL,
+  name       TEXT NOT NULL,
+  repo_path  TEXT UNIQUE CHECK (repo_path IS NULL OR length(repo_path) > 0)
+) STRICT;
+INSERT INTO projects_new (rowid, id, created_at, name, repo_path)
+  SELECT rowid, id, created_at, name, repo_path FROM projects;
+DROP TABLE projects;
+ALTER TABLE projects_new RENAME TO projects;
 `,
   },
 ];

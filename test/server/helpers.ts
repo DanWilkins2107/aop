@@ -47,7 +47,7 @@ export const CONFIG_YAML = `
 sandboxed_command: sandboxed-claude
 non_sandboxed_command: claude
 agent_args: -p
-open_from: .
+open_from: ~/code
 agent_timeout_minutes: 30
 stages: ./stages.yaml
 `;
@@ -106,7 +106,7 @@ export function harness(): Harness {
   process.env["AOP_HOME"] = home;
   const db = openDb();
   const repo = makeRepo();
-  const project = addProject(db, repo);
+  const project = addProject(db, { repo_path: repo });
   const app = createApp(db);
 
   const call: Harness["call"] = async <T,>(method: string, path: string, body?: unknown) => {

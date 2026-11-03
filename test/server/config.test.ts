@@ -57,7 +57,7 @@ describe("config loading", () => {
       non_sandboxed_command: "claude",
       agent_args: "-p",
       sandbox: true,
-      open_from: ".",
+      open_from: "~/code",
       agent_timeout_minutes: 30,
       stagesPath: join(home, "stages.yaml"),
     });
@@ -86,7 +86,7 @@ describe("config loading", () => {
 
   it("defaults the optional keys", () => {
     const home = makeHome({ "config.yaml": `sandboxed_command: s\n${ONLY_STAGES}` });
-    expect(loadConfig(home)).toMatchObject({ agent_args: "", sandbox: true, open_from: ".", agent_timeout_minutes: 60 });
+    expect(loadConfig(home)).toMatchObject({ agent_args: "", sandbox: true, open_from: "~/code", agent_timeout_minutes: 60 });
   });
 
   it("requires sandboxed_command unless sandbox is false", () => {
@@ -114,7 +114,7 @@ sandboxed_command: "  "
 non_sandboxed_command: 3
 agent_args: [a]
 sandbox: "no"
-open_from: ${JSON.stringify(resolve("/somewhere"))}
+open_from: ""
 agent_timeout_minutes: 0
 ${ONLY_STAGES}`,
     });

@@ -1,8 +1,9 @@
 import { existsSync } from "node:fs";
-import { isAbsolute, resolve } from "node:path";
+import { resolve } from "node:path";
 import { z } from "zod";
+import type { ConfigView } from "../shared/api.js";
 import { ConfigError } from "./errors.js";
-import { aopHome, configPath } from "./paths.js";
+import { aopHome, configPath, resolveConfigPath } from "./paths.js";
 import { loadStagesFile, type StageGraph } from "./stages.js";
 import { parseYamlFile } from "./yamlFile.js";
 
@@ -13,11 +14,7 @@ const settingsSchema = z.strictObject({
   non_sandboxed_command: command.optional(),
   agent_args: z.string().default(""),
   sandbox: z.boolean().default(true),
-  open_from: z
-    .string()
-    .min(1)
-    .refine((path) => !isAbsolute(path), "must be relative to the repo root")
-    .default("."),
+  open_from: z.string().trim().min(1).default("~/code"),
   agent_timeout_minutes: z.number().positive().default(60),
   stages: z.string().min(1),
 });
@@ -27,6 +24,8 @@ type Settings = z.infer<typeof settingsSchema>;
 export interface AopConfig extends Settings {
   /** Absolute path to `stages.yaml`. */
   stagesPath: string;
+  /** Absolute path of `open_from`, where agents start for projects with no path. May not exist. */
+  openFromPath: string;
   graph: StageGraph;
 }
 
@@ -82,5 +81,31 @@ export function loadConfig(home: string = aopHome()): AopConfig {
   problems.push(...stageProblems);
 
   if (!settings.success || problems.length > 0) throw new ConfigError(problems);
-  return { ...settings.data, stagesPath, graph };
+  return { ...settings.data, stagesPath, openFromPath: resolveConfigPath(home, settings.data.open_from), graph };
+}
+
+/** What the read-only settings page shows. An invalid config is a normal answer here, not a failure. */
+export function describeConfig(home: string = aopHome()): ConfigView {
+  const config_path = configPath(home);
+  try {
+    const config = loadConfig(home);
+    return {
+      config_path,
+      problems: [],
+      settings: {
+        sandboxed_command: config.sandboxed_command ?? null,
+        non_sandboxed_command: config.non_sandboxed_command ?? null,
+        agent_args: config.agent_args,
+        sandbox: config.sandbox,
+        open_from: config.open_from,
+        open_from_path: config.openFromPath,
+        agent_timeout_minutes: config.agent_timeout_minutes,
+        stages: config.stages,
+        stages_path: config.stagesPath,
+      },
+    };
+  } catch (error) {
+    if (error instanceof ConfigError) return { config_path, problems: error.problems, settings: null };
+    throw error;
+  }
 }

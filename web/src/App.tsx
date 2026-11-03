@@ -1,7 +1,9 @@
 import { Link, Route, Routes } from "react-router-dom";
 import { useLiveStatus } from "./lib/live.js";
+import { AopSettingsPage } from "./pages/AopSettingsPage.js";
 import { GraphPage } from "./pages/GraphPage.js";
 import { NodePage } from "./pages/NodePage.js";
+import { ProjectSettingsPage } from "./pages/ProjectSettingsPage.js";
 import { ProjectsPage } from "./pages/ProjectsPage.js";
 
 const STATUS_LABEL = { connecting: "Connecting", live: "Live", offline: "Reconnecting" };
@@ -30,12 +32,17 @@ export function App() {
           AOP
         </Link>
         <span className="topbar-spacer" />
+        <Link to="/settings" className="quiet-link">
+          AOP settings
+        </Link>
         <LiveIndicator />
       </header>
       <main className="main">
         <Routes>
           <Route path="/" element={<ProjectsPage />} />
+          <Route path="/settings" element={<AopSettingsPage />} />
           <Route path="/p/:projectId" element={<GraphPage />} />
+          <Route path="/p/:projectId/settings" element={<ProjectSettingsPage />} />
           <Route path="/n/:nodeId" element={<NodePage />} />
           <Route
             path="*"

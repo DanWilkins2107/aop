@@ -7,7 +7,24 @@ export interface ProjectRow {
   id: string;
   created_at: string;
   name: string;
-  repo_path: string;
+  repo_path: string | null;
+}
+
+/** The machine's `config.yaml`, with defaults filled in. `settings` is null while it's invalid. */
+export interface ConfigView {
+  config_path: string;
+  problems: string[];
+  settings: {
+    sandboxed_command: string | null;
+    non_sandboxed_command: string | null;
+    agent_args: string;
+    sandbox: boolean;
+    open_from: string;
+    open_from_path: string;
+    agent_timeout_minutes: number;
+    stages: string;
+    stages_path: string;
+  } | null;
 }
 
 export interface NodeRow {

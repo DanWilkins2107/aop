@@ -232,7 +232,7 @@ describe("serving the web app", () => {
 
   it("serves files, and the page for any route the browser owns", async () => {
     expect(await (await get("/assets/app.js")).text()).toBe("console.log(1)");
-    for (const path of ["/", "/p/abc", "/n/abc"]) {
+    for (const path of ["/", "/p/abc", "/p/abc/settings", "/settings", "/n/abc"]) {
       const res = await get(path);
       expect(res.status).toBe(200);
       expect(await res.text()).toContain("page");

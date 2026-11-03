@@ -2,6 +2,6 @@
 sandboxed_command: echo
 non_sandboxed_command: echo
 agent_args: -p
-open_from: .
+open_from: ~/code
 agent_timeout_minutes: 60
 stages: ./stages.yaml

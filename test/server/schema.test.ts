@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { allowProjectDeletion, openDb, type Db } from "../../src/server/db.js";
 import { migrations } from "../../src/server/migrations.js";
 import { aopHome } from "../../src/server/paths.js";
+import { deleteProject } from "../../src/server/projects.js";
 
 let db: Db;
 let file: string;
@@ -92,8 +93,19 @@ describe("database setup", () => {
 });
 
 describe("projects", () => {
-  it("requires a unique repo_path", () => {
+  it("keeps a set repo_path unique", () => {
     expect(() => db.prepare("INSERT INTO projects VALUES ('p3', ?, 'x', '/repo/p1')").run(T)).toThrow(/UNIQUE/);
+  });
+
+  it("lets any number of projects have no repo_path, but not a blank one", () => {
+    const insert = db.prepare("INSERT INTO projects (id, created_at, name, repo_path) VALUES (?, ?, 'x', ?)");
+    insert.run("none1", T, null);
+    insert.run("none2", T, null);
+    expect(() => insert.run("blank", T, "")).toThrow(/CHECK/);
+  });
+
+  it("still requires a name", () => {
+    expect(() => db.prepare("INSERT INTO projects (id, created_at, name) VALUES ('p3', ?, NULL)").run(T)).toThrow(/NOT NULL/);
   });
 
   it("can't be deleted while it has nodes", () => {
@@ -390,6 +402,114 @@ describe("upgrading from the first migration", () => {
       expect(() => upgraded.prepare("UPDATE nodes SET stage = 'splitting', return_stage = NULL WHERE id = 'n'").run()).toThrow(/CHECK/);
     } finally {
       upgraded.close();
+    }
+  });
+});
+
+describe("upgrading a database with projects that must have a path", () => {
+  /** A database as the previous version left it, with one of everything in it. */
+  function atVersion3(): string {
+    const path = join(mkdtempSync(join(aopHome(), "upgrade-")), "aop.db");
+    const old = new Database(path);
+    old.function("aop_project_being_deleted", { deterministic: false }, () => null);
+    for (const migration of migrations.filter((m) => m.version <= 3)) old.exec(migration.sql);
+    old.pragma("user_version = 3");
+    old.pragma("foreign_keys = ON");
+    // Inserted out of id order, so that listing by rowid is a real check.
+    const project = old.prepare("INSERT INTO projects (id, created_at, name, repo_path) VALUES (?, ?, ?, ?)");
+    project.run("z", T, "First", "/repo/first");
+    project.run("a", T, "Second", "/repo/second");
+    const node = old.prepare("INSERT INTO nodes (id, created_at, project_id, title, type, stage) VALUES (?, ?, 'z', ?, 'dev', 'implement')");
+    node.run("n1", T, "One");
+    node.run("n2", T, "Two");
+    old.prepare("INSERT INTO edges (id, created_at, source_id, target_id, kind) VALUES ('e', ?, 'n1', 'n2', 'blocks')").run(T);
+    old.prepare("INSERT INTO links (id, created_at, node_id, kind, url) VALUES ('l', ?, 'n1', 'pr', 'https://example.com')").run(T);
+    old.prepare("INSERT INTO messages (id, created_at, node_id, stage, author, body) VALUES ('m', ?, 'n1', 'implement', 'human', 'hi')").run(T);
+    old.prepare("INSERT INTO events (id, created_at, node_id, actor, kind, data) VALUES ('ev', ?, 'n1', 'human', 'x', '{}')").run(T);
+    old.prepare("INSERT INTO runs (id, created_at, node_id, stage, status, log_path) VALUES ('r', ?, 'n1', 'implement', 'exited', '/log')").run(T);
+    old.close();
+    return path;
+  }
+
+  it("keeps every project, in order, and everything that hangs off them", () => {
+    const upgraded = openDb(atVersion3());
+    try {
+      expect(upgraded.pragma("user_version", { simple: true })).toBe(4);
+      expect(upgraded.prepare("SELECT * FROM projects ORDER BY rowid").all()).toEqual([
+        { id: "z", created_at: T, name: "First", repo_path: "/repo/first" },
+        { id: "a", created_at: T, name: "Second", repo_path: "/repo/second" },
+      ]);
+      for (const [table, count] of [["nodes", 2], ["edges", 1], ["links", 1], ["messages", 1], ["events", 1], ["runs", 1]] as const) {
+        expect((upgraded.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n).toBe(count);
+      }
+    } finally {
+      upgraded.close();
+    }
+  });
+
+  it("makes repo_path optional, and still unique and enforced by foreign keys", () => {
+    const upgraded = openDb(atVersion3());
+    try {
+      const add = upgraded.prepare("INSERT INTO projects (id, created_at, name, repo_path) VALUES (?, ?, 'x', ?)");
+      add.run("none1", T, null);
+      add.run("none2", T, null);
+      expect(() => add.run("twin", T, "/repo/first")).toThrow(/UNIQUE/);
+
+      expect(upgraded.pragma("foreign_keys", { simple: true })).toBe(1);
+      expect(upgraded.pragma("foreign_key_check")).toEqual([]);
+      expect(() => upgraded.prepare("DELETE FROM projects WHERE id = 'z'").run()).toThrow(/FOREIGN KEY/);
+      expect(() =>
+        upgraded.prepare("INSERT INTO nodes (id, created_at, project_id, title, type, stage) VALUES ('x', ?, 'missing', 't', 'dev', 'implement')").run(T),
+      ).toThrow(/FOREIGN KEY/);
+      // The other tables still point at `projects`, not at the name it was rebuilt under.
+      const nodesSql = upgraded.prepare("SELECT sql FROM sqlite_schema WHERE name = 'nodes'").get() as { sql: string };
+      expect(nodesSql.sql).not.toContain("projects_new");
+    } finally {
+      upgraded.close();
+    }
+  });
+
+  it("keeps the delete guards, and the project delete that gets past them", () => {
+    const upgraded = openDb(atVersion3());
+    try {
+      expect(() => upgraded.exec("DELETE FROM nodes")).toThrow(/never deleted/);
+      deleteProject(upgraded, "z");
+      expect(upgraded.prepare("SELECT id FROM projects").all()).toEqual([{ id: "a" }]);
+    } finally {
+      upgraded.close();
+    }
+  });
+
+  it("only runs once, leaving later projects alone on reopening", () => {
+    const path = atVersion3();
+    const first = openDb(path);
+    first.prepare("INSERT INTO projects (id, created_at, name, repo_path) VALUES ('later', ?, 'x', NULL)").run(T);
+    first.close();
+    const second = openDb(path);
+    try {
+      expect(second.prepare("SELECT repo_path FROM projects WHERE id = 'later'").get()).toEqual({ repo_path: null });
+    } finally {
+      second.close();
+    }
+  });
+
+  it("leaves nothing half done if a rebuild would break foreign keys", () => {
+    // An orphan a later FK check would catch: written with foreign keys off, as an old bug might have.
+    const path = atVersion3();
+    const old = new Database(path);
+    old.function("aop_project_being_deleted", { deterministic: false }, () => null);
+    old.pragma("foreign_keys = OFF");
+    old.prepare("INSERT INTO nodes (id, created_at, project_id, title, type, stage) VALUES ('orphan', ?, 'gone', 't', 'dev', 'implement')").run(T);
+    old.close();
+
+    expect(() => openDb(path)).toThrow(/would break foreign keys/);
+    const after = new Database(path);
+    try {
+      expect(after.pragma("user_version", { simple: true })).toBe(3);
+      expect(after.prepare("SELECT count(*) AS n FROM projects").get()).toEqual({ n: 2 });
+      expect(() => after.prepare("INSERT INTO projects (id, created_at, name, repo_path) VALUES ('x', ?, 'x', NULL)").run(T)).toThrow(/NOT NULL/);
+    } finally {
+      after.close();
     }
   });
 });

@@ -47,7 +47,36 @@ function counts(): Record<string, number> {
 }
 
 describe("adding a project", () => {
-  it("needs only an existing folder, and writes nothing to it", async () => {
+  it("needs only a name", async () => {
+    const res = await h.call<ProjectRow>("POST", "/api/projects", { name: "  No repo  " });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ name: "No repo", repo_path: null });
+    const listed = (await h.call<ProjectRow[]>("GET", "/api/projects")).body;
+    expect(listed.find((p) => p.id === res.body.id)?.repo_path).toBeNull();
+  });
+
+  it("treats a null path the same as none, and allows many projects with no path", async () => {
+    for (const name of ["One", "Two"]) {
+      const res = await h.call<ProjectRow>("POST", "/api/projects", { name, repo_path: null });
+      expect(res.status).toBe(201);
+      expect(res.body.repo_path).toBeNull();
+    }
+  });
+
+  it("refuses a project with neither a name nor a path", async () => {
+    for (const body of [{}, { repo_path: null }, { name: "   " }]) {
+      expect((await h.call("POST", "/api/projects", body)).status).toBe(400);
+    }
+  });
+
+  it("takes work on a project with no path", async () => {
+    const project = (await h.call<ProjectRow>("POST", "/api/projects", { name: "No repo" })).body;
+    const res = await h.call<NodeView>("POST", `/api/projects/${project.id}/nodes`, { title: "x" });
+    expect(res.status).toBe(201);
+    expect(res.body.stage).toBe("awaiting_agent_breakdown");
+  });
+
+  it("needs only an existing folder if given a path, and writes nothing to it", async () => {
     const repo = makeRepo();
     const before = readdirSync(repo);
     const res = await h.call<ProjectRow>("POST", "/api/projects", { name: "  Mine  ", repo_path: repo });
@@ -156,6 +185,35 @@ describe("changing a project's path", () => {
     expect((await h.call<ProjectRow[]>("GET", "/api/projects")).body[0]).toEqual(before);
   });
 
+  it("clears the path with null, freeing it for another project and keeping the nodes", async () => {
+    const node = await h.create("dev");
+    const old = h.repo;
+    const res = await h.call<ProjectRow>("PATCH", `/api/projects/${h.projectId}`, { repo_path: null });
+    expect(res.status).toBe(200);
+    expect(res.body.repo_path).toBeNull();
+    expect((await h.call<ProjectRow[]>("GET", "/api/projects")).body[0]?.repo_path).toBeNull();
+    expect((await h.node(node.id)).id).toBe(node.id);
+    expect((await h.call("POST", "/api/projects", { name: "Other", repo_path: old })).status).toBe(201);
+  });
+
+  it("clears a path that has gone from disk", async () => {
+    rmSync(h.repo, { recursive: true, force: true });
+    expect((await h.call("PATCH", `/api/projects/${h.projectId}`, { repo_path: null })).status).toBe(200);
+  });
+
+  it("gives a project with no path a path, and renames it without touching a missing one", async () => {
+    await h.call("PATCH", `/api/projects/${h.projectId}`, { repo_path: null });
+    const renamed = await h.call<ProjectRow>("PATCH", `/api/projects/${h.projectId}`, { name: "Renamed" });
+    expect(renamed.body).toMatchObject({ name: "Renamed", repo_path: null });
+    const moved = makeRepo();
+    const res = await change(moved);
+    expect(String(res.body["repo_path"]).toLowerCase()).toBe(moved.toLowerCase());
+  });
+
+  it("refuses a blank path, which isn't how to clear one", async () => {
+    expect((await change("   ")).status).toBe(400);
+  });
+
   it("applies a name and a path together, or neither", async () => {
     const res = await h.call("PATCH", `/api/projects/${h.projectId}`, { name: "Both", repo_path: join(h.repo, "missing") });
     expect(res.status).toBe(400);
@@ -185,6 +243,13 @@ describe("deleting a project", () => {
   it("deletes a project with no nodes", async () => {
     expect((await h.call("DELETE", `/api/projects/${h.projectId}`)).status).toBe(200);
     expect(counts().nodes).toBe(0);
+  });
+
+  it("deletes a project with no path, with its nodes", async () => {
+    const project = (await h.call<ProjectRow>("POST", "/api/projects", { name: "No repo" })).body;
+    await fill(project.id);
+    expect((await h.call("DELETE", `/api/projects/${project.id}`)).status).toBe(200);
+    expect((await h.call<ProjectRow[]>("GET", "/api/projects")).body.map((p) => p.id)).toEqual([h.projectId]);
   });
 
   it("never touches the repo folder", async () => {
