@@ -1,8 +1,12 @@
 import type { NodeView, StagesView, TypeView } from "../../../src/shared/api.js";
-import { ensureBright, mix, parseHex, visibleOn } from "./color.js";
+import { mix, parseHex, readableText, visibleOn } from "./color.js";
+import { humanize } from "./format.js";
 
-/** The built-in stages that finish a node. They sit at the end of a rail, not off it. */
+/** The built-in stages that finish a node. */
 export const FINISHED_STAGES: readonly string[] = ["done", "broken_down"];
+
+/** Reachable from anywhere, so they live outside every type's pipeline. */
+export const GLOBAL_STAGES: readonly string[] = ["invalidated", "externally_blocked", "ask_human_question", "failed"];
 
 /** Built-ins have no config of their own, so their colours live here. */
 const BUILT_IN_COLORS = new Map([
@@ -26,12 +30,6 @@ export function stageColor(stage: string, stages: StagesView | null): string {
   return parseHex(color) ? color : UNSET_COLOR;
 }
 
-/** The colour of an outcome's target, which may be a stage or a type entered at its start. */
-export function targetColor(target: string, stages: StagesView | null): string {
-  const type = stages?.types.find((t) => t.name === target);
-  return stageColor(type ? type.start : target, stages);
-}
-
 export function findType(stages: StagesView | null, name: string): TypeView | undefined {
   return stages?.types.find((t) => t.name === name);
 }
@@ -41,77 +39,41 @@ export function isInvalidated(node: NodeView): boolean {
   return node.stage === "invalidated" || node.invalidated_by_parent;
 }
 
-export type CardKind = "human" | "agent" | "finished" | "invalidated";
+/** `inactive` is everything that isn't for picking up: blocked, held or finished. */
+export type CardKind = "human" | "agent" | "inactive" | "invalidated";
 
 export interface CardLook {
   background: string;
   border: string;
-  borderStyle: "solid" | "dashed";
-  borderWidth: number;
+  /** A small mark of the stage's colour, on cards that aren't filled with it. */
   accent: string | null;
   text: string;
-  pillBackground: string;
-  pillText: string;
   opacity: number;
   struck: boolean;
 }
 
 const INK = "#1f2226";
 const SURFACE = "#ffffff";
-const WAITING_OPACITY = 0.7;
-// Enough for INK to stay legible on a tint, however dark the configured colour is.
-const TINT_MIN_LUMINANCE = 0.35;
+const INACTIVE_OPACITY = 0.7;
 
-const tintOf = (color: string) => ensureBright(mix(color, SURFACE, 0.45), TINT_MIN_LUMINANCE);
+/** The fill that means a human needs to act: the stage's own colour, without any alpha from config. */
+export const fillOf = (color: string) => mix(color, color, 0);
+
+/** A stage's colour, dark enough to use as a small mark on white. */
+export const accentOf = (color: string) => visibleOn(color, SURFACE, 3);
 
 export function lookOf(kind: CardKind, color: string): CardLook {
-  const plain = { borderStyle: "solid", borderWidth: 1, accent: null, opacity: 1, struck: false } as const;
   switch (kind) {
     case "human": {
-      const background = tintOf(color);
-      return {
-        ...plain,
-        background,
-        border: mix(background, "#000000", 0.3),
-        borderWidth: 2,
-        text: INK,
-        pillBackground: SURFACE,
-        pillText: INK,
-      };
+      const background = fillOf(color);
+      return { background, border: mix(background, "#000000", 0.2), accent: null, text: readableText(background), opacity: 1, struck: false };
     }
-    case "agent": {
-      const accent = visibleOn(color, SURFACE, 3);
-      return {
-        ...plain,
-        background: SURFACE,
-        border: "#cdd2d8",
-        accent,
-        text: INK,
-        pillBackground: mix(accent, SURFACE, 0.78),
-        pillText: INK,
-      };
-    }
-    case "finished":
-      return {
-        ...plain,
-        background: "#e9ecef",
-        border: "#ced4da",
-        text: "#495057",
-        pillBackground: tintOf(color),
-        pillText: INK,
-      };
+    case "agent":
+      return { background: SURFACE, border: "#d5d9de", accent: accentOf(color), text: INK, opacity: 1, struck: false };
+    case "inactive":
+      return { background: "#e9ecef", border: "#ced4da", accent: null, text: "#343a40", opacity: INACTIVE_OPACITY, struck: false };
     case "invalidated":
-      return {
-        ...plain,
-        background: "#f8f9fa",
-        border: "#adb5bd",
-        borderStyle: "dashed",
-        borderWidth: 2,
-        text: "#5c636a",
-        pillBackground: "#dee2e6",
-        pillText: "#495057",
-        struck: true,
-      };
+      return { background: SURFACE, border: "#adb5bd", accent: null, text: "#5c636a", opacity: 1, struck: true };
   }
 }
 
@@ -119,13 +81,23 @@ export function lookOf(kind: CardKind, color: string): CardLook {
 export function cardKind(node: NodeView): CardKind {
   if (isInvalidated(node)) return "invalidated";
   if (!node.stage_exists) return "human";
-  if (FINISHED_STAGES.includes(node.stage)) return "finished";
+  if (FINISHED_STAGES.includes(node.stage) || node.blocked_by.length > 0 || node.held) return "inactive";
   return node.turn === "human" ? "human" : "agent";
 }
 
 export function cardLook(node: NodeView, stages: StagesView | null): CardLook {
   const color = node.stage_exists ? stageColor(node.stage, stages) : MISSING_STAGE_COLOR;
-  const look = lookOf(cardKind(node), color);
-  const waiting = node.blocked_by.length > 0 || node.held;
-  return waiting ? { ...look, opacity: Math.min(look.opacity, WAITING_OPACITY) } : look;
+  return lookOf(cardKind(node), color);
+}
+
+/** Where a node's stage is, in words. Carries what used to take a badge. */
+export function stageLabel(node: NodeView): string {
+  if (!node.stage_exists) return `${humanize(node.stage)}: stage gone`;
+  if (node.invalidated_by_parent && node.stage !== "invalidated") return "Invalidated by parent";
+  return humanize(node.stage);
+}
+
+/** The type shown on a card. Global stages don't show one. */
+export function cardType(node: NodeView): string | null {
+  return GLOBAL_STAGES.includes(node.stage) ? null : node.type;
 }

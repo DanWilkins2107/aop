@@ -2,10 +2,12 @@ import { Graph, layout } from "@dagrejs/dagre";
 import type { EdgeRow } from "../../../src/shared/api.js";
 
 export const CARD_WIDTH = 236;
-export const CARD_HEIGHT = 84;
+export const CARD_HEIGHT = 66;
 
 /** Roughly a desktop canvas, so that unconnected work fills the view instead of one long row. */
-const TARGET_ASPECT = 1.9;
+export const WIDE_ASPECT = 1.9;
+/** Roughly a small window, where rows must stay short enough to read without much panning. */
+export const NARROW_ASPECT = 0.6;
 const GROUP_GAP = 56;
 
 type LayoutEdge = Pick<EdgeRow, "id" | "source_id" | "target_id" | "kind">;
@@ -76,7 +78,7 @@ function layoutGroup(nodeIds: string[], edges: LayoutEdge[]): Group {
  * Lays cards out top to bottom over both kinds of edge. Dagre would line every unconnected group
  * up along the top, so each is laid out alone and then packed into rows.
  */
-export function layoutGraph(nodeIds: string[], edges: LayoutEdge[]): GraphLayout {
+export function layoutGraph(nodeIds: string[], edges: LayoutEdge[], aspect = WIDE_ASPECT): GraphLayout {
   const known = new Set(nodeIds);
   const usable = edges.filter((edge) => known.has(edge.source_id) && known.has(edge.target_id));
   const groups = connectedGroups(nodeIds, usable).map((ids) => {
@@ -86,7 +88,7 @@ export function layoutGraph(nodeIds: string[], edges: LayoutEdge[]): GraphLayout
 
   const area = groups.reduce((sum, g) => sum + (g.width + GROUP_GAP) * (g.height + GROUP_GAP), 0);
   const widest = groups.reduce((most, g) => Math.max(most, g.width), 0);
-  const rowWidth = Math.max(widest, Math.sqrt(area * TARGET_ASPECT));
+  const rowWidth = Math.max(widest, Math.sqrt(area * aspect));
 
   const positions = new Map<string, Point>();
   const routes = new Map<string, Point[]>();
@@ -105,6 +107,37 @@ export function layoutGraph(nodeIds: string[], edges: LayoutEdge[]): GraphLayout
     rowHeight = Math.max(rowHeight, group.height);
   }
   return { positions, routes };
+}
+
+export interface FitOptions {
+  /** Kept clear on the left and right, and on the top and bottom. */
+  padding: Point;
+  minZoom: number;
+  maxZoom: number;
+}
+
+/**
+ * The view that shows every card, centred, down to `minZoom`. Past that the graph is too big to
+ * read at once, so the view starts at its top left and leaves the rest to panning.
+ */
+export function fittedViewport(
+  positions: Iterable<Point>,
+  canvas: { width: number; height: number },
+  { padding, minZoom, maxZoom }: FitOptions,
+): { x: number; y: number; zoom: number } {
+  const points = [...positions];
+  if (points.length === 0) return { x: 0, y: 0, zoom: maxZoom };
+  const left = Math.min(...points.map((p) => p.x));
+  const top = Math.min(...points.map((p) => p.y));
+  const width = Math.max(...points.map((p) => p.x)) + CARD_WIDTH - left;
+  const height = Math.max(...points.map((p) => p.y)) + CARD_HEIGHT - top;
+  const fit = Math.min((canvas.width - 2 * padding.x) / width, (canvas.height - 2 * padding.y) / height);
+  const zoom = Math.min(maxZoom, Math.max(minZoom, fit));
+  const offset = (space: number, size: number, pad: number, start: number) => {
+    const free = space - size * zoom;
+    return (free >= 2 * pad ? free / 2 : pad) - start * zoom;
+  };
+  return { x: offset(canvas.width, width, padding.x, left), y: offset(canvas.height, height, padding.y, top), zoom };
 }
 
 /** An SVG path through a route, rounding each corner. */

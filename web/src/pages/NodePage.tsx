@@ -1,19 +1,18 @@
 import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
-import type { EdgeRow, NodeView } from "../../../src/shared/api.js";
+import type { EdgeRow, LinkRow, NodeView } from "../../../src/shared/api.js";
+import { ClaimMark } from "../components/ClaimMark.js";
 import { ErrorNotice } from "../components/ErrorNotice.js";
-import { PipelineRail } from "../components/PipelineRail.js";
-import { StagePill } from "../components/StagePill.js";
+import { PipelineGraph } from "../components/PipelineGraph.js";
 import { api } from "../lib/api.js";
+import { humanize } from "../lib/format.js";
 import { useLiveData } from "../lib/live.js";
-import { pipelineFor } from "../lib/pipeline.js";
-import { findType } from "../lib/stageStyle.js";
-import { Actions } from "./node/Actions.js";
+import { originalStage } from "../lib/stageGraph.js";
+import { GLOBAL_STAGES, MISSING_STAGE_COLOR, accentOf, findType, stageColor } from "../lib/stageStyle.js";
+import { Admin } from "./node/Admin.js";
 import { Description } from "./node/Description.js";
-import { Edges } from "./node/Edges.js";
-import { History } from "./node/History.js";
-import { Links } from "./node/Links.js";
 import { Messages } from "./node/Messages.js";
+import { MovingOn } from "./node/MovingOn.js";
 
 async function loadNode(nodeId: string) {
   const node = await api.node(nodeId);
@@ -47,11 +46,31 @@ function ancestorsOf(node: NodeView, nodes: NodeView[], edges: EdgeRow[]): NodeV
   }
 }
 
-function turnLabel(node: NodeView): string {
+function turnLabel(node: NodeView): string | null {
   if (!node.stage_exists) return "Needs a human to move it";
   if (node.turn === "human") return "Your turn";
   if (node.turn === "agent") return "Agent's turn";
-  return "Nobody's turn";
+  return null;
+}
+
+/** Plain links named by kind. A second of the same kind gets a number, to tell them apart. */
+function Links({ links }: { links: LinkRow[] }) {
+  if (links.length === 0) return null;
+  const seen = new Map<string, number>();
+  return (
+    <p className="meta-links">
+      {links.map((link) => {
+        const count = (seen.get(link.kind) ?? 0) + 1;
+        seen.set(link.kind, count);
+        return (
+          <a key={link.id} href={link.url} target="_blank" rel="noreferrer" title={link.url} data-link-kind={link.kind}>
+            {link.kind}
+            {count > 1 ? ` ${count}` : ""}
+          </a>
+        );
+      })}
+    </p>
+  );
 }
 
 export function NodePage() {
@@ -64,13 +83,14 @@ export function NodePage() {
   }, [data]);
 
   if (!data) {
-    return <div className="page">{error ? <ErrorNotice error={error} /> : <div className="loading">Loading…</div>}</div>;
+    return <div className="page page-narrow">{error ? <ErrorNotice error={error} /> : <div className="loading">Loading…</div>}</div>;
   }
 
   const { node, stages, events, messages, projectNodes } = data;
-  const pipeline = pipelineFor(node, findType(stages, node.type), events);
   const ancestors = ancestorsOf(node, projectNodes, data.projectEdges);
   const byParent = node.invalidated_by_parent && node.stage !== "invalidated";
+  const onGlobalStage = GLOBAL_STAGES.includes(node.stage);
+  const color = node.stage_exists ? stageColor(node.stage, stages) : MISSING_STAGE_COLOR;
   const nodeLink = (id: string) => (
     <Link key={id} to={`/n/${id}`} className="inline-link">
       {titleOf(id)}
@@ -78,7 +98,7 @@ export function NodePage() {
   );
 
   return (
-    <div className="page node-page" key={node.id}>
+    <div className="page page-narrow node-page" key={node.id}>
       <nav className="breadcrumb">
         <Link to={`/p/${node.project_id}`}>{data.project?.name ?? "Graph"}</Link>
         {ancestors.map((ancestor) => (
@@ -87,69 +107,72 @@ export function NodePage() {
             <Link to={`/n/${ancestor.id}`}>{ancestor.title}</Link>
           </span>
         ))}
-        <span>
-          <span className="crumb-sep">›</span>
-          <span className="crumb-current">{node.title}</span>
-        </span>
       </nav>
 
       {error ? <ErrorNotice error={error} /> : null}
 
-      {!node.stage_exists ? (
-        <div className="banner banner-danger" role="alert">
-          <strong>This node's stage is gone.</strong> <code>{node.stage}</code> is no longer in type{" "}
-          <code>{node.type}</code> in stages.yaml. Pick a stage for it with the move control below.
-        </div>
-      ) : null}
-      {node.stage === "invalidated" ? (
-        <div className="banner banner-danger">
-          <strong>Invalidated:</strong> {node.invalidation_reason}
-        </div>
-      ) : null}
-      {byParent ? (
-        <div className="banner banner-warn">
-          <strong>Invalidated by parent:</strong> invalidated ancestor{node.invalidated_ancestors.length > 1 ? "s" : ""}{" "}
-          {node.invalidated_ancestors.map(nodeLink)}. Restoring {node.invalidated_ancestors.length > 1 ? "them" : "it"} clears this.
-        </div>
-      ) : null}
-      {node.blocked_by.length > 0 ? (
-        <div className="banner banner-warn">
-          <strong>Blocked by</strong> {node.blocked_by.map(nodeLink)}. No agent starts here until{" "}
-          {node.blocked_by.length > 1 ? "they finish" : "it finishes"}.
-        </div>
-      ) : null}
-      {node.held ? (
-        <div className="banner banner-warn">
-          <strong>Held:</strong> {node.held_by.map(nodeLink)} {node.held_by.length > 1 ? "are" : "is"} still splitting. No
-          agent starts here until the split finishes.
-        </div>
-      ) : null}
-
-      <div className="node-head">
+      <header className="node-meta">
         <h1 className={node.stage === "invalidated" || byParent ? "title-dead" : undefined}>{node.title}</h1>
-        <StagePill stage={node.stage} stages={stages} />
-        {byParent ? <span className="badge badge-invalidated-by-parent">INVALIDATED BY PARENT</span> : null}
-        {node.blocked_by.length > 0 ? <span className="badge badge-danger">BLOCKED</span> : null}
-        {node.held ? <span className="badge badge-held">HELD</span> : null}
-        <span className="turn-label">{turnLabel(node)}</span>
-      </div>
+        <p className="meta-line">
+          <span className="stage-mark" style={{ background: accentOf(color) }} />
+          <span>{humanize(node.stage)}</span>
+          {[humanize(node.type), turnLabel(node)].map((part) =>
+            part ? (
+              <span key={part} className="meta-part">
+                {part}
+              </span>
+            ) : null,
+          )}
+          <ClaimMark node={node} />
+        </p>
+        {!node.stage_exists ? (
+          <p className="meta-note meta-note-alert" role="alert">
+            This node's stage is gone. <code>{node.stage}</code> is no longer in type <code>{node.type}</code> in
+            stages.yaml.
+          </p>
+        ) : null}
+        {node.stage === "invalidated" ? <p className="meta-note">Invalidated: {node.invalidation_reason}</p> : null}
+        {byParent ? (
+          <p className="meta-note">
+            Invalidated by parent {node.invalidated_ancestors.map(nodeLink)}. Restoring{" "}
+            {node.invalidated_ancestors.length > 1 ? "them" : "it"} clears this.
+          </p>
+        ) : null}
+        {node.blocked_by.length > 0 ? (
+          <p className="meta-note">
+            Blocked by {node.blocked_by.map(nodeLink)}. No agent starts here until{" "}
+            {node.blocked_by.length > 1 ? "they finish" : "it finishes"}.
+          </p>
+        ) : null}
+        {node.held ? (
+          <p className="meta-note">
+            Held: {node.held_by.map(nodeLink)} {node.held_by.length > 1 ? "are" : "is"} still splitting. No agent starts
+            here until the split finishes.
+          </p>
+        ) : null}
+        {onGlobalStage ? <p className="meta-note muted">{humanize(node.stage)} is a global stage. Global stages live outside the pipeline.</p> : null}
+        <Links links={data.links} />
+      </header>
 
-      <section className="panel">
-        <PipelineRail node={node} pipeline={pipeline} stages={stages} />
-        <Actions node={node} stages={stages} messages={messages} events={events} reload={reload} />
-      </section>
+      <MovingOn node={node} stages={stages} messages={messages} events={events} reload={reload} />
 
-      <div className="node-columns">
-        <div className="node-main">
-          <Description node={node} reload={reload} />
-          <Messages node={node} messages={messages} stages={stages} reload={reload} />
-        </div>
-        <aside className="node-side">
-          <Links node={node} links={data.links} reload={reload} />
-          <Edges node={node} edges={data.edges} nodes={projectNodes} stages={stages} reload={reload} />
-          <History events={events} titleOf={titleOf} />
-        </aside>
-      </div>
+      <details className="section">
+        <summary>Pipeline</summary>
+        <PipelineGraph
+          node={node}
+          type={findType(stages, node.type)}
+          stages={stages}
+          returnTo={onGlobalStage ? originalStage(node, events) : null}
+        />
+      </details>
+
+      <Description node={node} reload={reload} />
+      <Messages node={node} messages={messages} reload={reload} />
+
+      <details className="section">
+        <summary>Admin</summary>
+        <Admin node={node} edges={data.edges} nodes={projectNodes} events={events} stages={stages} titleOf={titleOf} reload={reload} />
+      </details>
     </div>
   );
 }

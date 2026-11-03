@@ -73,12 +73,11 @@ export const api = {
   restore: (id: string) => send<NodeView>("POST", `${nodePath(id)}/restore`),
   block: (id: string, reason: string) => send<NodeView>("POST", `${nodePath(id)}/block`, { reason }),
   unblock: (id: string) => send<NodeView>("POST", `${nodePath(id)}/unblock`),
+  claim: (id: string) => send<NodeView>("POST", `${nodePath(id)}/claim`),
   release: (id: string) => send<NodeView>("POST", `${nodePath(id)}/release`),
   move: (id: string, body: { stage: string; type?: string; cron?: string }) =>
     send<NodeView>("POST", `${nodePath(id)}/move`, body),
   addMessage: (id: string, body: string) => send<MessageRow>("POST", `${nodePath(id)}/messages`, { body }),
-  addLink: (id: string, kind: LinkRow["kind"], url: string) =>
-    send<LinkRow>("POST", `${nodePath(id)}/links`, { kind, url }),
   addEdge: (sourceId: string, targetId: string, kind: EdgeRow["kind"]) =>
     send<EdgeRow>("POST", `${nodePath(sourceId)}/edges`, { target_id: targetId, kind }),
   removeEdge: (edgeId: string) => send<EdgeRow>("DELETE", `/edges/${encodeURIComponent(edgeId)}`),

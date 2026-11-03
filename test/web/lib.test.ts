@@ -2,11 +2,11 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import type { EventView, NodeView, TypeView } from "../../src/shared/api.js";
-import { contrast, ensureBright, luminance, parseHex, readableText, visibleOn } from "../../web/src/lib/color.js";
-import { CARD_HEIGHT, CARD_WIDTH, layoutGraph, smoothPath } from "../../web/src/lib/layout.js";
-import { pipelineFor, shapeOf } from "../../web/src/lib/pipeline.js";
+import { contrast, parseHex, readableText, visibleOn } from "../../web/src/lib/color.js";
+import { CARD_HEIGHT, CARD_WIDTH, fittedViewport, layoutGraph, smoothPath } from "../../web/src/lib/layout.js";
+import { originalStage, stageDrawing } from "../../web/src/lib/stageGraph.js";
 import { describeEvent, humanize, stageOptionGroups } from "../../web/src/lib/format.js";
-import { cardKind, cardLook, isInvalidated, lookOf, stageColor } from "../../web/src/lib/stageStyle.js";
+import { cardKind, cardLook, cardType, isInvalidated, lookOf, stageColor, stageLabel } from "../../web/src/lib/stageStyle.js";
 
 const COLORS = ["#ffc107", "#cddc39", "#000000", "#ffffff", "#123", "#4263eb", "#e91e63", "#808080", "#12b886aa"];
 
@@ -18,10 +18,6 @@ describe("colour", () => {
     expect(parseHex("#1234567")).toBeNull();
   });
 
-  it("picks text that stays legible on any colour", () => {
-    for (const color of COLORS) expect(contrast(readableText(color), color)).toBeGreaterThanOrEqual(4.5);
-  });
-
   it("shifts a colour until it shows against a background", () => {
     for (const color of COLORS) {
       expect(contrast(visibleOn(color, "#1f2226", 3), "#1f2226")).toBeGreaterThanOrEqual(3);
@@ -29,16 +25,15 @@ describe("colour", () => {
     }
   });
 
-  it("keeps a dark configured colour bright on a human card", () => {
-    expect(luminance(ensureBright("#000000"))).toBeGreaterThanOrEqual(0.2);
+  it("picks text that stays legible on any colour", () => {
+    for (const color of COLORS) expect(contrast(readableText(color), color)).toBeGreaterThanOrEqual(4.5);
   });
 
-  it("keeps every card's text and pill legible, whatever the colour", () => {
+  it("keeps every card's text legible, whatever the colour", () => {
     for (const color of COLORS) {
-      for (const kind of ["human", "agent", "finished", "invalidated"] as const) {
+      for (const kind of ["human", "agent", "inactive", "invalidated"] as const) {
         const look = lookOf(kind, color);
         expect(contrast(look.text, look.background)).toBeGreaterThanOrEqual(4.5);
-        expect(contrast(look.pillText, look.pillBackground)).toBeGreaterThanOrEqual(4.5);
       }
     }
   });
@@ -51,22 +46,26 @@ describe("colour", () => {
     }
   });
 
-  it("keeps human cards coloured, and softer than the stage's own colour", () => {
-    for (const color of ["#ffc107", "#4263eb", "#e91e63", "#12b886"]) {
-      const { background } = lookOf("human", color);
-      expect(background).not.toBe("#ffffff");
-      expect(luminance(background)).toBeGreaterThan(luminance(color));
-    }
+  it("fills human cards with the stage's own colour, ignoring alpha", () => {
+    expect(lookOf("human", "#4263eb").background).toBe("#4263eb");
+    expect(lookOf("human", "#12b886aa").background).toBe("#12b886");
   });
 
-  it("tells settled cards apart from live ones and from each other", () => {
-    const finished = lookOf("finished", "#57b56f");
-    const invalidated = lookOf("invalidated", "#8f969d");
-    expect(finished.background).not.toBe("#ffffff");
-    expect(finished.accent).toBeNull();
-    expect(invalidated.borderStyle).toBe("dashed");
+  it("greys out inactive cards whatever the colour, and strikes invalidated ones without fading them", () => {
+    const inactive = lookOf("inactive", "#57b56f");
+    expect(inactive.accent).toBeNull();
+    expect(inactive.opacity).toBeLessThan(1);
+    expect(lookOf("inactive", "#e91e63")).toEqual(inactive);
+    const invalidated = lookOf("invalidated", "#57b56f");
     expect(invalidated.struck).toBe(true);
-    expect(finished.struck).toBe(false);
+    expect(invalidated.opacity).toBe(1);
+  });
+
+  it("uses a stage's colour as a fill only when a human needs to act", () => {
+    expect(lookOf("human", "#e91e63").background).not.toBe(lookOf("human", "#12b886").background);
+    for (const kind of ["agent", "inactive", "invalidated"] as const) {
+      expect(lookOf(kind, "#e91e63").background).toBe(lookOf(kind, "#12b886").background);
+    }
   });
 });
 
@@ -75,13 +74,11 @@ describe("default stage colours", () => {
   const BUILT_INS = ["done", "broken_down", "invalidated", "scheduled", "ask_human_question", "failed", "externally_blocked", "splitting"];
   const defaults = [...Object.values(demo.stages).map((s) => s.color), ...BUILT_INS.map((s) => stageColor(s, null))];
 
-  it("stay legible as pills and on every card", () => {
+  it("stay legible on every card", () => {
     for (const color of defaults) {
-      expect(contrast(readableText(color), color)).toBeGreaterThanOrEqual(4.5);
-      for (const kind of ["human", "agent", "finished", "invalidated"] as const) {
+      for (const kind of ["human", "agent", "inactive", "invalidated"] as const) {
         const look = lookOf(kind, color);
         expect(contrast(look.text, look.background)).toBeGreaterThanOrEqual(4.5);
-        expect(contrast(look.pillText, look.pillBackground)).toBeGreaterThanOrEqual(4.5);
       }
     }
   });
@@ -164,56 +161,26 @@ const FLOW: TypeView = {
   ],
 };
 
-describe("pipeline", () => {
-  it("draws the line from the type and ends at its terminal", () => {
-    expect(shapeOf(FLOW)).toEqual({ rail: ["alpha", "beta", "gamma"], terminal: "done", branches: [] });
+describe("pipeline drawing", () => {
+  const box = (type: TypeView, name: string, current = "alpha", returnTo: string | null = null) =>
+    stageDrawing(type, current, returnTo).boxes.find((b) => b.name === name);
+
+  it("draws every stage and every outcome, including loops back and the finish", () => {
+    const { boxes, links } = stageDrawing(FLOW, "beta", null);
+    expect(boxes.map((b) => b.name).sort()).toEqual(["alpha", "beta", "done", "gamma"]);
+    expect(links.map((l) => l.id).sort()).toEqual(["alpha:go", "beta:go", "beta:redo", "gamma:finish", "gamma:redo"]);
+    for (const link of links) expect(link.points.length).toBeGreaterThanOrEqual(2);
+    for (const link of links) expect(link.labelAt).not.toBeNull();
   });
 
-  it("marks visited, current and future stages from events", () => {
-    const { rail, side } = pipelineFor(nodeAt("beta"), FLOW, [created("alpha"), change("alpha", "beta")]);
-    expect(rail.map((s) => s.state)).toEqual(["visited", "current", "future", "future"]);
-    expect(side).toBeNull();
+  it("orders stages by route and keeps the start at the top, despite the loops", () => {
+    const y = (name: string) => box(FLOW, name)!.y;
+    expect(y("alpha")).toBeLessThan(y("beta"));
+    expect(y("beta")).toBeLessThan(y("gamma"));
+    expect(y("gamma")).toBeLessThan(y("done"));
   });
 
-  it("marks a jumped-over stage as skipped", () => {
-    const { rail } = pipelineFor(nodeAt("gamma"), FLOW, [created("alpha"), change("alpha", "gamma")]);
-    expect(rail.map((s) => s.state)).toEqual(["visited", "skipped", "current", "future"]);
-  });
-
-  it("lists outcomes that leave the line, marking those that go back", () => {
-    const { rail } = pipelineFor(nodeAt("beta"), FLOW, [created("alpha")]);
-    expect(rail[1]?.others).toEqual([{ outcome: "redo", target: "alpha", back: true }]);
-  });
-
-  it("puts side states off the rail, anchored where the node came from", () => {
-    const events = [created("alpha"), change("alpha", "failed")];
-    for (const stage of ["failed", "ask_human_question", "externally_blocked", "splitting"]) {
-      const { rail, side } = pipelineFor(nodeAt(stage, { return_stage: "alpha" }), FLOW, events);
-      expect(side).toEqual({ stage, anchor: "alpha" });
-      expect(rail.map((s) => s.stage)).not.toContain(stage);
-      expect(rail[0]?.state).toBe("visited");
-    }
-  });
-
-  it("anchors an invalidated node from its event", () => {
-    const { side } = pipelineFor(nodeAt("invalidated"), FLOW, [created("alpha"), change("alpha", "invalidated")]);
-    expect(side).toEqual({ stage: "invalidated", anchor: "alpha" });
-  });
-
-  it("flags a removed stage as off the rail", () => {
-    const { side } = pipelineFor(nodeAt("removed", { stage_exists: false }), FLOW, [created("alpha")]);
-    expect(side).toEqual({ stage: "removed", anchor: null });
-  });
-
-  it("appends a finish the type has no route to", () => {
-    const type: TypeView = { name: "flow", start: "alpha", stages: [{ name: "alpha", next: [] }] };
-    const { rail, side } = pipelineFor(nodeAt("broken_down"), type, [created("alpha"), change("alpha", "broken_down")]);
-    expect(rail.map((s) => s.stage)).toEqual(["alpha", "broken_down"]);
-    expect(rail[1]?.state).toBe("current");
-    expect(side).toBeNull();
-  });
-
-  it("shows a fork's shorter route as a branch", () => {
+  it("gives a fork's routes their own places", () => {
     const type: TypeView = {
       name: "flow",
       start: "a",
@@ -221,31 +188,65 @@ describe("pipeline", () => {
         {
           name: "a",
           next: [
-            { outcome: "short", target: "s" },
-            { outcome: "long", target: "l1" },
+            { outcome: "left", target: "l" },
+            { outcome: "right", target: "other_type" },
           ],
         },
-        { name: "s", next: [{ outcome: "end", target: "done" }] },
-        { name: "l1", next: [{ outcome: "on", target: "l2" }] },
-        { name: "l2", next: [{ outcome: "end", target: "done" }] },
+        { name: "l", next: [] },
       ],
     };
-    const shape = shapeOf(type);
-    expect(shape.rail).toEqual(["a", "l1", "l2"]);
-    expect(shape.branches).toEqual([{ from: "a", stages: ["s"] }]);
+    const left = box(type, "l")!;
+    const right = box(type, "other_type")!;
+    expect(left.y).toBe(right.y);
+    expect(left.x).not.toBe(right.x);
+    expect(right.kind).toBe("exit");
+    expect(left.kind).toBe("stage");
   });
 
-  it("names earlier types, and doesn't count a same-named stage in another type as visited", () => {
-    const events = [created("alpha", "other"), change("alpha", "beta", "flow", "other")];
-    const { rail, cameFrom } = pipelineFor(nodeAt("beta"), FLOW, events);
-    expect(cameFrom).toEqual(["other"]);
-    expect(rail[0]?.state).toBe("skipped");
+  it("highlights the current stage only", () => {
+    const kinds = stageDrawing(FLOW, "beta", null).boxes.filter((b) => b.kind === "current");
+    expect(kinds.map((b) => b.name)).toEqual(["beta"]);
   });
 
-  it("draws nothing when the type is gone", () => {
-    const { rail, side } = pipelineFor(nodeAt("beta", { stage_exists: false }), undefined, []);
-    expect(rail).toEqual([]);
-    expect(side).toEqual({ stage: "beta", anchor: null });
+  it("leaves global stages out and marks where the node returns to", () => {
+    for (const stage of ["failed", "ask_human_question", "externally_blocked", "invalidated"]) {
+      const { boxes } = stageDrawing(FLOW, stage, "beta");
+      expect(boxes.map((b) => b.name)).not.toContain(stage);
+      expect(boxes.filter((b) => b.kind === "current")).toEqual([]);
+      expect(boxes.find((b) => b.name === "beta")?.kind).toBe("return");
+    }
+  });
+
+  it("draws a current stage that's off the type beside it", () => {
+    for (const stage of ["splitting", "broken_down", "removed"]) {
+      expect(box(FLOW, stage, stage)?.kind).toBe("current");
+    }
+  });
+
+  it("copes with an outcome that loops to its own stage, and two to one target", () => {
+    const type: TypeView = {
+      name: "flow",
+      start: "a",
+      stages: [
+        {
+          name: "a",
+          next: [
+            { outcome: "again", target: "a" },
+            { outcome: "one", target: "done" },
+            { outcome: "two", target: "done" },
+          ],
+        },
+      ],
+    };
+    const { links } = stageDrawing(type, "a", null);
+    expect(links).toHaveLength(3);
+    for (const link of links) expect(link.points.length).toBeGreaterThan(0);
+  });
+
+  it("finds a node's original stage from return_stage, or else from its events", () => {
+    expect(originalStage(nodeAt("failed", { return_stage: "beta" }), [])).toBe("beta");
+    expect(originalStage(nodeAt("invalidated"), [created("alpha"), change("alpha", "beta"), change("beta", "invalidated")])).toBe("beta");
+    expect(originalStage(nodeAt("invalidated"), [])).toBeNull();
   });
 });
 
@@ -257,9 +258,11 @@ describe("card kind", () => {
     expect(cardKind(nodeAt("scheduled", { turn: null }))).toBe("agent");
   });
 
-  it("settles finished nodes and strikes out dead ones", () => {
-    expect(cardKind(nodeAt("done", { turn: null }))).toBe("finished");
-    expect(cardKind(nodeAt("broken_down", { turn: null }))).toBe("finished");
+  it("greys out what isn't for picking up, even on a human's turn, and strikes out dead ones", () => {
+    expect(cardKind(nodeAt("done", { turn: null }))).toBe("inactive");
+    expect(cardKind(nodeAt("broken_down", { turn: null }))).toBe("inactive");
+    expect(cardKind(nodeAt("beta", { turn: "human", blocked_by: ["x"] }))).toBe("inactive");
+    expect(cardKind(nodeAt("beta", { turn: "human", held: true }))).toBe("inactive");
     expect(cardKind(nodeAt("invalidated", { turn: null }))).toBe("invalidated");
     expect(cardKind(nodeAt("beta", { turn: "human", invalidated_by_parent: true }))).toBe("invalidated");
   });
@@ -324,6 +327,37 @@ describe("graph layout", () => {
     }
   });
 
+  it("packs unconnected nodes into narrower rows for a narrower aspect", () => {
+    const ids = Array.from({ length: 12 }, (_, i) => `solo${i}`);
+    const widest = (aspect: number) => Math.max(...[...layoutGraph(ids, [], aspect).positions.values()].map((p) => p.x));
+    expect(widest(0.6)).toBeLessThan(widest(1.9));
+  });
+
+  it("fits every card in view, centred", () => {
+    const options = { padding: { x: 20, y: 20 }, minZoom: 0.1, maxZoom: 1 };
+    const positions = [{ x: 0, y: 0 }, { x: 1000, y: 500 }];
+    const { x, y, zoom } = fittedViewport(positions, { width: 800, height: 400 }, options);
+    expect(zoom).toBeLessThan(1);
+    expect(x).toBeGreaterThanOrEqual(20);
+    expect(y).toBeGreaterThanOrEqual(20);
+    expect(x + (1000 + CARD_WIDTH) * zoom).toBeLessThanOrEqual(780.01);
+    expect(y + (500 + CARD_HEIGHT) * zoom).toBeLessThanOrEqual(380.01);
+  });
+
+  it("won't zoom past the maximum, and centres a small graph", () => {
+    const { x, zoom } = fittedViewport([{ x: 0, y: 0 }], { width: 1000, height: 600 }, { padding: { x: 20, y: 20 }, minZoom: 0.1, maxZoom: 1 });
+    expect(zoom).toBe(1);
+    expect(x).toBe((1000 - CARD_WIDTH) / 2);
+  });
+
+  it("starts at the top left when the graph is too big to read at once", () => {
+    const options = { padding: { x: 16, y: 16 }, minZoom: 0.7, maxZoom: 1 };
+    const { x, y, zoom } = fittedViewport([{ x: 100, y: 50 }, { x: 3000, y: 2000 }], { width: 375, height: 600 }, options);
+    expect(zoom).toBe(0.7);
+    expect(x).toBeCloseTo(16 - 100 * 0.7);
+    expect(y).toBeCloseTo(16 - 50 * 0.7);
+  });
+
   it("draws a path through a route", () => {
     expect(smoothPath([])).toBe("");
     expect(smoothPath([{ x: 0, y: 0 }, { x: 0, y: 10 }])).toBe("M 0 0 L 0 10");
@@ -381,9 +415,31 @@ describe("history text", () => {
 });
 
 describe("waiting and hidden cards", () => {
-  it("fades a held card like a blocked one", () => {
-    expect(cardLook(nodeAt("beta", { held: true }), null).opacity).toBeLessThan(1);
-    expect(cardLook(nodeAt("beta"), null).opacity).toBe(1);
+  it("greys blocked, held, done and broken_down cards to the same opacity", () => {
+    const opacity = (node: NodeView) => cardLook(node, null).opacity;
+    const greyed = [
+      nodeAt("beta", { held: true }),
+      nodeAt("beta", { blocked_by: ["x"] }),
+      nodeAt("done", { turn: null }),
+      nodeAt("broken_down", { turn: null }),
+    ].map(opacity);
+    expect(new Set(greyed).size).toBe(1);
+    expect(greyed[0]).toBeLessThan(1);
+    expect(opacity(nodeAt("beta"))).toBe(1);
+  });
+
+  it("drops the type on global stages only", () => {
+    for (const stage of ["invalidated", "externally_blocked", "ask_human_question", "failed"]) {
+      expect(cardType(nodeAt(stage))).toBeNull();
+    }
+    expect(cardType(nodeAt("beta"))).toBe("flow");
+    expect(cardType(nodeAt("done"))).toBe("flow");
+  });
+
+  it("says in words what used to take a badge", () => {
+    expect(stageLabel(nodeAt("pr_review"))).toBe("PR review");
+    expect(stageLabel(nodeAt("beta", { invalidated_by_parent: true }))).toBe("Invalidated by parent");
+    expect(stageLabel(nodeAt("legal_signoff", { stage_exists: false }))).toBe("Legal signoff: stage gone");
   });
 
   it("counts a node as invalidated if it or a parent is", () => {

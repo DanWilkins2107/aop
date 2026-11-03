@@ -6,10 +6,6 @@ interface Rgb {
   b: number;
 }
 
-// Pure black, because only black and white together guarantee 4.5:1 on every colour.
-const DARK_TEXT = "#000000";
-const LIGHT_TEXT = "#ffffff";
-
 /** Reads #rgb, #rgba, #rrggbb and #rrggbbaa, ignoring alpha. Returns null for anything else. */
 export function parseHex(color: string): Rgb | null {
   const hex = color.replace(/^#/, "");
@@ -47,7 +43,7 @@ export function contrast(a: string, b: string): number {
 
 /** Black or white, whichever reads better on this background. Always at least 4.5:1. */
 export function readableText(background: string): string {
-  return contrast(DARK_TEXT, background) >= contrast(LIGHT_TEXT, background) ? DARK_TEXT : LIGHT_TEXT;
+  return contrast("#000000", background) >= contrast("#ffffff", background) ? "#000000" : "#ffffff";
 }
 
 /** Moves `from` towards `to` by `amount`, from 0 to 1. */
@@ -70,13 +66,4 @@ export function visibleOn(color: string, background: string, minimum = 3): strin
     if (contrast(shade, background) >= minimum) return shade;
   }
   return toward;
-}
-
-/** A shade light enough to read as a bright card, however dark the configured colour is. */
-export function ensureBright(color: string, minimumLuminance = 0.2): string {
-  for (let amount = 0; amount <= 1; amount += 0.05) {
-    const shade = mix(color, "#ffffff", amount);
-    if (luminance(shade) >= minimumLuminance) return shade;
-  }
-  return "#ffffff";
 }

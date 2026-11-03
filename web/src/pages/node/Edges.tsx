@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import type { EdgeRow, NodeView, StagesView } from "../../../../src/shared/api.js";
-import { StagePill } from "../../components/StagePill.js";
+import type { EdgeRow, NodeView } from "../../../../src/shared/api.js";
 import { api, ApiFailure, failureText } from "../../lib/api.js";
+import { humanize } from "../../lib/format.js";
 
 /** An edge as seen from this node. `outgoing` means this node is its source. */
 const RELATIONS = [
@@ -21,13 +21,11 @@ export function Edges({
   node,
   edges,
   nodes,
-  stages,
   reload,
 }: {
   node: NodeView;
   edges: EdgeRow[];
   nodes: NodeView[];
-  stages: StagesView;
   reload: () => Promise<void>;
 }) {
   const [relation, setRelation] = useState<(typeof RELATIONS)[number]["value"]>("parent");
@@ -60,19 +58,18 @@ export function Edges({
   }
 
   return (
-    <section className="panel">
-      <h2>Edges</h2>
-      {edges.length === 0 ? <p className="muted">No edges yet.</p> : null}
+    <>
+      {edges.length === 0 ? <p className="muted section-text">No edges yet.</p> : null}
       <ul className="edge-list">
         {edges.map((edge) => {
           const otherId = edge.source_id === node.id ? edge.target_id : edge.source_id;
           const otherNode = byId.get(otherId);
           return (
             <li key={edge.id} className="edge-row">
-              <span className={`edge-kind edge-kind-${edge.kind}`}>{relationOf(edge, node.id)?.label}</span>
+              <span className="edge-kind">{relationOf(edge, node.id)?.label}</span>
               <span className="edge-node">
                 <Link to={`/n/${otherId}`}>{otherNode?.title ?? otherId}</Link>
-                {otherNode ? <StagePill stage={otherNode.stage} stages={stages} /> : null}
+                {otherNode ? <span className="muted">{humanize(otherNode.stage)}</span> : null}
               </span>
               <button
                 type="button"
@@ -110,11 +107,11 @@ export function Edges({
             </option>
           ))}
         </select>
-        <button type="submit" className="btn-small" disabled={busy || other === ""}>
+        <button type="submit" disabled={busy || other === ""}>
           Add
         </button>
       </form>
       {error ? <div className="form-error">{error}</div> : null}
-    </section>
+    </>
   );
 }
