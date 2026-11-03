@@ -98,12 +98,16 @@ export function Legend({ stages, nodes }: { stages: StagesView; nodes: NodeView[
           <Row kind="dimmed" stage="invalidated" stages={stages} />
           <div className="legend-heading">Badges</div>
           <div className="legend-row">
-            <span className="badge badge-stale">STALE</span>
+            <span className="badge badge-invalidated-by-parent">INVALIDATED BY PARENT</span>
             <span>An ancestor is invalidated</span>
           </div>
           <div className="legend-row">
             <span className="badge badge-danger">BLOCKED</span>
             <span>Waiting on a blocker</span>
+          </div>
+          <div className="legend-row">
+            <span className="badge badge-held">HELD</span>
+            <span>Parent is still splitting</span>
           </div>
           <div className="legend-heading">Edges</div>
           <div className="legend-row">

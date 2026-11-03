@@ -70,7 +70,7 @@ export function NodePage() {
   const { node, stages, events, messages, projectNodes } = data;
   const pipeline = pipelineFor(node, findType(stages, node.type), events);
   const ancestors = ancestorsOf(node, projectNodes, data.projectEdges);
-  const stale = node.stale && node.stage !== "invalidated";
+  const byParent = node.invalidated_by_parent && node.stage !== "invalidated";
   const nodeLink = (id: string) => (
     <Link key={id} to={`/n/${id}`} className="inline-link">
       {titleOf(id)}
@@ -106,10 +106,10 @@ export function NodePage() {
           <strong>Invalidated:</strong> {node.invalidation_reason}
         </div>
       ) : null}
-      {stale ? (
+      {byParent ? (
         <div className="banner banner-warn">
-          <strong>Stale:</strong> invalidated ancestor{node.stale_because.length > 1 ? "s" : ""}{" "}
-          {node.stale_because.map(nodeLink)}. Restoring {node.stale_because.length > 1 ? "them" : "it"} clears this.
+          <strong>Invalidated by parent:</strong> invalidated ancestor{node.invalidated_ancestors.length > 1 ? "s" : ""}{" "}
+          {node.invalidated_ancestors.map(nodeLink)}. Restoring {node.invalidated_ancestors.length > 1 ? "them" : "it"} clears this.
         </div>
       ) : null}
       {node.blocked_by.length > 0 ? (
@@ -118,12 +118,19 @@ export function NodePage() {
           {node.blocked_by.length > 1 ? "they finish" : "it finishes"}.
         </div>
       ) : null}
+      {node.held ? (
+        <div className="banner banner-warn">
+          <strong>Held:</strong> {node.held_by.map(nodeLink)} {node.held_by.length > 1 ? "are" : "is"} still splitting. No
+          agent starts here until the split finishes.
+        </div>
+      ) : null}
 
       <div className="node-head">
-        <h1 className={node.stage === "invalidated" || stale ? "title-dead" : undefined}>{node.title}</h1>
+        <h1 className={node.stage === "invalidated" || byParent ? "title-dead" : undefined}>{node.title}</h1>
         <StagePill stage={node.stage} stages={stages} />
-        {stale ? <span className="badge badge-stale">STALE</span> : null}
+        {byParent ? <span className="badge badge-invalidated-by-parent">INVALIDATED BY PARENT</span> : null}
         {node.blocked_by.length > 0 ? <span className="badge badge-danger">BLOCKED</span> : null}
+        {node.held ? <span className="badge badge-held">HELD</span> : null}
         <span className="turn-label">{turnLabel(node)}</span>
       </div>
 

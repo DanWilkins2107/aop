@@ -10,8 +10,11 @@ export type StageCardNode = Node<{ node: NodeView; stages: StagesView | null }, 
 /** One badge at most, in order of what a human most needs to know. */
 function badgeFor(node: NodeView): { label: string; className: string } | null {
   if (!node.stage_exists) return { label: "STAGE GONE", className: "badge-danger" };
-  if (node.stale && node.stage !== "invalidated") return { label: "STALE", className: "badge-stale" };
+  if (node.invalidated_by_parent && node.stage !== "invalidated") {
+    return { label: "INVALIDATED BY PARENT", className: "badge-invalidated-by-parent" };
+  }
   if (node.blocked_by.length > 0) return { label: "BLOCKED", className: "badge-danger" };
+  if (node.held) return { label: "HELD", className: "badge-held" };
   return null;
 }
 
@@ -33,7 +36,12 @@ export function StageCard({ data }: NodeProps<StageCardNode>) {
           opacity: look.opacity,
         }}
       >
-        <div className="card-title">{node.title}</div>
+        <div className={`card-title${node.claimed_by ? " card-title-short" : ""}`}>{node.title}</div>
+        {node.claimed_by ? (
+          <div className="card-claim" data-claimed-by={node.claimed_by}>
+            {node.claimed_by === "agent" ? "Agent run holds this" : "Claimed by a human"}
+          </div>
+        ) : null}
         <div className="card-meta">
           <span className="pill" style={{ background: look.pillBackground, color: look.pillText }}>
             {humanize(node.stage)}

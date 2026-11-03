@@ -3,7 +3,7 @@ import type { EventView, MessageRow, NodeView, StagesView } from "../../../../sr
 import { Dialog } from "../../components/Dialog.js";
 import { api, failureText } from "../../lib/api.js";
 import { readableText } from "../../lib/color.js";
-import { humanize } from "../../lib/format.js";
+import { humanize, stageOptionGroups } from "../../lib/format.js";
 import { FINISHED_STAGES, targetColor } from "../../lib/stageStyle.js";
 
 /** Runs one action at a time and keeps its error on screen. */
@@ -27,10 +27,11 @@ function useAction(reload: () => Promise<void>) {
   return { busy, error, run };
 }
 
-function failureReason(events: EventView[]): string | null {
+/** The reason given when the node last entered this stage through its own action. */
+function entryReason(events: EventView[], via: string): string | null {
   const event = [...events].reverse().find((e) => {
     const data = e.data as Record<string, unknown>;
-    return e.kind === "stage_changed" && data["to_stage"] === "failed";
+    return e.kind === "stage_changed" && data["via"] === via;
   });
   const reason = (event?.data as Record<string, unknown> | undefined)?.["reason"];
   return typeof reason === "string" ? reason : null;
@@ -63,7 +64,7 @@ function AnswerForm({ node, messages, reload }: { node: NodeView; messages: Mess
 
 function RetryPanel({ node, events, reload }: { node: NodeView; events: EventView[]; reload: () => Promise<void> }) {
   const { busy, error, run } = useAction(reload);
-  const reason = failureReason(events);
+  const reason = entryReason(events, "fail");
   return (
     <div>
       <p className="action-text">
@@ -72,6 +73,24 @@ function RetryPanel({ node, events, reload }: { node: NodeView; events: EventVie
       <div className="action-row">
         <button type="button" className="btn-primary" disabled={busy} onClick={() => void run(() => api.retry(node.id))}>
           Retry
+        </button>
+        {node.return_stage ? <span className="muted">Returns to {humanize(node.return_stage)}.</span> : null}
+      </div>
+      {error ? <div className="form-error">{error}</div> : null}
+    </div>
+  );
+}
+
+function UnblockPanel({ node, events, reload }: { node: NodeView; events: EventView[]; reload: () => Promise<void> }) {
+  const { busy, error, run } = useAction(reload);
+  return (
+    <div>
+      <p className="action-text">
+        <strong>Waiting on something outside AOP.</strong> {entryReason(events, "block")}
+      </p>
+      <div className="action-row">
+        <button type="button" className="btn-primary" disabled={busy} onClick={() => void run(() => api.unblock(node.id))}>
+          Unblock
         </button>
         {node.return_stage ? <span className="muted">Returns to {humanize(node.return_stage)}.</span> : null}
       </div>
@@ -137,7 +156,16 @@ function Primary({
   if (!node.stage_exists) return <p className="action-text">Outcomes are off until this node is moved to a stage that exists.</p>;
   if (node.stage === "ask_human_question") return <AnswerForm node={node} messages={messages} reload={reload} />;
   if (node.stage === "failed") return <RetryPanel node={node} events={events} reload={reload} />;
+  if (node.stage === "externally_blocked") return <UnblockPanel node={node} events={events} reload={reload} />;
   if (node.stage === "invalidated") return <RestorePanel node={node} reload={reload} />;
+  if (node.stage === "splitting") {
+    return (
+      <p className="action-text muted">
+        An agent is creating children, which stay held until it finishes the split. Moving this node by hand ends the
+        split and releases them.
+      </p>
+    );
+  }
   if (node.stage === "scheduled") {
     return (
       <p className="action-text">
@@ -176,7 +204,7 @@ function InvalidateButton({ node, reload }: { node: NodeView; reload: () => Prom
           submitClass="btn-danger"
           canSubmit={reason.trim() !== ""}
         >
-          <p className="field-hint">Its descendants will read as stale. It can be restored later.</p>
+          <p className="field-hint">Its descendants will read as invalidated by parent. It can be restored later.</p>
           <label>
             Reason
             <textarea autoFocus rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why is this no longer valid?" />
@@ -187,16 +215,68 @@ function InvalidateButton({ node, reload }: { node: NodeView; reload: () => Prom
   );
 }
 
+function BlockButton({ node, reload }: { node: NodeView; reload: () => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const { busy, error, run } = useAction(reload);
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)}>
+        Mark externally blocked…
+      </button>
+      {open ? (
+        <Dialog
+          title="Mark externally blocked"
+          busy={busy}
+          onClose={() => setOpen(false)}
+          onSubmit={() => void run(() => api.block(node.id, reason.trim())).then((ok) => ok && setOpen(false))}
+          error={error}
+          submitLabel="Mark blocked"
+          canSubmit={reason.trim() !== ""}
+        >
+          <p className="field-hint">
+            No agent starts here until you unblock it, and anything it blocks stays blocked. Unblocking returns it to{" "}
+            {humanize(node.stage)}.
+          </p>
+          <label>
+            Reason
+            <textarea autoFocus rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="What is it waiting on?" />
+          </label>
+        </Dialog>
+      ) : null}
+    </>
+  );
+}
+
+/** Who holds the claim. Only a human's can be released here: an agent's ends with its run. */
+function ClaimRow({ node, reload }: { node: NodeView; reload: () => Promise<void> }) {
+  const { busy, error, run } = useAction(reload);
+  if (node.claimed_by === null) return null;
+  return (
+    <div className="claim-row" data-claimed-by={node.claimed_by}>
+      {node.claimed_by === "human" ? (
+        <>
+          <span>
+            <strong>Claimed by a human.</strong> No agent starts here until it's released.
+          </span>
+          <button type="button" className="btn-small" disabled={busy} onClick={() => void run(() => api.release(node.id))}>
+            Release claim
+          </button>
+        </>
+      ) : (
+        <span>
+          <strong>An agent run holds this node.</strong> The claim ends with the run.
+        </span>
+      )}
+      {error ? <div className="form-error">{error}</div> : null}
+    </div>
+  );
+}
+
 /** The stages a human can send a node to. Other built-ins have their own actions. */
 function moveChoices(stages: StagesView): { group: string; options: { label: string; value: string }[] }[] {
   return [
-    ...stages.types.map((type) => ({
-      group: humanize(type.name),
-      options: type.stages.map((stage) => ({
-        label: humanize(stage.name),
-        value: JSON.stringify({ stage: stage.name, type: type.name }),
-      })),
-    })),
+    ...stageOptionGroups(stages),
     {
       group: "Finish",
       options: FINISHED_STAGES.map((stage) => ({ label: humanize(stage), value: JSON.stringify({ stage }) })),
@@ -267,16 +347,21 @@ export function Actions(props: {
   reload: () => Promise<void>;
 }) {
   const { node, stages, reload } = props;
+  const canBlock = !["done", "broken_down", "invalidated", "externally_blocked"].includes(node.stage);
   return (
+    <>
+    <ClaimRow node={node} reload={reload} />
     <div className="actions">
       {/* Keyed by stage so that a half-typed answer can't carry over to the next stage. */}
       <div className="actions-primary" key={node.stage}>
         <Primary {...props} />
       </div>
       <div className="actions-secondary">
+        {canBlock ? <BlockButton node={node} reload={reload} /> : null}
         {node.stage !== "invalidated" ? <InvalidateButton node={node} reload={reload} /> : null}
         <HumanMove node={node} stages={stages} reload={reload} />
       </div>
     </div>
+    </>
   );
 }

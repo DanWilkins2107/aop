@@ -1,9 +1,17 @@
 import { useState } from "react";
 import type { NodeView, StagesView } from "../../../src/shared/api.js";
 import { api, failureText } from "../lib/api.js";
-import { humanize } from "../lib/format.js";
+import { humanize, stageOptionGroups } from "../lib/format.js";
 import { findType } from "../lib/stageStyle.js";
 import { Dialog } from "./Dialog.js";
+
+/** A value of the "Starts in" dropdown. A type enters at its own start. */
+interface StartChoice {
+  type: string;
+  stage?: string;
+}
+
+const typeChoice = (type: string) => JSON.stringify({ type } satisfies StartChoice);
 
 export function NewNodeDialog({
   projectId,
@@ -18,20 +26,20 @@ export function NewNodeDialog({
 }) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
-  // The first type in the file, until `stages.yaml` gets a top-level `start` to say otherwise.
-  const [typeName, setTypeName] = useState(stages.types[0]?.name ?? "");
+  const [choice, setChoice] = useState(typeChoice(stages.start));
   const [cron, setCron] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const start = findType(stages, typeName)?.start;
+  const chosen = JSON.parse(choice) as StartChoice;
+  const start = chosen.stage ?? findType(stages, chosen.type)?.start;
   const scheduled = start === "scheduled";
 
   async function create() {
     setBusy(true);
     setError(null);
     try {
-      const input = { type: typeName, title: title.trim(), body };
+      const input = { ...chosen, title: title.trim(), body };
       onCreated(await api.createNode(projectId, scheduled ? { ...input, cron: cron.trim() } : input));
     } catch (failure) {
       setError(failureText(failure));
@@ -47,7 +55,7 @@ export function NewNodeDialog({
       onSubmit={() => void create()}
       error={error}
       submitLabel="Create node"
-      canSubmit={title.trim() !== "" && typeName !== "" && (!scheduled || cron.trim() !== "")}
+      canSubmit={title.trim() !== "" && (!scheduled || cron.trim() !== "")}
     >
       <label>
         Title
@@ -58,18 +66,32 @@ export function NewNodeDialog({
         <textarea rows={5} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Optional" />
       </label>
       <label>
-        <span>
-          Type <span className="muted">(optional)</span>
-        </span>
-        <select value={typeName} onChange={(e) => setTypeName(e.target.value)} aria-label="Type">
-          {stages.types.map((type) => (
-            <option key={type.name} value={type.name}>
-              {humanize(type.name)}
-            </option>
+        Starts in
+        <select value={choice} onChange={(e) => setChoice(e.target.value)} aria-label="Starts in">
+          <optgroup label="Type">
+            {stages.types.map((type) => (
+              <option key={type.name} value={typeChoice(type.name)}>
+                {humanize(type.name)}
+                {type.name === stages.start ? " (default)" : ""}
+              </option>
+            ))}
+          </optgroup>
+          {stageOptionGroups(stages).map(({ group, options }) => (
+            <optgroup key={group} label={`Stage in ${group}`}>
+              {options.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </select>
       </label>
-      {start ? <p className="field-hint">Starts at {humanize(start)}.</p> : null}
+      {start ? (
+        <p className="field-hint">
+          Type {humanize(chosen.type)}, starting at {humanize(start)}.
+        </p>
+      ) : null}
       {scheduled ? (
         <label>
           Cron schedule

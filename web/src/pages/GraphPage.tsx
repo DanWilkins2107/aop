@@ -9,7 +9,7 @@ import { StageCard, type StageCardNode } from "../components/StageCard.js";
 import { api } from "../lib/api.js";
 import { CARD_HEIGHT, CARD_WIDTH, layoutGraph } from "../lib/layout.js";
 import { useLiveData } from "../lib/live.js";
-import { FINISHED_STAGES } from "../lib/stageStyle.js";
+import { isInvalidated } from "../lib/stageStyle.js";
 
 const nodeTypes = { stage: StageCard };
 const edgeTypes = { routed: RoutedEdge };
@@ -22,6 +22,24 @@ const FIT = {
   padding: { top: "28px", right: "244px", bottom: "28px", left: "56px" },
   maxZoom: 1,
 } as const;
+
+const hideKey = (projectId: string) => `aop:hideInvalidated:${projectId}`;
+
+function readHide(projectId: string): boolean {
+  try {
+    return localStorage.getItem(hideKey(projectId)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeHide(projectId: string, hide: boolean): void {
+  try {
+    localStorage.setItem(hideKey(projectId), hide ? "1" : "0");
+  } catch {
+    // Only a convenience: the toggle still works until the page reloads.
+  }
+}
 
 /** Fits the view when cards appear or go, and leaves the user's pan and zoom alone otherwise. */
 function FitWhenCountChanges({ count }: { count: number }) {
@@ -36,6 +54,7 @@ export function GraphPage() {
   const { projectId = "" } = useParams();
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
+  const [hideInvalidated, setHideInvalidated] = useState(() => readHide(projectId));
 
   const { data, error } = useLiveData(async () => {
     const [nodes, edges, stages, projects] = await Promise.all([
@@ -49,12 +68,15 @@ export function GraphPage() {
 
   const { flowNodes, flowEdges } = useMemo(() => {
     if (!data) return { flowNodes: [] as StageCardNode[], flowEdges: [] as RoutedEdgeType[] };
+    const nodes = hideInvalidated ? data.nodes.filter((n) => !isInvalidated(n)) : data.nodes;
+    const shown = new Set(nodes.map((n) => n.id));
+    const edges = data.edges.filter((e) => shown.has(e.source_id) && shown.has(e.target_id));
     const { positions, routes } = layoutGraph(
-      data.nodes.map((n) => n.id),
-      data.edges,
+      nodes.map((n) => n.id),
+      edges,
     );
-    const stageOf = new Map(data.nodes.map((n) => [n.id, n.stage]));
-    const flowNodes: StageCardNode[] = data.nodes.map((node) => ({
+    const stageOf = new Map(nodes.map((n) => [n.id, n.stage]));
+    const flowNodes: StageCardNode[] = nodes.map((node) => ({
       id: node.id,
       type: "stage",
       position: positions.get(node.id) ?? { x: 0, y: 0 },
@@ -62,9 +84,9 @@ export function GraphPage() {
       height: CARD_HEIGHT,
       data: { node, stages: data.stages },
     }));
-    const flowEdges: RoutedEdgeType[] = data.edges.map((edge) => {
+    const flowEdges: RoutedEdgeType[] = edges.map((edge) => {
       // A finished blocker holds nothing any more, so its edge fades.
-      const holding = !FINISHED_STAGES.includes(stageOf.get(edge.source_id) ?? "");
+      const holding = stageOf.get(edge.source_id) !== "done";
       const stroke = edge.kind === "subtask" ? SUBTASK_STROKE : BLOCKS_STROKE;
       return {
         id: edge.id,
@@ -81,7 +103,7 @@ export function GraphPage() {
       };
     });
     return { flowNodes, flowEdges };
-  }, [data]);
+  }, [data, hideInvalidated]);
 
   return (
     <div className="graph-page">
@@ -91,9 +113,22 @@ export function GraphPage() {
         </Link>
         <h1>{data?.project?.name ?? ""}</h1>
         <span className="muted">
-          {data ? `${data.nodes.length} ${data.nodes.length === 1 ? "node" : "nodes"}` : null}
+          {data
+            ? `${flowNodes.length === data.nodes.length ? "" : `${flowNodes.length} of `}${data.nodes.length} ${data.nodes.length === 1 ? "node" : "nodes"}`
+            : null}
         </span>
         <span className="topbar-spacer" />
+        <label className="graph-filter">
+          <input
+            type="checkbox"
+            checked={hideInvalidated}
+            onChange={(e) => {
+              writeHide(projectId, e.target.checked);
+              setHideInvalidated(e.target.checked);
+            }}
+          />
+          Hide invalidated
+        </label>
         <button type="button" className="btn-create" disabled={!data} onClick={() => setCreating(true)}>
           + New node
         </button>
@@ -108,6 +143,14 @@ export function GraphPage() {
           <div className="graph-empty">
             <strong>Nothing here yet</strong>
             <span className="muted">Create the first node to start the process.</span>
+          </div>
+        ) : null}
+        {data && data.nodes.length > 0 && flowNodes.length === 0 ? (
+          <div className="graph-empty">
+            <strong>Every node here is hidden</strong>
+            <span className="muted">
+              They're all invalidated or invalidated by a parent. Turn off "Hide invalidated" to see them.
+            </span>
           </div>
         ) : null}
         {data ? (

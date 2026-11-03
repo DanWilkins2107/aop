@@ -3,7 +3,8 @@ import type { EventView, NodeView, TypeView } from "../../src/shared/api.js";
 import { contrast, ensureBright, luminance, parseHex, readableText, visibleOn } from "../../web/src/lib/color.js";
 import { CARD_HEIGHT, CARD_WIDTH, layoutGraph, smoothPath } from "../../web/src/lib/layout.js";
 import { pipelineFor, shapeOf } from "../../web/src/lib/pipeline.js";
-import { cardKind, lookOf } from "../../web/src/lib/stageStyle.js";
+import { describeEvent, humanize, stageOptionGroups } from "../../web/src/lib/format.js";
+import { cardKind, cardLook, isInvalidated, lookOf } from "../../web/src/lib/stageStyle.js";
 
 const COLORS = ["#ffc107", "#cddc39", "#000000", "#ffffff", "#123", "#4263eb", "#e91e63", "#808080", "#12b886aa"];
 
@@ -57,9 +58,12 @@ function nodeAt(stage: string, extra: Partial<NodeView> = {}): NodeView {
     stage_exists: true,
     turn: "agent",
     available_outcomes: [],
-    stale: false,
-    stale_because: [],
+    invalidated_by_parent: false,
+    invalidated_ancestors: [],
     blocked_by: [],
+    held: false,
+    held_by: [],
+    claimed_by: null,
     ...extra,
   };
 }
@@ -204,7 +208,7 @@ describe("card kind", () => {
     expect(cardKind(nodeAt("done", { turn: null }))).toBe("muted");
     expect(cardKind(nodeAt("broken_down", { turn: null }))).toBe("muted");
     expect(cardKind(nodeAt("invalidated", { turn: null }))).toBe("dimmed");
-    expect(cardKind(nodeAt("beta", { turn: "human", stale: true }))).toBe("dimmed");
+    expect(cardKind(nodeAt("beta", { turn: "human", invalidated_by_parent: true }))).toBe("dimmed");
   });
 
   it("makes a removed stage demand attention", () => {
@@ -271,5 +275,68 @@ describe("graph layout", () => {
     expect(smoothPath([])).toBe("");
     expect(smoothPath([{ x: 0, y: 0 }, { x: 0, y: 10 }])).toBe("M 0 0 L 0 10");
     expect(smoothPath([{ x: 0, y: 0 }, { x: 0, y: 10 }, { x: 10, y: 10 }])).toBe("M 0 0 Q 0 10 5 10 L 10 10");
+  });
+});
+
+describe("display names", () => {
+  it("formats known abbreviations, wherever they fall", () => {
+    expect(humanize("pr_review")).toBe("PR review");
+    expect(humanize("pr_raised")).toBe("PR raised");
+    expect(humanize("second_pr_review")).toBe("Second PR review");
+    expect(humanize("fix-ci")).toBe("Fix CI");
+    expect(humanize("qa")).toBe("QA");
+  });
+
+  it("leaves other words alone, including ones containing an abbreviation", () => {
+    expect(humanize("split_proposed")).toBe("Split proposed");
+    expect(humanize("print_review")).toBe("Print review");
+    expect(humanize("approve")).toBe("Approve");
+    expect(humanize("ask_human_question")).toBe("Ask human question");
+  });
+
+  it("groups stages by type, with values a move or a new node can send", () => {
+    const groups = stageOptionGroups({ start: "flow", stages: [], types: [FLOW] });
+    expect(groups[0]?.group).toBe("Flow");
+    expect(groups[0]?.options[0]).toEqual({ label: "Alpha", value: JSON.stringify({ stage: "alpha", type: "flow" }) });
+  });
+});
+
+describe("history text", () => {
+  const event = (kind: string, data: Record<string, unknown>): EventView => ({
+    id: "e",
+    created_at: "2026-01-01T00:00:00Z",
+    node_id: "n",
+    actor: "human",
+    kind,
+    data,
+  });
+  const line = (kind: string, data: Record<string, unknown>) => describeEvent(event(kind, data), (id) => id);
+
+  it("describes the new stage changes", () => {
+    const change = (via: string, extra = {}) => line("stage_changed", { via, from_stage: "pr_review", to_stage: "pr_review", ...extra });
+    expect(change("block", { reason: "Vendor" })).toBe("Externally blocked at PR review: Vendor");
+    expect(change("unblock")).toBe("Unblocked, back to PR review");
+    expect(change("split_start")).toBe("Started splitting at PR review");
+    expect(change("split_finish")).toBe("Finished splitting");
+  });
+
+  it("describes title edits and claims", () => {
+    expect(line("title_edited", { previous: "Old" })).toBe("Title edited, was: Old");
+    expect(line("claim_taken", { holder: "human" })).toBe("Claimed by a human");
+    expect(line("claim_released", { holder: "agent" })).toBe("Claim released by an agent run");
+  });
+});
+
+describe("waiting and hidden cards", () => {
+  it("fades a held card like a blocked one", () => {
+    expect(cardLook(nodeAt("beta", { held: true }), null).opacity).toBeLessThan(1);
+    expect(cardLook(nodeAt("beta"), null).opacity).toBe(1);
+  });
+
+  it("counts a node as invalidated if it or a parent is", () => {
+    expect(isInvalidated(nodeAt("invalidated"))).toBe(true);
+    expect(isInvalidated(nodeAt("beta", { invalidated_by_parent: true }))).toBe(true);
+    expect(isInvalidated(nodeAt("beta"))).toBe(false);
+    expect(isInvalidated(nodeAt("done"))).toBe(false);
   });
 });

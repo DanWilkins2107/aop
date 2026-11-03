@@ -12,7 +12,7 @@
   --border: #dde1e6;
   --accent: #4263eb;
   --danger: #e03131;
-  --stale: #f59f00;
+  --invalidated-by-parent: #f59f00;
   --create: #2f9e44;
 }
 
@@ -278,12 +278,16 @@ label {
   line-height: 1.2;
   white-space: nowrap;
 }
-.badge-stale {
-  background: var(--stale);
+.badge-invalidated-by-parent {
+  background: var(--invalidated-by-parent);
   color: #1a1b1e;
 }
 .badge-danger {
   background: #c92a2a;
+  color: #fff;
+}
+.badge-held {
+  background: #1864ab;
   color: #fff;
 }
 .banner {
@@ -383,6 +387,20 @@ label {
   min-height: 0;
   position: relative;
 }
+.graph-filter {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+.graph-filter input {
+  width: auto;
+  margin: 0;
+}
 .graph-empty {
   position: absolute;
   inset: 0;
@@ -456,6 +474,16 @@ label {
     0 0 0 1.5px rgba(255, 255, 255, 0.9),
     0 1px 3px rgba(0, 0, 0, 0.3);
 }
+/* A claim takes a line, and the card's height is fixed. */
+.card-title-short {
+  -webkit-line-clamp: 1;
+}
+.card-claim {
+  font-size: 10.5px;
+  font-weight: 600;
+  opacity: 0.9;
+  white-space: nowrap;
+}
 .card-handle {
   opacity: 0;
   pointer-events: none;
@@ -493,6 +521,7 @@ label {
 }
 .legend-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 7px;
   margin-bottom: 3px;
@@ -714,6 +743,17 @@ p.action-text:last-child {
   margin-bottom: 8px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+.claim-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 7px 10px;
+  background: #e7f5ff;
+  border-left: 4px solid #1864ab;
+  border-radius: 4px;
 }
 .human-move summary {
   cursor: pointer;

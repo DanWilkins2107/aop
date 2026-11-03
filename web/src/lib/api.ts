@@ -52,7 +52,7 @@ export const api = {
   nodes: (projectId: string) => send<NodeView[]>("GET", `${projectPath(projectId)}/nodes`),
   projectEdges: (projectId: string) => send<EdgeRow[]>("GET", `${projectPath(projectId)}/edges`),
   stages: (projectId: string) => send<StagesView>("GET", `${projectPath(projectId)}/stages`),
-  createNode: (projectId: string, body: { type: string; title: string; body: string; cron?: string }) =>
+  createNode: (projectId: string, body: { type?: string; stage?: string; title: string; body: string; cron?: string }) =>
     send<NodeView>("POST", `${projectPath(projectId)}/nodes`, body),
 
   node: (id: string) => send<NodeView>("GET", nodePath(id)),
@@ -67,6 +67,9 @@ export const api = {
   retry: (id: string) => send<NodeView>("POST", `${nodePath(id)}/retry`),
   invalidate: (id: string, reason: string) => send<NodeView>("POST", `${nodePath(id)}/invalidate`, { reason }),
   restore: (id: string) => send<NodeView>("POST", `${nodePath(id)}/restore`),
+  block: (id: string, reason: string) => send<NodeView>("POST", `${nodePath(id)}/block`, { reason }),
+  unblock: (id: string) => send<NodeView>("POST", `${nodePath(id)}/unblock`),
+  release: (id: string) => send<NodeView>("POST", `${nodePath(id)}/release`),
   move: (id: string, body: { stage: string; type?: string; cron?: string }) =>
     send<NodeView>("POST", `${nodePath(id)}/move`, body),
   addMessage: (id: string, body: string) => send<MessageRow>("POST", `${nodePath(id)}/messages`, { body }),

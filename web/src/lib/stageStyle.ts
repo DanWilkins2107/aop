@@ -40,6 +40,11 @@ export function findType(stages: StagesView | null, name: string): TypeView | un
   return stages?.types.find((t) => t.name === name);
 }
 
+/** What the graph's "Hide invalidated" toggle hides. */
+export function isInvalidated(node: NodeView): boolean {
+  return node.stage === "invalidated" || node.invalidated_by_parent;
+}
+
 export type CardKind = "bright" | "dark" | "muted" | "dimmed";
 
 export interface CardLook {
@@ -107,7 +112,7 @@ export function lookOf(kind: CardKind, color: string): CardLook {
 
 /** Bright means a human needs to act, so this turns on `turn` and not on a stage's name. */
 export function cardKind(node: NodeView): CardKind {
-  if (node.stage === "invalidated" || node.stale) return "dimmed";
+  if (isInvalidated(node)) return "dimmed";
   if (!node.stage_exists) return "bright";
   if (FINISHED_STAGES.includes(node.stage)) return "muted";
   return node.turn === "human" ? "bright" : "dark";
@@ -116,5 +121,6 @@ export function cardKind(node: NodeView): CardKind {
 export function cardLook(node: NodeView, stages: StagesView | null): CardLook {
   const color = node.stage_exists ? stageColor(node.stage, stages) : MISSING_STAGE_COLOR;
   const look = lookOf(cardKind(node), color);
-  return node.blocked_by.length > 0 ? { ...look, opacity: Math.min(look.opacity, BLOCKED_OPACITY) } : look;
+  const waiting = node.blocked_by.length > 0 || node.held;
+  return waiting ? { ...look, opacity: Math.min(look.opacity, BLOCKED_OPACITY) } : look;
 }
