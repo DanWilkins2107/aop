@@ -15,8 +15,8 @@ export async function seed(app: Hono, db: Db, projectId: string): Promise<void> 
     return (await response.json()) as T;
   };
 
-  const create = (type: string, title: string, body = "") =>
-    call<NodeView>("POST", `/projects/${projectId}/nodes`, { type, title, body });
+  const create = (type: string | undefined, title: string, body = "") =>
+    call<NodeView>("POST", `/projects/${projectId}/nodes`, { ...(type ? { type } : {}), title, body });
   const outcome = (node: NodeView, name: string) => call("POST", `/nodes/${node.id}/next`, { outcome: name });
   const say = (node: NodeView, text: string, author: "human" | "agent" = "agent") =>
     call("POST", `/nodes/${node.id}/messages`, { body: text, author });
@@ -33,6 +33,7 @@ export async function seed(app: Hono, db: Db, projectId: string): Promise<void> 
   await say(billing, "This touches four separate areas. I propose splitting it into one node for each.");
   await outcome(billing, "approve");
   await say(billing, "Agreed, go ahead.", "human");
+  await call("POST", `/nodes/${billing.id}/split/start`);
 
   const exportPdf = await create("dev", "Invoice PDF export", "Render invoices from the new ledger.");
   const webhooks = await create("dev", "Retry failed payment webhooks", "Back off and retry, with a dead-letter queue.");
@@ -40,7 +41,22 @@ export async function seed(app: Hono, db: Db, projectId: string): Promise<void> 
   const rounding = await create("dev", "Tax rounding per line or per invoice", "Finance needs this to match their exports.");
   const migrate = await create("dev", "Migrate historic invoices", "Backfill two years of invoices into the ledger.");
   for (const child of [exportPdf, webhooks, emails, rounding, migrate]) await edge(billing, child, "subtask");
-  await call("POST", `/nodes/${billing.id}/move`, { stage: "broken_down" });
+  await call("POST", `/nodes/${billing.id}/split/finish`);
+
+  // A split still going: its children stay held until it finishes.
+  const search = await create("triage", "Move search onto the new index", "One node for indexing and one for the query API.");
+  await outcome(search, "split");
+  await outcome(search, "approve");
+  await call("POST", `/nodes/${search.id}/split/start`);
+  for (const title of ["Build the search indexer", "Search query API"]) {
+    await edge(search, await create("dev", title), "subtask");
+  }
+
+  // Waiting on the outside world, and work only a human can do.
+  const vendor = await create("dev", "Integrate the vendor tax API", "Needs sandbox credentials from the vendor.");
+  await call("POST", `/nodes/${vendor.id}/block`, { reason: "Waiting on the vendor to issue sandbox keys." });
+  const dns = await create(undefined, "Point the billing domain at the new load balancer", "Only the infra team has DNS access.");
+  await outcome(dns, "human_only");
 
   // Human turn.
   await outcome(exportPdf, "pr_raised");
@@ -48,8 +64,12 @@ export async function seed(app: Hono, db: Db, projectId: string): Promise<void> 
   await call("POST", `/nodes/${exportPdf.id}/links`, { kind: "pr", url: "https://github.com/example/billing/pull/412" });
   await call("POST", `/nodes/${exportPdf.id}/links`, { kind: "ticket", url: "https://linear.app/example/issue/BIL-88" });
 
+  // A human is steering this one, whatever stage it reaches.
+  await call("POST", `/nodes/${exportPdf.id}/claim`, { actor: "human" });
+
   // A blocked node: the emails wait for the webhooks, which an agent is still working on.
   await edge(webhooks, emails, "blocks");
+  await call("POST", `/nodes/${webhooks.id}/claim`, { actor: "agent" });
 
   // A question and a failure.
   await call("POST", `/nodes/${rounding.id}/ask`, {
@@ -57,7 +77,7 @@ export async function seed(app: Hono, db: Db, projectId: string): Promise<void> 
   });
   await call("POST", `/nodes/${migrate.id}/fail`, { reason: "Agent exited with code 1 during the backfill." });
 
-  // An invalidated node with a stale child.
+  // An invalidated node with a child it invalidates.
   const reporting = await create("triage", "Rewrite the reporting pipeline", "Move reporting onto the warehouse.");
   const reportingApi = await create("dev", "Reporting API", "Serve the new reports.");
   await edge(reporting, reportingApi, "subtask");
@@ -68,7 +88,7 @@ export async function seed(app: Hono, db: Db, projectId: string): Promise<void> 
   await outcome(admin, "split");
   await say(admin, "I propose three children: refunds, account lookup and the audit log view.");
 
-  await create("triage", "Flaky login test on CI", "Fails about one run in twenty.");
+  await create(undefined, "Flaky login test on CI", "Fails about one run in twenty.");
 
   const timezone = await create("triage", "Fix daylight saving bug in schedules", "Runs fire an hour late after the clocks change.");
   await outcome(timezone, "ready");

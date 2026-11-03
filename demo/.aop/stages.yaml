@@ -1,20 +1,23 @@
-# The example from specs/stages.md, without its top-level `start` key, which the server doesn't
-# accept yet.
-stages:
+# The example from specs/stages.md.
+start: triage                 # the type new nodes start in
+
+stages:                       # pool of every stage
   assess:         { turn: agent, color: "#5c7cfa", prompt: ./prompts/assess.md }
   split_proposed: { turn: human, color: "#ffc107" }
   split_approved: { turn: agent, color: "#4263eb", prompt: ./prompts/split_approved.md }
+  human_only_action: { turn: human, color: "#ff9800" }
   implement:      { turn: agent, color: "#12b886", prompt: ./prompts/implement.md }
   pr_review:      { turn: human, color: "#9775fa" }
   second_human_review: { turn: human, color: "#e91e63" }
 
-types:
+types:                        # a mini graph for each part of the workflow
   triage:
     start: assess
     stages:
-      assess:         { next: { ready: dev, split: split_proposed } }
+      assess:         { next: { ready: dev, split: split_proposed, human_only: human_only_action } }
+      human_only_action: { next: { done: done } }
       split_proposed: { next: { approve: split_approved, reject: assess } }
-      split_approved: { next: {} }
+      split_approved: { next: {} }    # finishes through `aop split finish`
   dev:
     start: implement
     stages:
