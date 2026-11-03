@@ -19,7 +19,7 @@ function ReasonButton({
   hint,
   placeholder,
   submitLabel,
-  submitClass,
+  submitClass = "",
   action,
   reload,
 }: {
@@ -37,7 +37,7 @@ function ReasonButton({
   const { busy, error, run } = useAction(reload);
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)}>
+      <button type="button" className="btn-small" onClick={() => setOpen(true)}>
         {label}
       </button>
       {open ? (
@@ -48,7 +48,7 @@ function ReasonButton({
           onSubmit={() => void run(() => action(reason.trim())).then((ok) => ok && setOpen(false))}
           error={error}
           submitLabel={submitLabel}
-          {...(submitClass ? { submitClass } : {})}
+          submitClass={submitClass}
           canSubmit={reason.trim() !== ""}
         >
           <p className="field-hint">{hint}</p>
@@ -98,10 +98,10 @@ function ClaimControls({ node, reload }: { node: NodeView; reload: Reload }) {
   );
 }
 
-/** A small part of the Details card, closed until wanted. `status` keeps its state readable while closed. */
-function Part({ title, status, children }: { title: string; status?: ReactNode; children: ReactNode }) {
+/** A small part of the Details card, usually closed until wanted. `status` keeps its state readable while closed. */
+function Part({ title, status, defaultOpen, children }: { title: string; status?: ReactNode; defaultOpen?: boolean; children: ReactNode }) {
   return (
-    <details className="detail-part">
+    <details className="detail-part" open={defaultOpen}>
       <summary>
         {title}
         {status !== undefined ? <span className="detail-status">{status}</span> : null}
@@ -134,20 +134,16 @@ export function Details({
   return (
     <section className="panel" aria-label="Details">
       <h2>Details</h2>
-      <Part title="Edges" status={edges.length}>
-        <Edges node={node} edges={edges} nodes={nodes} reload={reload} />
-      </Part>
-      <Part title="History" status={events.length}>
-        <History events={events} titleOf={titleOf} />
-      </Part>
-      <Part title="Claim" status={node.claimed_by ?? "none"}>
-        <ClaimControls node={node} reload={reload} />
-      </Part>
+      {node.stage_exists ? (
+        <Part title="Force stage">
+          <MoveForm node={node} stages={stages} reload={reload} />
+        </Part>
+      ) : null}
       {!invalidated ? (
         <Part title="Invalidate or block">
           <div className="action-row">
             <ReasonButton
-              label="Invalidate…"
+              label="Invalidate"
               title="Invalidate this node"
               hint="Its descendants will read as invalidated by parent. It can be restored later."
               placeholder="Why is this no longer valid?"
@@ -158,7 +154,7 @@ export function Details({
             />
             {canBlock ? (
               <ReasonButton
-                label="Mark externally blocked…"
+                label="Mark externally blocked"
                 title="Mark externally blocked"
                 hint={`No agent starts here until you unblock it, and anything it blocks stays blocked. Unblocking returns it to ${humanize(node.stage)}.`}
                 placeholder="What is it waiting on?"
@@ -170,11 +166,15 @@ export function Details({
           </div>
         </Part>
       ) : null}
-      {node.stage_exists ? (
-        <Part title="Move by hand">
-          <MoveForm node={node} stages={stages} reload={reload} />
-        </Part>
-      ) : null}
+      <Part title="Claim" status={node.claimed_by ?? "none"} defaultOpen>
+        <ClaimControls node={node} reload={reload} />
+      </Part>
+      <Part title="Edges" status={edges.length}>
+        <Edges node={node} edges={edges} nodes={nodes} reload={reload} />
+      </Part>
+      <Part title="History" status={events.length}>
+        <History events={events} titleOf={titleOf} />
+      </Part>
     </section>
   );
 }

@@ -39,6 +39,11 @@ export function isInvalidated(node: NodeView): boolean {
   return node.stage === "invalidated" || node.invalidated_by_parent;
 }
 
+/** What the graph's "Hide finished" toggle hides. */
+export function isFinished(node: NodeView): boolean {
+  return FINISHED_STAGES.includes(node.stage);
+}
+
 /**
  * `inactive` is what isn't for picking up right now: blocked, held or done. `broken_down` and
  * `invalidated` recede further, because nothing more will happen on those cards.
@@ -100,6 +105,20 @@ export function cardKind(node: NodeView): CardKind {
 export function cardLook(node: NodeView, stages: StagesView | null): CardLook {
   const color = node.stage_exists ? stageColor(node.stage, stages) : MISSING_STAGE_COLOR;
   return lookOf(cardKind(node), color);
+}
+
+/**
+ * The band across the top of the node page, the one place outside the graph that shows a stage's
+ * colour. Stages that are over use the grey their graph cards go.
+ */
+export function stageBand(node: NodeView, stages: StagesView | null): { background: string; text: string } {
+  const color = node.stage_exists ? stageColor(node.stage, stages) : MISSING_STAGE_COLOR;
+  if (node.stage_exists && (FINISHED_STAGES.includes(node.stage) || isInvalidated(node))) {
+    const { background, text } = lookOf("inactive", color);
+    return { background, text };
+  }
+  const background = fillOf(color);
+  return { background, text: readableText(background) };
 }
 
 /** Where a node's stage is, in words. Carries what used to take a badge. */

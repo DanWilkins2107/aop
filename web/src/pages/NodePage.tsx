@@ -8,7 +8,7 @@ import { api } from "../lib/api.js";
 import { humanize } from "../lib/format.js";
 import { useLiveData } from "../lib/live.js";
 import { originalStage } from "../lib/stageGraph.js";
-import { GLOBAL_STAGES, MISSING_STAGE_COLOR, accentOf, findType, stageColor } from "../lib/stageStyle.js";
+import { GLOBAL_STAGES, findType, stageBand } from "../lib/stageStyle.js";
 import { Description } from "./node/Description.js";
 import { Details } from "./node/Details.js";
 import { Messages } from "./node/Messages.js";
@@ -53,6 +53,8 @@ function turnLabel(node: NodeView): string | null {
   return null;
 }
 
+const LINK_LABELS: Record<LinkRow["kind"], string> = { pr: "PR", ticket: "Ticket" };
+
 /** Plain links named by kind. A second of the same kind gets a number, to tell them apart. */
 function Links({ links }: { links: LinkRow[] }) {
   if (links.length === 0) return null;
@@ -64,7 +66,7 @@ function Links({ links }: { links: LinkRow[] }) {
         seen.set(link.kind, count);
         return (
           <a key={link.id} href={link.url} target="_blank" rel="noreferrer" title={link.url} data-link-kind={link.kind}>
-            {link.kind}
+            {LINK_LABELS[link.kind]}
             {count > 1 ? ` ${count}` : ""}
           </a>
         );
@@ -90,7 +92,7 @@ export function NodePage() {
   const ancestors = ancestorsOf(node, projectNodes, data.projectEdges);
   const byParent = node.invalidated_by_parent && node.stage !== "invalidated";
   const onGlobalStage = GLOBAL_STAGES.includes(node.stage);
-  const color = node.stage_exists ? stageColor(node.stage, stages) : MISSING_STAGE_COLOR;
+  const band = stageBand(node, stages);
   const nodeLink = (id: string) => (
     <Link key={id} to={`/n/${id}`} className="inline-link">
       {titleOf(id)}
@@ -113,10 +115,11 @@ export function NodePage() {
         {error ? <ErrorNotice error={error} /> : null}
 
         <header className="panel node-meta">
+          <p className="stage-band" style={{ background: band.background, color: band.text }}>
+            {humanize(node.stage)}
+          </p>
           <h1 className={node.stage === "invalidated" || byParent ? "title-dead" : undefined}>{node.title}</h1>
           <p className="meta-line">
-            <span className="stage-mark" style={{ background: accentOf(color) }} />
-            <span>{humanize(node.stage)}</span>
             {[humanize(node.type), turnLabel(node)].map((part) =>
               part ? (
                 <span key={part} className="meta-part">
@@ -159,14 +162,13 @@ export function NodePage() {
             <PipelineGraph
               node={node}
               type={findType(stages, node.type)}
-              stages={stages}
               returnTo={onGlobalStage ? originalStage(node, events) : null}
             />
           </details>
         </header>
 
         <Description node={node} reload={reload} />
-        <Messages node={node} messages={messages} reload={reload} />
+        <Messages node={node} messages={messages} events={events} reload={reload} />
         <Details node={node} edges={data.edges} nodes={projectNodes} events={events} stages={stages} titleOf={titleOf} reload={reload} />
       </div>
     </div>

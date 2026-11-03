@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import type { EventView, NodeView, TypeView } from "../../src/shared/api.js";
 import { contrast, parseHex, readableText, visibleOn } from "../../web/src/lib/color.js";
-import { CARD_HEIGHT, CARD_WIDTH, fittedViewport, layoutGraph, smoothPath } from "../../web/src/lib/layout.js";
+import { CARD_HEIGHT, CARD_WIDTH, fittedViewport, graphView, layoutGraph, smoothPath } from "../../web/src/lib/layout.js";
 import { originalStage, stageDrawing } from "../../web/src/lib/stageGraph.js";
 import { describeEvent, humanize, stageOptionGroups } from "../../web/src/lib/format.js";
-import { cardKind, cardLook, cardType, isInvalidated, lookOf, stageColor, stageLabel } from "../../web/src/lib/stageStyle.js";
+import { cardKind, cardLook, cardType, isFinished, isInvalidated, lookOf, stageColor, stageLabel } from "../../web/src/lib/stageStyle.js";
 
 const COLORS = ["#ffc107", "#cddc39", "#000000", "#ffffff", "#123", "#4263eb", "#e91e63", "#808080", "#12b886aa"];
 
@@ -331,14 +331,67 @@ describe("graph layout", () => {
     expect([...routes.keys()].sort()).toEqual(["1", "2"]);
   });
 
-  it("wraps unconnected nodes into rows, and keeps routes with their moved cards", () => {
-    const ids = ["p", "c", ...Array.from({ length: 12 }, (_, i) => `solo${i}`)];
-    const { positions, routes } = layoutGraph(ids, [edge("1", "p", "c", "subtask")]);
-    const ys = new Set([...positions.values()].map((at) => at.y));
-    expect(ys.size).toBeGreaterThan(2);
-    const points = routes.get("1") ?? [];
-    expect(points[0]?.y).toBeGreaterThanOrEqual(positions.get("p")!.y);
-    expect(points[points.length - 1]?.y).toBeLessThanOrEqual(positions.get("c")!.y + CARD_HEIGHT);
+  it("keeps unconnected nodes in one row, however many there are", () => {
+    const ids = Array.from({ length: 60 }, (_, i) => `solo${i}`);
+    const at = [...layoutGraph(ids, []).positions.values()];
+    expect(new Set(at.map((p) => p.y))).toEqual(new Set([0]));
+    expect(new Set(at.map((p) => p.x)).size).toBe(60);
+  });
+
+  it("starts connected groups on the same row, side by side, with routes kept to their cards", () => {
+    const ids = ["solo0", "p", "c", "solo1", "b1", "b2"];
+    const { positions, routes } = layoutGraph(ids, [edge("1", "p", "c", "subtask"), edge("2", "b1", "b2", "blocks")]);
+    const at = (id: string) => positions.get(id)!;
+    for (const id of ["solo0", "solo1", "p", "b1"]) expect(at(id).y).toBe(0);
+    for (const id of ["c", "b2"]) expect(at(id).y).toBeGreaterThan(0);
+    expect(new Set(ids.filter((id) => at(id).y === 0).map((id) => at(id).x)).size).toBe(4);
+
+    const route = routes.get("2") ?? [];
+    expect(route[0]!.x).toBeCloseTo(at("b1").x + CARD_WIDTH / 2, 0);
+    expect(route[route.length - 1]!.x).toBeCloseTo(at("b2").x + CARD_WIDTH / 2, 0);
+  });
+
+  describe("keeps nodes in the same place", () => {
+    const made = (id: string, order: number) => ({ id, created_at: `2026-01-01T00:00:${String(order).padStart(2, "0")}Z` });
+    const nodes = ["old", "p", "c1", "c2", "solo", "b1", "b2", "late"].map(made);
+    const edges = [edge("1", "p", "c1", "subtask"), edge("2", "p", "c2", "subtask"), edge("3", "b1", "b2", "blocks")];
+    const everything = graphView(nodes, edges, () => false);
+
+    it("gives the same positions and routes to what's left when nodes are hidden", () => {
+      const hidden = new Set(["old", "c1", "b1"]);
+      const view = graphView(nodes, edges, (node) => hidden.has(node.id));
+      expect(view.nodes.map((node) => node.id)).toEqual(["p", "c2", "solo", "b2", "late"]);
+      expect(view.edges.map((e) => e.id)).toEqual(["2"]);
+      for (const node of view.nodes) expect(view.positions.get(node.id)).toEqual(everything.positions.get(node.id));
+      expect(view.routes.get("2")).toEqual(everything.routes.get("2"));
+    });
+
+    it("puts a new unconnected node at the right end without moving anything", () => {
+      const more = graphView([...nodes, made("new", 30)], edges, () => false);
+      for (const node of nodes) expect(more.positions.get(node.id)).toEqual(everything.positions.get(node.id));
+      const others = nodes.map((node) => everything.positions.get(node.id)!.x);
+      expect(more.positions.get("new")!.x).toBeGreaterThan(Math.max(...others));
+      expect(more.positions.get("new")!.y).toBe(0);
+    });
+
+    it("orders groups by their oldest node and not by size, whatever order they arrive in", () => {
+      const at = graphView([...nodes].reverse(), edges, () => false).positions;
+      expect(at).toEqual(everything.positions);
+      const xs = ["old", "p", "solo", "b1", "late"].map((id) => at.get(id)!.x);
+      expect(xs).toEqual([...xs].sort((a, b) => a - b));
+    });
+
+    it("moves only later groups, all by the same distance, when a group gets a new child", () => {
+      const more = graphView(
+        [...nodes, made("c3", 30)],
+        [...edges, edge("4", "p", "c3", "subtask")],
+        () => false,
+      ).positions;
+      expect(more.get("old")).toEqual(everything.positions.get("old"));
+      const shifts = ["solo", "b1", "b2", "late"].map((id) => more.get(id)!.x - everything.positions.get(id)!.x);
+      expect(shifts[0]).toBeGreaterThan(0);
+      for (const shift of shifts) expect(shift).toBeCloseTo(shifts[0]!);
+    });
   });
 
   it("routes a long edge around a card in its way", () => {
@@ -349,12 +402,6 @@ describe("graph layout", () => {
       const inside = point.x > b.x && point.x < b.x + CARD_WIDTH && point.y > b.y && point.y < b.y + CARD_HEIGHT;
       expect(inside).toBe(false);
     }
-  });
-
-  it("packs unconnected nodes into narrower rows for a narrower aspect", () => {
-    const ids = Array.from({ length: 12 }, (_, i) => `solo${i}`);
-    const widest = (aspect: number) => Math.max(...[...layoutGraph(ids, [], aspect).positions.values()].map((p) => p.x));
-    expect(widest(0.6)).toBeLessThan(widest(1.9));
   });
 
   it("fits every card in view, centred", () => {
@@ -372,6 +419,12 @@ describe("graph layout", () => {
     const { x, zoom } = fittedViewport([{ x: 0, y: 0 }], { width: 1000, height: 600 }, { padding: { x: 20, y: 20 }, minZoom: 0.1, maxZoom: 1 });
     expect(zoom).toBe(1);
     expect(x).toBe((1000 - CARD_WIDTH) / 2);
+  });
+
+  it("starts a row too wide to read at the top left, even though its height would fit", () => {
+    const options = { padding: { x: 56, y: 24 }, minZoom: 0.5, maxZoom: 1 };
+    const row = Array.from({ length: 40 }, (_, i) => ({ x: i * 292, y: 0 }));
+    expect(fittedViewport(row, { width: 1400, height: 800 }, options)).toEqual({ x: 56, y: 24, zoom: 0.5 });
   });
 
   it("starts at the top left when the graph is too big to read at once", () => {
@@ -470,6 +523,13 @@ describe("waiting and hidden cards", () => {
     expect(stageLabel(nodeAt("pr_review"))).toBe("PR review");
     expect(stageLabel(nodeAt("beta", { invalidated_by_parent: true }))).toBe("Invalidated by parent");
     expect(stageLabel(nodeAt("legal_signoff", { stage_exists: false }))).toBe("Legal signoff: stage gone");
+  });
+
+  it("counts only done and broken down nodes as finished", () => {
+    expect(isFinished(nodeAt("done"))).toBe(true);
+    expect(isFinished(nodeAt("broken_down"))).toBe(true);
+    expect(isFinished(nodeAt("beta"))).toBe(false);
+    expect(isFinished(nodeAt("invalidated"))).toBe(false);
   });
 
   it("counts a node as invalidated if it or a parent is", () => {

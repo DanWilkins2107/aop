@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type { ProjectRow } from "../../../src/shared/api.js";
 import { ErrorNotice } from "../components/ErrorNotice.js";
-import { DeleteProjectDialog } from "../components/ProjectDialogs.js";
+import { DeleteProjectDialog, RepoPathHint } from "../components/ProjectDialogs.js";
 import { api } from "../lib/api.js";
 import { useLiveData } from "../lib/live.js";
 import { useAction } from "./node/useAction.js";
@@ -72,16 +72,7 @@ function DetailsForm({
           }}
         />
       </label>
-      <p className="field-hint">
-        The full path of an existing folder, where this project's agents start. AOP doesn't write anything to it or move
-        any files.
-        {openFrom ? (
-          <>
-            {" "}
-            With no path, they start in <code>{openFrom}</code>.
-          </>
-        ) : null}
-      </p>
+      <RepoPathHint openFrom={openFrom} />
       {error ? <div className="form-error">{error}</div> : null}
       <div className="action-row">
         <button type="submit" className="btn-primary" disabled={busy || name === "" || (!nameChanged && !pathChanged)}>
@@ -125,9 +116,7 @@ export function ProjectSettingsPage() {
           <DetailsForm key={project.id} project={project} openFrom={data.openFrom} reload={reload} />
           <section className="section settings-delete">
             <h2>Delete project</h2>
-            <p className="section-text">
-              Permanently deletes the project from AOP and stops its agents. The repo folder isn't touched.
-            </p>
+            <p className="section-text">Permanently deletes the project from AOP and stops its agents.</p>
             <div className="action-row">
               <button type="button" onClick={() => setDeleting(true)}>
                 Delete project

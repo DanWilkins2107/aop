@@ -19,12 +19,10 @@ function moveChoices(stages: StagesView): { group: string; options: { label: str
 export function MoveForm({
   node,
   stages,
-  primary = false,
   reload,
 }: {
   node: NodeView;
   stages: StagesView;
-  primary?: boolean;
   reload: () => Promise<void>;
 }) {
   const [choice, setChoice] = useState("");
@@ -71,7 +69,7 @@ export function MoveForm({
             aria-label="Cron schedule"
           />
         ) : null}
-        <button type="submit" className={primary ? "btn-primary" : undefined} disabled={busy || !parsed || (needsCron && cron.trim() === "")}>
+        <button type="submit" className="btn-small" disabled={busy || !parsed || (needsCron && cron.trim() === "")}>
           Move
         </button>
       </form>

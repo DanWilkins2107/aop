@@ -185,6 +185,7 @@ label {
   margin: -4px 0 0;
   color: var(--muted);
   font-size: 13px;
+  overflow-wrap: anywhere;
 }
 .hint {
   font-size: 12px;
@@ -597,7 +598,8 @@ label {
 .detail-part > summary {
   cursor: pointer;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 400;
+  color: var(--muted);
   user-select: none;
 }
 .pipeline-part[open] > summary {
@@ -634,17 +636,18 @@ label {
   margin: 6px 0 0;
   font-size: 13px;
 }
-.stage-mark {
-  flex: 0 0 auto;
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-  margin-right: 6px;
+.stage-band {
+  margin: -14px -16px 12px;
+  padding: 6px 16px;
+  border-radius: 7px 7px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
 }
 .meta-part {
   color: var(--muted);
 }
-.meta-part::before {
+.meta-part:not(:first-child)::before {
   content: "·";
   margin: 0 6px;
 }
@@ -710,6 +713,16 @@ p.action-text:last-child {
 
 /* ---- messages ---- */
 
+.messages {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.visit > h3 {
+  font-size: 13px;
+  color: var(--text);
+  margin: 0;
+}
 .message {
   margin-top: 8px;
   padding: 8px 10px;
@@ -738,8 +751,8 @@ p.action-text:last-child {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.composer {
-  margin-bottom: 12px;
+.composer + .section-text {
+  margin-top: 12px;
 }
 
 /* ---- details ---- */

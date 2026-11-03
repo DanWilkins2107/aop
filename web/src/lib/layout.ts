@@ -4,10 +4,6 @@ import type { EdgeRow } from "../../../src/shared/api.js";
 export const CARD_WIDTH = 236;
 export const CARD_HEIGHT = 66;
 
-/** Roughly a desktop canvas, so that unconnected work fills the view instead of one long row. */
-export const WIDE_ASPECT = 1.9;
-/** Roughly a small window, where rows must stay short enough to read without much panning. */
-export const NARROW_ASPECT = 0.6;
 const GROUP_GAP = 56;
 
 type LayoutEdge = Pick<EdgeRow, "id" | "source_id" | "target_id" | "kind">;
@@ -26,10 +22,9 @@ export interface GraphLayout {
 
 interface Group extends GraphLayout {
   width: number;
-  height: number;
 }
 
-/** Nodes joined by any edge, biggest group first and otherwise in the order given. */
+/** Nodes joined by any edge. Groups and their members keep the order given, by each group's first member. */
 function connectedGroups(nodeIds: string[], edges: LayoutEdge[]): string[][] {
   const parent = new Map(nodeIds.map((id) => [id, id]));
   const find = (id: string): string => {
@@ -42,7 +37,7 @@ function connectedGroups(nodeIds: string[], edges: LayoutEdge[]): string[][] {
 
   const groups = new Map<string, string[]>();
   for (const id of nodeIds) groups.set(find(id), [...(groups.get(find(id)) ?? []), id]);
-  return [...groups.values()].sort((a, b) => b.length - a.length);
+  return [...groups.values()];
 }
 
 function layoutGroup(nodeIds: string[], edges: LayoutEdge[]): Group {
@@ -60,53 +55,55 @@ function layoutGroup(nodeIds: string[], edges: LayoutEdge[]): Group {
   const positions = new Map<string, Point>();
   const routes = new Map<string, Point[]>();
   let width = 0;
-  let height = 0;
   for (const id of nodeIds) {
     const { x, y } = graph.node(id);
     positions.set(id, { x: x - CARD_WIDTH / 2, y: y - CARD_HEIGHT / 2 });
     width = Math.max(width, x + CARD_WIDTH / 2);
-    height = Math.max(height, y + CARD_HEIGHT / 2);
   }
   for (const edge of edges) {
     const points: Point[] = graph.edge({ v: edge.source_id, w: edge.target_id, name: edge.id }).points ?? [];
     routes.set(edge.id, points);
   }
-  return { positions, routes, width, height };
+  return { positions, routes, width };
 }
 
 /**
- * Lays cards out top to bottom over both kinds of edge. Dagre would line every unconnected group
- * up along the top, so each is laid out alone and then packed into rows.
+ * Lays cards out top to bottom over both kinds of edge, so only an edge ever adds depth. Each
+ * unconnected group is laid out alone, then they all sit side by side along the top in the order
+ * given. Nothing but `nodeIds` and `edges` goes in, so nothing else can move a card.
  */
-export function layoutGraph(nodeIds: string[], edges: LayoutEdge[], aspect = WIDE_ASPECT): GraphLayout {
+export function layoutGraph(nodeIds: string[], edges: LayoutEdge[]): GraphLayout {
   const known = new Set(nodeIds);
   const usable = edges.filter((edge) => known.has(edge.source_id) && known.has(edge.target_id));
-  const groups = connectedGroups(nodeIds, usable).map((ids) => {
-    const members = new Set(ids);
-    return layoutGroup(ids, usable.filter((edge) => members.has(edge.source_id)));
-  });
-
-  const area = groups.reduce((sum, g) => sum + (g.width + GROUP_GAP) * (g.height + GROUP_GAP), 0);
-  const widest = groups.reduce((most, g) => Math.max(most, g.width), 0);
-  const rowWidth = Math.max(widest, Math.sqrt(area * aspect));
 
   const positions = new Map<string, Point>();
   const routes = new Map<string, Point[]>();
   let x = 0;
-  let y = 0;
-  let rowHeight = 0;
-  for (const group of groups) {
-    if (x > 0 && x + group.width > rowWidth) {
-      x = 0;
-      y += rowHeight + GROUP_GAP;
-      rowHeight = 0;
-    }
-    for (const [id, at] of group.positions) positions.set(id, { x: at.x + x, y: at.y + y });
-    for (const [id, points] of group.routes) routes.set(id, points.map((p) => ({ x: p.x + x, y: p.y + y })));
+  for (const ids of connectedGroups(nodeIds, usable)) {
+    const members = new Set(ids);
+    const group = layoutGroup(ids, usable.filter((edge) => members.has(edge.source_id)));
+    for (const [id, at] of group.positions) positions.set(id, { x: at.x + x, y: at.y });
+    for (const [id, points] of group.routes) routes.set(id, points.map((p) => ({ x: p.x + x, y: p.y })));
     x += group.width + GROUP_GAP;
-    rowHeight = Math.max(rowHeight, group.height);
   }
   return { positions, routes };
+}
+
+/**
+ * What the graph shows. Positions always come from every node, oldest first, so that hiding a node
+ * leaves a gap instead of moving the others, and a new unconnected node lands at the right end.
+ */
+export function graphView<N extends { id: string; created_at: string }, E extends LayoutEdge>(
+  allNodes: N[],
+  allEdges: E[],
+  hidden: (node: N) => boolean,
+): GraphLayout & { nodes: N[]; edges: E[] } {
+  const oldestFirst = [...allNodes].sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0));
+  const { positions, routes } = layoutGraph(oldestFirst.map((node) => node.id), allEdges);
+  const nodes = oldestFirst.filter((node) => !hidden(node));
+  const shown = new Set(nodes.map((node) => node.id));
+  const edges = allEdges.filter((edge) => shown.has(edge.source_id) && shown.has(edge.target_id));
+  return { nodes, edges, positions, routes };
 }
 
 export interface FitOptions {
@@ -135,7 +132,7 @@ export function fittedViewport(
   const zoom = Math.min(maxZoom, Math.max(minZoom, fit));
   const offset = (space: number, size: number, pad: number, start: number) => {
     const free = space - size * zoom;
-    return (free >= 2 * pad ? free / 2 : pad) - start * zoom;
+    return (fit >= minZoom && free >= 2 * pad ? free / 2 : pad) - start * zoom;
   };
   return { x: offset(canvas.width, width, padding.x, left), y: offset(canvas.height, height, padding.y, top), zoom };
 }
