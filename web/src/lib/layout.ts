@@ -24,7 +24,7 @@ interface Group extends GraphLayout {
   width: number;
 }
 
-/** Nodes joined by any edge, biggest group first and otherwise in the order given. */
+/** Nodes joined by any edge. Groups and their members keep the order given, by each group's first member. */
 function connectedGroups(nodeIds: string[], edges: LayoutEdge[]): string[][] {
   const parent = new Map(nodeIds.map((id) => [id, id]));
   const find = (id: string): string => {
@@ -37,7 +37,7 @@ function connectedGroups(nodeIds: string[], edges: LayoutEdge[]): string[][] {
 
   const groups = new Map<string, string[]>();
   for (const id of nodeIds) groups.set(find(id), [...(groups.get(find(id)) ?? []), id]);
-  return [...groups.values()].sort((a, b) => b.length - a.length);
+  return [...groups.values()];
 }
 
 function layoutGroup(nodeIds: string[], edges: LayoutEdge[]): Group {
@@ -69,7 +69,8 @@ function layoutGroup(nodeIds: string[], edges: LayoutEdge[]): Group {
 
 /**
  * Lays cards out top to bottom over both kinds of edge, so only an edge ever adds depth. Each
- * unconnected group is laid out alone, then they all sit side by side along the top.
+ * unconnected group is laid out alone, then they all sit side by side along the top in the order
+ * given. Nothing but `nodeIds` and `edges` goes in, so nothing else can move a card.
  */
 export function layoutGraph(nodeIds: string[], edges: LayoutEdge[]): GraphLayout {
   const known = new Set(nodeIds);
@@ -86,6 +87,23 @@ export function layoutGraph(nodeIds: string[], edges: LayoutEdge[]): GraphLayout
     x += group.width + GROUP_GAP;
   }
   return { positions, routes };
+}
+
+/**
+ * What the graph shows. Positions always come from every node, oldest first, so that hiding a node
+ * leaves a gap instead of moving the others, and a new unconnected node lands at the right end.
+ */
+export function graphView<N extends { id: string; created_at: string }, E extends LayoutEdge>(
+  allNodes: N[],
+  allEdges: E[],
+  hidden: (node: N) => boolean,
+): GraphLayout & { nodes: N[]; edges: E[] } {
+  const oldestFirst = [...allNodes].sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0));
+  const { positions, routes } = layoutGraph(oldestFirst.map((node) => node.id), allEdges);
+  const nodes = oldestFirst.filter((node) => !hidden(node));
+  const shown = new Set(nodes.map((node) => node.id));
+  const edges = allEdges.filter((edge) => shown.has(edge.source_id) && shown.has(edge.target_id));
+  return { nodes, edges, positions, routes };
 }
 
 export interface FitOptions {

@@ -6,9 +6,9 @@ import { NewNodeDialog } from "../components/NewNodeDialog.js";
 import { RoutedEdge, type RoutedEdgeType } from "../components/RoutedEdge.js";
 import { StageCard, type StageCardNode } from "../components/StageCard.js";
 import { api } from "../lib/api.js";
-import { CARD_HEIGHT, CARD_WIDTH, fittedViewport, layoutGraph, type FitOptions } from "../lib/layout.js";
+import { CARD_HEIGHT, CARD_WIDTH, fittedViewport, graphView, type FitOptions } from "../lib/layout.js";
 import { useLiveData } from "../lib/live.js";
-import { isInvalidated } from "../lib/stageStyle.js";
+import { isFinished, isInvalidated } from "../lib/stageStyle.js";
 
 const nodeTypes = { stage: StageCard };
 const edgeTypes = { routed: RoutedEdge };
@@ -19,28 +19,33 @@ const BLOCKS_STROKE = "#495057";
 /** Below this the canvas is a small window, so cards stay big enough to read. */
 const NARROW_WIDTH = 640;
 
-// The left side clears the zoom controls. A project too wide to read at this zoom pans instead.
-const WIDE_FIT: FitOptions = { padding: { x: 56, y: 24 }, minZoom: 0.5, maxZoom: 1 };
+// The left side clears the zoom controls. A project too wide even at this zoom pans instead.
+const WIDE_FIT: FitOptions = { padding: { x: 56, y: 24 }, minZoom: 0.25, maxZoom: 1 };
 const NARROW_FIT: FitOptions = { padding: { x: 16, y: 16 }, minZoom: 0.7, maxZoom: 1 };
 // What the fit button does: the whole graph, however small.
 const FIT_ALL = { padding: "16px", maxZoom: 1 } as const;
 
-const hideKey = (projectId: string) => `aop:hideInvalidated:${projectId}`;
+type HideToggle = "hideInvalidated" | "hideFinished";
 
-function readHide(projectId: string): boolean {
-  try {
-    return localStorage.getItem(hideKey(projectId)) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function writeHide(projectId: string, hide: boolean): void {
-  try {
-    localStorage.setItem(hideKey(projectId), hide ? "1" : "0");
-  } catch {
-    // Only a convenience: the toggle still works until the page reloads.
-  }
+/** A toggle remembered per project. */
+function useHide(toggle: HideToggle, projectId: string) {
+  const key = `aop:${toggle}:${projectId}`;
+  const [hide, setHide] = useState(() => {
+    try {
+      return localStorage.getItem(key) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const change = (next: boolean) => {
+    try {
+      localStorage.setItem(key, next ? "1" : "0");
+    } catch {
+      // Only a convenience: the toggle still works until the page reloads.
+    }
+    setHide(next);
+  };
+  return [hide, change] as const;
 }
 
 /** The canvas's size, known before anything paints. */
@@ -59,13 +64,20 @@ function useSize() {
   return { ref, size };
 }
 
-/** Fits the view when cards appear or go, and leaves the user's pan and zoom alone otherwise. */
-function FitWhenChanged({ fitKey, viewport }: { fitKey: string; viewport: Viewport }) {
+/**
+ * Fits the view once, the first time there are cards to fit. React Flow's `defaultViewport` covers
+ * a graph that has cards from the start, but one that starts empty has nothing to fit until later.
+ * After that only the user and the fit button move the view: hiding or live updates never do.
+ */
+function FitFirstCards({ hasCards, viewport }: { hasCards: boolean; viewport: Viewport }) {
   const { setViewport } = useReactFlow();
+  const fitted = useRef(false);
   useLayoutEffect(() => {
+    if (!hasCards || fitted.current) return;
+    fitted.current = true;
     void setViewport(viewport);
-    // Only on `fitKey`: a viewport that changed for any other reason mustn't move the user's view.
-  }, [fitKey, setViewport]);
+    // Only on `hasCards`: a viewport that changed for any other reason mustn't move the user's view.
+  }, [hasCards, setViewport]);
   return null;
 }
 
@@ -73,7 +85,8 @@ export function GraphPage() {
   const { projectId = "" } = useParams();
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
-  const [hideInvalidated, setHideInvalidated] = useState(() => readHide(projectId));
+  const [hideInvalidated, setHideInvalidated] = useHide("hideInvalidated", projectId);
+  const [hideFinished, setHideFinished] = useHide("hideFinished", projectId);
   const { ref: canvasRef, size } = useSize();
   // React Flow applies its starting view just after it mounts, so it stays hidden until then.
   const [readyFor, setReadyFor] = useState<string | null>(null);
@@ -92,10 +105,11 @@ export function GraphPage() {
   const { flowNodes, flowEdges, viewport } = useMemo(() => {
     const none: Viewport = { x: 0, y: 0, zoom: 1 };
     if (!data || !size) return { flowNodes: [] as StageCardNode[], flowEdges: [] as RoutedEdgeType[], viewport: none };
-    const nodes = hideInvalidated ? data.nodes.filter((n) => !isInvalidated(n)) : data.nodes;
-    const shown = new Set(nodes.map((n) => n.id));
-    const edges = data.edges.filter((e) => shown.has(e.source_id) && shown.has(e.target_id));
-    const { positions, routes } = layoutGraph(nodes.map((n) => n.id), edges);
+    const { nodes, edges, positions, routes } = graphView(
+      data.nodes,
+      data.edges,
+      (n) => (hideInvalidated && isInvalidated(n)) || (hideFinished && isFinished(n)),
+    );
     const stageOf = new Map(nodes.map((n) => [n.id, n.stage]));
     const flowNodes: StageCardNode[] = nodes.map((node) => ({
       id: node.id,
@@ -123,8 +137,9 @@ export function GraphPage() {
         markerEnd: { type: MarkerType.ArrowClosed, color: stroke },
       };
     });
-    return { flowNodes, flowEdges, viewport: fittedViewport(positions.values(), size, narrow ? NARROW_FIT : WIDE_FIT) };
-  }, [data, hideInvalidated, size, narrow]);
+    const shownAt = flowNodes.map((node) => node.position);
+    return { flowNodes, flowEdges, viewport: fittedViewport(shownAt, size, narrow ? NARROW_FIT : WIDE_FIT) };
+  }, [data, hideInvalidated, hideFinished, size, narrow]);
 
   return (
     <div className="graph-page">
@@ -136,15 +151,12 @@ export function GraphPage() {
         </nav>
         <div className="graph-tools">
           <label className="graph-filter">
-            <input
-              type="checkbox"
-              checked={hideInvalidated}
-              onChange={(e) => {
-                writeHide(projectId, e.target.checked);
-                setHideInvalidated(e.target.checked);
-              }}
-            />
+            <input type="checkbox" checked={hideInvalidated} onChange={(e) => setHideInvalidated(e.target.checked)} />
             Hide invalidated
+          </label>
+          <label className="graph-filter">
+            <input type="checkbox" checked={hideFinished} onChange={(e) => setHideFinished(e.target.checked)} />
+            Hide finished
           </label>
           <Link to={`/p/${projectId}/settings`} className="quiet-link">
             Settings
@@ -170,7 +182,11 @@ export function GraphPage() {
           <div className="graph-empty">
             <strong>Every node here is hidden</strong>
             <span className="muted">
-              They're all invalidated or invalidated by a parent. Turn off "Hide invalidated" to see them.
+              {hideInvalidated && hideFinished
+                ? 'They\'re all invalidated or finished. Turn off "Hide invalidated" or "Hide finished" to see them.'
+                : hideFinished
+                  ? 'They\'re all done or broken down. Turn off "Hide finished" to see them.'
+                  : 'They\'re all invalidated or invalidated by a parent. Turn off "Hide invalidated" to see them.'}
             </span>
           </div>
         ) : null}
@@ -191,7 +207,7 @@ export function GraphPage() {
             proOptions={{ hideAttribution: true }}
           >
             <Controls showInteractive={false} position="bottom-left" fitViewOptions={FIT_ALL} />
-            <FitWhenChanged fitKey={`${flowNodes.length}:${narrow}`} viewport={viewport} />
+            <FitFirstCards hasCards={flowNodes.length > 0} viewport={viewport} />
           </ReactFlow>
         ) : null}
       </div>
