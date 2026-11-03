@@ -11,7 +11,7 @@ export const STAGES_YAML = `
 start: triage
 
 stages:
-  assess:         { turn: agent, color: "#5c7cfa", prompt: ./prompts/assess.md }
+  awaiting_agent_breakdown:         { turn: agent, color: "#5c7cfa", prompt: ./prompts/awaiting_agent_breakdown.md }
   split_proposed: { turn: human, color: "#ffc107" }
   split_approved: { turn: agent, color: "#4263eb", prompt: ./prompts/split_approved.md }
   write_spec:  { turn: agent, color: "#22b8cf", prompt: ./prompts/write_spec.md }
@@ -21,10 +21,10 @@ stages:
 
 types:
   triage:
-    start: assess
+    start: awaiting_agent_breakdown
     stages:
-      assess:         { next: { ready: dev, split: split_proposed } }
-      split_proposed: { next: { approve: split_approved, reject: assess } }
+      awaiting_agent_breakdown:         { next: { ready: dev, split: split_proposed } }
+      split_proposed: { next: { approve: split_approved, reject: awaiting_agent_breakdown } }
       split_approved: { next: { done: broken_down } }
   dev:
     start: write_spec
@@ -52,7 +52,7 @@ agent_timeout_minutes: 30
 stages: ./stages.yaml
 `;
 
-export const PROMPTS = ["assess", "split_approved", "write_spec", "implement"];
+export const PROMPTS = ["awaiting_agent_breakdown", "split_approved", "write_spec", "implement"];
 
 /** Writes files, given paths relative to the root. */
 export function writeFiles(root: string, files: Record<string, string>): void {

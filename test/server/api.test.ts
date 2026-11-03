@@ -42,7 +42,7 @@ describe("creating nodes", () => {
       title: "Hello",
       body: "Details",
       type: "triage",
-      stage: "assess",
+      stage: "awaiting_agent_breakdown",
       stage_exists: true,
       turn: "agent",
       invalidated_by_parent: false,

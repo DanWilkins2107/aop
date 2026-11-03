@@ -20,10 +20,10 @@ describe("UI API", () => {
   it("describes the shared stages in file order, without prompt paths", async () => {
     const res = await h.call<StagesView>("GET", "/api/stages");
     expect(res.status).toBe(200);
-    expect(res.body.stages[0]).toEqual({ name: "assess", turn: "agent", color: "#5c7cfa" });
+    expect(res.body.stages[0]).toEqual({ name: "awaiting_agent_breakdown", turn: "agent", color: "#5c7cfa" });
     expect(res.body.types.map((t) => t.name)).toEqual(["triage", "dev", "hotfix", "nightly"]);
     const triage = res.body.types[0];
-    expect(triage?.start).toBe("assess");
+    expect(triage?.start).toBe("awaiting_agent_breakdown");
     expect(triage?.stages[0]?.next).toContainEqual({ outcome: "split", target: "split_proposed" });
     expect(JSON.stringify(res.body)).not.toContain("prompts");
   });

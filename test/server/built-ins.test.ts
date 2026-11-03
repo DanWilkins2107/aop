@@ -45,7 +45,7 @@ describe("creating nodes in the right place", () => {
   it("defaults to the top-level start type", async () => {
     const res = await h.call<NodeView>("POST", path(), { title: "x" });
     expect(res.status).toBe(201);
-    expect(res.body).toMatchObject({ type: "triage", stage: "assess" });
+    expect(res.body).toMatchObject({ type: "triage", stage: "awaiting_agent_breakdown" });
   });
 
   it("can choose a type, entering at its start", async () => {
@@ -73,7 +73,7 @@ describe("creating nodes in the right place", () => {
   it("refuses an unknown type or stage, and a stage outside the chosen type", async () => {
     expect((await h.call("POST", path(), { title: "x", type: "nope" })).status).toBe(400);
     expect((await h.call("POST", path(), { title: "x", stage: "nope" })).status).toBe(400);
-    expect((await h.call("POST", path(), { title: "x", stage: "assess", type: "dev" })).status).toBe(400);
+    expect((await h.call("POST", path(), { title: "x", stage: "awaiting_agent_breakdown", type: "dev" })).status).toBe(400);
   });
 
   it("refuses built-ins that need their own action or state", async () => {
@@ -87,7 +87,7 @@ describe("creating nodes in the right place", () => {
     expect((await h.call("POST", path(), { title: "x", stage: "scheduled" })).status).toBe(400);
     const res = await h.call<NodeView>("POST", path(), { title: "x", stage: "scheduled", cron: "0 0 * * *" });
     expect(res.body).toMatchObject({ type: "nightly", stage: "scheduled" });
-    expect((await h.call("POST", path(), { title: "x", stage: "assess", cron: "0 0 * * *" })).status).toBe(400);
+    expect((await h.call("POST", path(), { title: "x", stage: "awaiting_agent_breakdown", cron: "0 0 * * *" })).status).toBe(400);
   });
 
   it("reports the start in the stages view", async () => {
@@ -240,7 +240,7 @@ describe("splitting", () => {
     const start = await h.create("dev");
     expect((await h.post(start.id, "move", { stage: "splitting" })).status).toBe(400);
     const node = await splitting();
-    expect((await h.post(node.id, "move", { stage: "assess" })).body).toMatchObject({ stage: "assess", return_stage: null });
+    expect((await h.post(node.id, "move", { stage: "awaiting_agent_breakdown" })).body).toMatchObject({ stage: "awaiting_agent_breakdown", return_stage: null });
   });
 
   it("holds children only while the parent is splitting, and releases them together", async () => {
@@ -328,7 +328,7 @@ describe("splitting", () => {
     const node = await splitting();
     const child = await childOf(node.id);
     await h.post(node.id, "ask", { question: "Q?" });
-    await h.post(node.id, "move", { stage: "assess" });
+    await h.post(node.id, "move", { stage: "awaiting_agent_breakdown" });
     expect((await h.node(child.id)).held).toBe(false);
   });
 
@@ -348,9 +348,9 @@ describe("splitting", () => {
     h.rewriteStages(`
 start: triage
 stages:
-  assess: { turn: agent, prompt: ./prompts/assess.md }
+  awaiting_agent_breakdown: { turn: agent, prompt: ./prompts/awaiting_agent_breakdown.md }
 types:
-  triage: { start: assess, stages: { assess: { next: {} } } }
+  triage: { start: awaiting_agent_breakdown, stages: { awaiting_agent_breakdown: { next: {} } } }
 `);
     expect((await h.post(node.id, "answer", { answer: "A" })).status).toBe(409);
     expect((await h.node(node.id)).stage).toBe("ask_human_question");

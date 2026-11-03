@@ -61,8 +61,8 @@ describe("config loading", () => {
       agent_timeout_minutes: 30,
       stagesPath: join(home, "stages.yaml"),
     });
-    expect(config.graph.types.get("triage")?.start).toBe("assess");
-    expect(config.graph.stages.get("assess")?.prompt).toBe(join(home, "prompts", "assess.md"));
+    expect(config.graph.types.get("triage")?.start).toBe("awaiting_agent_breakdown");
+    expect(config.graph.stages.get("awaiting_agent_breakdown")?.prompt).toBe(join(home, "prompts", "awaiting_agent_breakdown.md"));
   });
 
   it("reads AOP_HOME by default", () => {
@@ -81,7 +81,7 @@ describe("config loading", () => {
     const home = makeHome({ "config.yaml": `sandboxed_command: s\nstages: ${JSON.stringify(join(shared, "stages.yaml"))}\n` });
     const config = loadConfig(home);
     expect(config.stagesPath).toBe(join(shared, "stages.yaml"));
-    expect(config.graph.stages.get("assess")?.prompt).toBe(join(shared, "prompts", "assess.md"));
+    expect(config.graph.stages.get("awaiting_agent_breakdown")?.prompt).toBe(join(shared, "prompts", "awaiting_agent_breakdown.md"));
   });
 
   it("defaults the optional keys", () => {

@@ -113,7 +113,7 @@ describe("over real HTTP", () => {
       type: "triage",
       title: "Over the wire",
     });
-    expect(node.json).toMatchObject({ stage: "assess" });
+    expect(node.json).toMatchObject({ stage: "awaiting_agent_breakdown" });
     const moved = await send("POST", `/api/nodes/${String(node.json["id"])}/next`, headers, { outcome: "ready" });
     expect(moved.json).toMatchObject({ type: "dev", stage: "write_spec" });
   });
