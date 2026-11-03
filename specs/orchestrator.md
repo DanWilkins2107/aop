@@ -14,7 +14,7 @@ max_agents: 3
 ## Running a stage
 1. A node entering an agent stage is queued.
 2. It starts once no `blocks` edge holds it and a `max_agents` slot is free.
-3. Each stage is a fresh process, started in the repo root. Its prompt is built from the stage's prompt file, the node's description, its messages and how to use the CLI.
+3. Each stage is a fresh process, started in the repo root. Its prompt is built from a short instruction to load the plugin's `aop-context` and `aop-rulebook` skills, the stage's prompt file, the node's description and its messages.
 4. The agent finishes with `aop next <outcome>`, `aop ask "..."` or by exiting. Only outcomes in that stage's `next` are accepted.
 5. Exiting without either moves the node to `failed`. Nothing retries automatically.
 
