@@ -8,9 +8,9 @@
     "node": ">=22"
   },
   "scripts": {
-    "start": "tsx src/server/main.ts",
+    "start": "node dist/server/main.js",
     "dev:web": "vite",
-    "build": "vite build",
+    "build": "vite build && tsc -p tsconfig.build.json",
     "demo": "npm run build && tsx demo/start.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p web",
     "test": "vitest run"
