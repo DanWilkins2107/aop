@@ -8,7 +8,8 @@ One graph per project, using React Flow with auto-layout. Bright cards mean a hu
 ## Node page
 - **Pipeline** near the top: drawn from the node's current type, showing where it has been and where it is now.
 - Description, messages, history and links.
-- Outcome buttons for the current stage, taken from `next`.
+- Outcome buttons for the current stage, taken from `next`. This is the only way past a human stage.
+- Who holds the claim, with controls to stop an agent run, release a human claim and change the stage.
 
 ## Process page
 View-only drawing of each type's graph from `stages.yaml`. The file is the only place to edit the process.

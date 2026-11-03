@@ -16,3 +16,6 @@ The server still enforces the process: an agent can't take an outcome that isn't
 
 ## Extra rules
 A project's own rules go in its stage prompts. AOP has no separate rules feature.
+
+## Sources
+Adapted and cut down from the AgentJira plugin skills. The default `assess` prompt holds the whole routing rule: one PR goes to `dev`, bigger work is split, and work an agent can't do goes to `human_only_action`. Defaults only need to be reasonable.
