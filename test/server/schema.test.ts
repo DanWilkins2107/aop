@@ -138,6 +138,29 @@ describe("nodes", () => {
     }
   });
 
+  it("requires return_stage at externally_blocked and splitting, on insert and update", () => {
+    for (const stage of ["externally_blocked", "splitting"]) {
+      expect(() => node("x", "p1", { stage })).toThrow(/nodes_held_stages_require_return_stage/);
+      node(`ok_${stage}`, "p1", { stage, return_stage: "implement" });
+      expect(() => db.prepare("UPDATE nodes SET return_stage = NULL WHERE id = ?").run(`ok_${stage}`)).toThrow(
+        /nodes_held_stages_require_return_stage/,
+      );
+    }
+    expect(() => db.prepare("UPDATE nodes SET stage = 'splitting' WHERE id = 'n1'").run()).toThrow(
+      /nodes_held_stages_require_return_stage/,
+    );
+  });
+
+  it("limits claimed_by to human, agent or nothing", () => {
+    node("h", "p1", { claimed_by: "human" });
+    node("a", "p1", { claimed_by: "agent" });
+    node("none", "p1", { claimed_by: null });
+    for (const holder of ["system", "", "Human"]) {
+      expect(() => node("x", "p1", { claimed_by: holder })).toThrow(/nodes_claimed_by_known/);
+    }
+    expect(() => db.prepare("UPDATE nodes SET claimed_by = 'robot' WHERE id = 'h'").run()).toThrow(/nodes_claimed_by_known/);
+  });
+
   it("allows spawned_by to be null but not dangling", () => {
     node("child", "p1", { spawned_by: "n1" });
     expect(() => node("x", "p1", { spawned_by: "missing" })).toThrow(/FOREIGN KEY/);
@@ -258,5 +281,34 @@ describe("runs", () => {
     expect(() =>
       db.prepare("INSERT INTO runs (id, created_at, node_id, stage, status) VALUES ('x', ?, 'n1', 's', 'exited')").run(T),
     ).toThrow(/NOT NULL/);
+  });
+});
+
+describe("upgrading from the first migration", () => {
+  it("adds claimed_by to existing nodes, keeping them and enforcing the new checks", () => {
+    const path = join(mkdtempSync(join(aopHome(), "upgrade-")), "aop.db");
+    const old = new Database(path);
+    old.exec(migrations[0]?.sql ?? "");
+    old.pragma("user_version = 1");
+    old.prepare("INSERT INTO projects (id, created_at, name, repo_path) VALUES ('p', ?, 'p', '/p')").run(T);
+    old
+      .prepare(
+        "INSERT INTO nodes (id, created_at, project_id, title, type, stage, return_stage) VALUES ('n', ?, 'p', 't', 'dev', 'failed', 'implement')",
+      )
+      .run(T);
+    old.close();
+
+    const upgraded = openDb(path);
+    try {
+      expect(upgraded.pragma("user_version", { simple: true })).toBe(migrations.at(-1)?.version);
+      expect(upgraded.prepare("SELECT stage, claimed_by FROM nodes WHERE id = 'n'").get()).toEqual({
+        stage: "failed",
+        claimed_by: null,
+      });
+      expect(() => upgraded.prepare("UPDATE nodes SET claimed_by = 'robot' WHERE id = 'n'").run()).toThrow(/CHECK/);
+      expect(() => upgraded.prepare("UPDATE nodes SET stage = 'splitting', return_stage = NULL WHERE id = 'n'").run()).toThrow(/CHECK/);
+    } finally {
+      upgraded.close();
+    }
   });
 });

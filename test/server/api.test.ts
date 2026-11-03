@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { blockersOf, type EventView, type NodeView } from "../../src/server/nodes.js";
+import { holdersOf, type EventView, type NodeView } from "../../src/server/nodes.js";
 import { harness, makeRepo, STAGES_YAML, writeFiles, type Harness } from "./helpers.js";
 
 let h: Harness;
@@ -46,7 +46,7 @@ describe("projects", () => {
     const res = await h.call("POST", "/api/projects", { repo_path: repo });
     expect(res.status).toBe(422);
     expect(errorOf(res).code).toBe("config_invalid");
-    expect(errorOf(res).details).toHaveLength(2);
+    expect(errorOf(res).details).toHaveLength(3);
   });
 
   it("refuses a path that doesn't exist or has no .aop", async () => {
@@ -65,13 +65,12 @@ describe("creating nodes", () => {
       stage: "assess",
       stage_exists: true,
       turn: "agent",
-      stale: false,
+      invalidated_by_parent: false,
       blocked_by: [],
     });
     expect(node.available_outcomes).toEqual([
       { outcome: "ready", target: "dev" },
       { outcome: "split", target: "split_proposed" },
-      { outcome: "reject", target: "invalidated" },
     ]);
     const events = await h.call<EventView[]>("GET", `/api/nodes/${node.id}/events`);
     expect(events.body.map((e) => e.kind)).toEqual(["node_created"]);
@@ -194,7 +193,7 @@ describe("next", () => {
 
     // A blocks edge isn't a child, and neither is a removed subtask edge.
     const other = await h.create("dev");
-    await h.call("POST", `/api/nodes/${node.id}/edges`, { target_id: other.id, kind: "blocks" });
+    const blocks = await h.call<{ id: string }>("POST", `/api/nodes/${node.id}/edges`, { target_id: other.id, kind: "blocks" });
     const edge = await h.call<{ id: string }>("POST", `/api/nodes/${node.id}/edges`, {
       target_id: other.id,
       kind: "subtask",
@@ -202,6 +201,7 @@ describe("next", () => {
     await h.call("DELETE", `/api/edges/${edge.body.id}`);
     expect((await h.post(node.id, "next", { outcome: "done" })).status).toBe(409);
 
+    await h.call("DELETE", `/api/edges/${blocks.body.id}`);
     await child(node.id);
     const ok = await h.post(node.id, "next", { outcome: "done" });
     expect(ok.body).toMatchObject({ stage: "broken_down", available_outcomes: [] });
@@ -224,12 +224,9 @@ describe("next", () => {
     expect((await h.node(node.id)).type).toBe("hotfix");
   });
 
-  it("needs a reason for an outcome that targets invalidated", async () => {
+  it("takes no reason", async () => {
     const node = await h.create("triage");
-    expect((await h.post(node.id, "next", { outcome: "reject" })).status).toBe(409);
-    const res = await h.post(node.id, "next", { outcome: "reject", reason: "Out of scope" });
-    expect(res.body).toMatchObject({ stage: "invalidated", invalidation_reason: "Out of scope" });
-    expect((await h.post(node.id, "restore")).body.stage).toBe("assess");
+    expect((await h.post(node.id, "next", { outcome: "ready", reason: "x" })).status).toBe(400);
   });
 });
 
@@ -311,6 +308,7 @@ describe("human move", () => {
 describe("stages removed from stages.yaml", () => {
   const dropImplement = () =>
     h.rewriteStages(`
+start: dev
 stages:
   write_spec: { turn: agent, prompt: ./prompts/write_spec.md }
   pr_review: { turn: human }
@@ -382,7 +380,7 @@ types:
     h.rewriteStages("stages: { broken: { turn: agent } }\ntypes: {}\n");
     const res = await h.post(node.id, "next", { outcome: "done" });
     expect(res.status).toBe(422);
-    expect(errorOf(res).details).toEqual(['stage "broken": agent stage has no prompt']);
+    expect(errorOf(res).details).toContain('stage "broken": agent stage has no prompt');
     writeFiles(h.repo, { ".aop/stages.yaml": STAGES_YAML });
     expect((await h.post(node.id, "next", { outcome: "done" })).status).toBe(200);
   });
@@ -537,7 +535,7 @@ describe("invalidate and restore", () => {
     expect((await h.post(node.id, "invalidate", { reason: "y" })).status).toBe(409);
   });
 
-  it("derives stale state for all descendants through subtask edges, without writing it", async () => {
+  it("derives invalidated by parent for all descendants through subtask edges, without writing it", async () => {
     const root = await h.create("triage");
     const mid = await child(root.id);
     const leaf = await child(mid.id);
@@ -548,26 +546,26 @@ describe("invalidate and restore", () => {
     await h.post(root.id, "invalidate", { reason: "x" });
     expect(h.db.prepare("SELECT * FROM nodes WHERE id = ?").get(leaf.id)).toEqual(before);
 
-    expect(await h.node(mid.id)).toMatchObject({ stale: true, stale_because: [root.id] });
-    expect(await h.node(leaf.id)).toMatchObject({ stale: true, stale_because: [root.id], stage: "write_spec" });
-    expect((await h.node(root.id)).stale).toBe(false);
-    expect((await h.node(blocked.id)).stale).toBe(false);
+    expect(await h.node(mid.id)).toMatchObject({ invalidated_by_parent: true, invalidated_ancestors: [root.id] });
+    expect(await h.node(leaf.id)).toMatchObject({ invalidated_by_parent: true, invalidated_ancestors: [root.id], stage: "write_spec" });
+    expect((await h.node(root.id)).invalidated_by_parent).toBe(false);
+    expect((await h.node(blocked.id)).invalidated_by_parent).toBe(false);
 
     await h.post(root.id, "restore");
-    expect((await h.node(leaf.id)).stale).toBe(false);
+    expect((await h.node(leaf.id)).invalidated_by_parent).toBe(false);
   });
 
-  it("stops being stale when the subtask edge is removed, and survives cycles", async () => {
+  it("stops being invalidated by parent when the subtask edge is removed, and survives cycles", async () => {
     const a = await h.create("dev");
     const b = await child(a.id);
     const edge = await h.call<{ id: string }>("POST", `/api/nodes/${b.id}/edges`, { target_id: a.id, kind: "subtask" });
     await h.post(a.id, "invalidate", { reason: "x" });
-    expect(await h.node(b.id)).toMatchObject({ stale: true });
-    expect(await h.node(a.id)).toMatchObject({ stale: false });
+    expect(await h.node(b.id)).toMatchObject({ invalidated_by_parent: true });
+    expect(await h.node(a.id)).toMatchObject({ invalidated_by_parent: false });
     const edges = await h.call<{ id: string; source_id: string }[]>("GET", `/api/nodes/${b.id}/edges`);
     await h.call("DELETE", `/api/edges/${edges.body.find((e) => e.source_id === a.id)?.id}`);
     expect(edge.status).toBe(201);
-    expect((await h.node(b.id)).stale).toBe(false);
+    expect((await h.node(b.id)).invalidated_by_parent).toBe(false);
   });
 });
 
@@ -674,7 +672,7 @@ describe("edges", () => {
 });
 
 describe("blocks helper", () => {
-  it("holds a node until its blocker is done or broken_down", async () => {
+  it("holds a node until its blocker is done, and a broken_down one doesn't count", async () => {
     const blocker = await h.create("dev");
     const held = await h.create("dev");
     const edge = await h.call<{ id: string }>("POST", `/api/nodes/${blocker.id}/edges`, {
@@ -682,23 +680,23 @@ describe("blocks helper", () => {
       kind: "blocks",
     });
 
-    expect(blockersOf(h.db, held.id)).toEqual([{ id: blocker.id, stage: "write_spec" }]);
+    expect(holdersOf(h.db, held.id)).toEqual([{ id: blocker.id, stage: "write_spec", via: "blocks" }]);
     expect((await h.node(held.id)).blocked_by).toEqual([blocker.id]);
-    expect(blockersOf(h.db, blocker.id)).toEqual([]);
+    expect(holdersOf(h.db, blocker.id)).toEqual([]);
 
     await h.post(blocker.id, "move", { stage: "done" });
-    expect(blockersOf(h.db, held.id)).toEqual([]);
+    expect(holdersOf(h.db, held.id)).toEqual([]);
 
     await h.post(blocker.id, "move", { stage: "write_spec" });
-    expect(blockersOf(h.db, held.id)).toHaveLength(1);
+    expect(holdersOf(h.db, held.id)).toHaveLength(1);
 
     await child(blocker.id);
     await h.post(blocker.id, "move", { stage: "broken_down" });
-    expect(blockersOf(h.db, held.id)).toEqual([]);
+    expect(holdersOf(h.db, held.id)).toEqual([{ id: blocker.id, stage: "broken_down", via: "blocks" }]);
 
     await h.post(blocker.id, "move", { stage: "write_spec" });
     await h.call("DELETE", `/api/edges/${edge.body.id}`);
-    expect(blockersOf(h.db, held.id)).toEqual([]);
+    expect(holdersOf(h.db, held.id)).toEqual([]);
   });
 
   it("keeps holding when the blocker is invalidated", async () => {
@@ -706,13 +704,13 @@ describe("blocks helper", () => {
     const held = await h.create("dev");
     await h.call("POST", `/api/nodes/${blocker.id}/edges`, { target_id: held.id, kind: "blocks" });
     await h.post(blocker.id, "invalidate", { reason: "x" });
-    expect(blockersOf(h.db, held.id)).toEqual([{ id: blocker.id, stage: "invalidated" }]);
+    expect(holdersOf(h.db, held.id)).toEqual([{ id: blocker.id, stage: "invalidated", via: "blocks" }]);
   });
 
   it("ignores subtask edges", async () => {
     const parent = await h.create("dev");
     const kid = await child(parent.id);
-    expect(blockersOf(h.db, kid.id)).toEqual([]);
+    expect(holdersOf(h.db, kid.id)).toEqual([]);
   });
 });
 

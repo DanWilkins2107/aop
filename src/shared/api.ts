@@ -22,6 +22,7 @@ export interface NodeRow {
   invalidation_reason: string | null;
   return_stage: string | null;
   spawned_by: string | null;
+  claimed_by: "human" | "agent" | null;
 }
 
 export interface NodeView extends NodeRow {
@@ -29,11 +30,15 @@ export interface NodeView extends NodeRow {
   stage_exists: boolean;
   turn: Turn | null;
   available_outcomes: { outcome: string; target: string }[];
-  stale: boolean;
+  invalidated_by_parent: boolean;
   /** Invalidated ancestors, through `subtask` edges. */
-  stale_because: string[];
+  invalidated_ancestors: string[];
   /** Unfinished nodes whose `blocks` edges hold this one. */
   blocked_by: string[];
+  /** True while a parent is part-way through a split, so that its children don't start early. */
+  held: boolean;
+  /** The parents doing that. */
+  held_by: string[];
 }
 
 export interface MessageRow {
@@ -73,6 +78,8 @@ export interface EventView {
 
 /** A project's `stages.yaml`, in file order. Built-in stages aren't listed unless a type uses one. */
 export interface StagesView {
+  /** The type new nodes enter. */
+  start: string;
   stages: { name: string; turn: Turn; color: string | null }[];
   types: TypeView[];
 }

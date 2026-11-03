@@ -25,18 +25,17 @@ const title = nonBlank.refine((s) => [...s].length <= 200, "must be at most 200 
 
 const registerProjectBody = z.strictObject({ repo_path: nonBlank, name: nonBlank.optional() });
 const createNodeBody = z.strictObject({
-  type: nonBlank,
+  type: nonBlank.optional(),
+  stage: nonBlank.optional(),
   title,
   body: z.string().optional(),
   cron: nonBlank.optional(),
   actor: actor.default("human"),
 });
-const editNodeBody = z.strictObject({ body: z.string(), actor: actor.default("human") });
-const nextBody = z.strictObject({
-  outcome: nonBlank,
-  actor: actor.default("human"),
-  reason: nonBlank.optional(),
-});
+const editNodeBody = z
+  .strictObject({ title: title.optional(), body: z.string().optional(), actor: actor.default("human") })
+  .refine((edit) => edit.title !== undefined || edit.body !== undefined, "must include title or body");
+const nextBody = z.strictObject({ outcome: nonBlank, actor: actor.default("human") });
 const moveBody = z.strictObject({
   stage: nonBlank,
   type: nonBlank.optional(),
@@ -46,6 +45,9 @@ const askBody = z.strictObject({ question: nonBlank });
 const answerBody = z.strictObject({ answer: nonBlank });
 const failBody = z.strictObject({ actor: actor.default("system"), reason: nonBlank.optional() });
 const invalidateBody = z.strictObject({ reason: nonBlank, actor: actor.default("human") });
+const blockBody = z.strictObject({ reason: nonBlank, actor: actor.default("human") });
+const unblockBody = z.strictObject({ actor: actor.default("human") });
+const claimBody = z.strictObject({ actor: z.enum(["human", "agent"]).default("human") });
 const messageBody = z.strictObject({ body: nonBlank, author: actor.default("human") });
 const linkBody = z.strictObject({
   kind: z.enum(["ticket", "pr"]),
@@ -191,7 +193,7 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
   });
   app.get("/api/nodes/:id", (c) => c.json(nodes.getNode(db, c.req.param("id"))));
   app.patch("/api/nodes/:id", async (c) =>
-    c.json(nodes.setBody(db, c.req.param("id"), await readBody(c, editNodeBody))),
+    c.json(nodes.editNode(db, c.req.param("id"), await readBody(c, editNodeBody))),
   );
 
   // Stage changes
@@ -215,6 +217,23 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
     c.json(nodes.invalidate(db, c.req.param("id"), await readBody(c, invalidateBody))),
   );
   app.post("/api/nodes/:id/restore", (c) => c.json(nodes.restore(db, c.req.param("id"))));
+
+  app.post("/api/nodes/:id/block", async (c) =>
+    c.json(nodes.block(db, c.req.param("id"), await readBody(c, blockBody))),
+  );
+  app.post("/api/nodes/:id/unblock", async (c) =>
+    c.json(nodes.unblock(db, c.req.param("id"), await readBody(c, unblockBody, true))),
+  );
+  app.post("/api/nodes/:id/split/start", (c) => c.json(nodes.splitStart(db, c.req.param("id"))));
+  app.post("/api/nodes/:id/split/finish", (c) => c.json(nodes.splitFinish(db, c.req.param("id"))));
+
+  // Claims
+  app.post("/api/nodes/:id/claim", async (c) =>
+    c.json(nodes.claim(db, c.req.param("id"), await readBody(c, claimBody, true))),
+  );
+  app.post("/api/nodes/:id/release", async (c) =>
+    c.json(nodes.releaseClaim(db, c.req.param("id"), await readBody(c, claimBody, true))),
+  );
 
   // Messages
   app.get("/api/nodes/:id/messages", (c) => c.json(nodes.listMessages(db, c.req.param("id"))));

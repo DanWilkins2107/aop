@@ -21,6 +21,7 @@ function stagesProblems(yaml: string, extra: Record<string, string> = {}): strin
 }
 
 const pool = `
+start: t
 stages:
   a: { turn: human }
   b: { turn: human }
@@ -65,7 +66,7 @@ describe("config loading", () => {
   it("resolves a stages path set in config.local.yaml relative to .aop", () => {
     const repo = makeRepo({
       ".aop/config.local.yaml": "stages: ./custom/process.yaml\n",
-      ".aop/custom/process.yaml": `stages: { a: { turn: human } }\ntypes: { t: { start: a, stages: { a: { next: { ok: done } } } } }\n`,
+      ".aop/custom/process.yaml": `start: t\nstages: { a: { turn: human } }\ntypes: { t: { start: a, stages: { a: { next: { ok: done } } } } }\n`,
     });
     expect(loadProjectConfig(repo).stagesPath).toBe(join(repo, ".aop", "custom", "process.yaml"));
   });
@@ -109,7 +110,7 @@ describe("stages.yaml validation", () => {
   });
 
   it("refuses a stage using a built-in name", () => {
-    for (const name of ["done", "broken_down", "invalidated", "scheduled", "ask_human_question", "failed"]) {
+    for (const name of ["done", "broken_down", "invalidated", "scheduled", "ask_human_question", "failed", "externally_blocked", "splitting"]) {
       const problems = stagesProblems(`stages: { ${name}: { turn: human } }\ntypes: {}\n`);
       expect(problems.join()).toContain(`"${name}" is a reserved built-in`);
     }
@@ -130,13 +131,43 @@ describe("stages.yaml validation", () => {
     expect(problems.join()).toContain('outcome "go" targets "b"');
   });
 
-  it("accepts next targets of another type and of built-ins", () => {
+  it("accepts next targets of another type, done and broken_down", () => {
     const problems = stagesProblems(`${pool}
 types:
-  t: { start: a, stages: { a: { next: { to_u: u, end: done, split: broken_down, drop: invalidated } } } }
+  t: { start: a, stages: { a: { next: { to_u: u, end: done, split: broken_down } } } }
   u: { start: b, stages: { b: { next: {} } } }
 `);
     expect(problems).toEqual([]);
+  });
+
+  it("refuses next targeting any other built-in", () => {
+    for (const target of ["invalidated", "scheduled", "ask_human_question", "failed", "externally_blocked", "splitting"]) {
+      const problems = stagesProblems(`${pool}\ntypes: { t: { start: a, stages: { a: { next: { go: ${target} } } } } }\n`);
+      expect(problems.join()).toContain(`targets "${target}", but done and broken_down are the only built-ins`);
+    }
+  });
+
+  it("refuses next targeting scheduled even when the type lists it", () => {
+    const problems = stagesProblems(`${pool}
+types:
+  t: { start: a, stages: { a: { next: { go: scheduled } }, scheduled: { next: { fire: t } } } }
+`);
+    expect(problems.join()).toContain('targets "scheduled", but done and broken_down');
+  });
+
+  it("requires a top-level start, which must name a type", () => {
+    const type = "types: { t: { start: a, stages: { a: { next: {} } } } }\n";
+    const stagesOnly = "stages: { a: { turn: human } }\n";
+    expect(stagesProblems(`${stagesOnly}${type}`)).toEqual(['stages.yaml: the top-level "start" is missing']);
+    expect(stagesProblems(`start: nope\n${stagesOnly}${type}`).join()).toContain('start "nope" is not a type');
+    expect(stagesProblems(`start: a\n${stagesOnly}${type}`).join()).toContain('start "a" is not a type');
+    expect(stagesProblems(`start: t\n${stagesOnly}${type}`)).toEqual([]);
+  });
+
+  it("reports a missing start alongside other problems", () => {
+    const text = stagesProblems(`stages: { a: { turn: agent } }\ntypes: {}\n`).join("\n");
+    expect(text).toContain('"start" is missing');
+    expect(text).toContain("agent stage has no prompt");
   });
 
   it("refuses a start that doesn't exist or isn't in the type", () => {
@@ -180,7 +211,8 @@ types:
   });
 
   it("ignores a prompt on a human stage", () => {
-    expect(stagesProblems(`stages: { a: { turn: human, prompt: ./none.md } }\ntypes: {}\n`)).toEqual([]);
+    const yaml = `start: t\nstages: { a: { turn: human, prompt: ./none.md } }\ntypes: { t: { start: a, stages: { a: { next: {} } } } }\n`;
+    expect(stagesProblems(yaml)).toEqual([]);
   });
 
   it("refuses a bad turn, a bad colour, unknown keys and missing sections", () => {

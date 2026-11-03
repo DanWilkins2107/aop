@@ -113,4 +113,16 @@ CREATE TABLE runs (
 CREATE UNIQUE INDEX runs_one_running_per_node ON runs(node_id) WHERE status = 'running';
 `,
   },
+  {
+    version: 2,
+    // SQLite can't add a table CHECK without rebuilding the table, which the foreign keys into
+    // `nodes` make awkward. A column's CHECK can read other columns, so the new column carries the
+    // return_stage rule for the two stages the first migration left out.
+    sql: `
+ALTER TABLE nodes ADD COLUMN claimed_by TEXT
+  CONSTRAINT nodes_claimed_by_known CHECK (claimed_by IN ('human', 'agent'))
+  CONSTRAINT nodes_held_stages_require_return_stage
+    CHECK (stage NOT IN ('externally_blocked', 'splitting') OR return_stage IS NOT NULL);
+`,
+  },
 ];

@@ -24,7 +24,8 @@ function stageIsLive(graph: StageGraph, type: string, stage: string): boolean {
 }
 
 function turnOf(graph: StageGraph, node: NodeRow): Turn | null {
-  if (node.stage === "ask_human_question" || node.stage === "failed") return "human";
+  if (["ask_human_question", "failed", "externally_blocked"].includes(node.stage)) return "human";
+  if (node.stage === "splitting") return "agent";
   if (!stageIsLive(graph, node.type, node.stage)) return null;
   return graph.stages.get(node.stage)?.turn ?? null;
 }
@@ -35,7 +36,7 @@ function outcomesOf(graph: StageGraph, node: NodeRow): Map<string, string> {
   return graph.types.get(node.type)?.stages.get(node.stage) ?? new Map();
 }
 
-/** Invalidated ancestors of a node. Derived at read time; staleness is never stored. */
+/** Invalidated ancestors of a node. Derived at read time; being invalidated by a parent is never stored. */
 export function invalidatedAncestors(db: Db, nodeId: string): string[] {
   const rows = db
     .prepare(
@@ -53,31 +54,59 @@ export function invalidatedAncestors(db: Db, nodeId: string): string[] {
   return rows.map((row) => row.id);
 }
 
+export interface Holder {
+  id: string;
+  stage: string;
+  via: "blocks" | "split" | "invalidated_parent";
+}
+
 /**
- * The nodes holding this one through `blocks` edges. `done` and `broken_down` count as finished;
- * an `invalidated` blocker still blocks, so that a human has to decide. Empty means not held.
+ * Everything stopping an agent starting on this node. Empty means nothing is.
+ *
+ * - `blocks`: a blocker that isn't `done`. An `invalidated` one still blocks, so that a human has
+ *   to decide, and a `broken_down` one only has blocks left if a human moved it there.
+ * - `split`: a parent part-way through a split. That includes one waiting on a human: its
+ *   `return_stage` is `splitting`, or it's externally blocked from a question or failure that was.
+ * - `invalidated_parent`: an invalidated ancestor, through `subtask` edges.
  */
-export function blockersOf(db: Db, nodeId: string): { id: string; stage: string }[] {
-  return db
+export function holdersOf(db: Db, nodeId: string): Holder[] {
+  const rows = db
     .prepare(
-      `SELECT n.id, n.stage FROM edges e JOIN nodes n ON n.id = e.source_id
-        WHERE e.target_id = ? AND e.kind = 'blocks' AND e.removed_at IS NULL
-          AND n.stage NOT IN ('done', 'broken_down')
-        ORDER BY e.rowid`,
+      `SELECT n.id, n.stage, 'blocks' AS via FROM edges e JOIN nodes n ON n.id = e.source_id
+        WHERE e.target_id = @id AND e.kind = 'blocks' AND e.removed_at IS NULL
+          AND n.stage <> 'done'
+       UNION ALL
+       SELECT n.id, n.stage, 'split' AS via FROM edges e JOIN nodes n ON n.id = e.source_id
+        WHERE e.target_id = @id AND e.kind = 'subtask' AND e.removed_at IS NULL
+          AND (n.stage = 'splitting' OR n.return_stage = 'splitting'
+            OR (n.stage = 'externally_blocked' AND n.return_stage IN ('ask_human_question', 'failed')
+              AND (SELECT json_extract(ev.data, '$.from_return_stage') FROM events ev
+                    WHERE ev.node_id = n.id AND ev.kind = 'stage_changed'
+                      AND json_extract(ev.data, '$.via') = 'block'
+                    ORDER BY ev.rowid DESC LIMIT 1) = 'splitting'))`,
     )
-    .all(nodeId) as { id: string; stage: string }[];
+    .all({ id: nodeId }) as Holder[];
+  const ancestors = invalidatedAncestors(db, nodeId).map(
+    (id): Holder => ({ id, stage: "invalidated", via: "invalidated_parent" }),
+  );
+  return [...rows, ...ancestors];
 }
 
 function toView(db: Db, graph: StageGraph, node: NodeRow): NodeView {
-  const staleBecause = invalidatedAncestors(db, node.id);
+  const holders = holdersOf(db, node.id);
+  const holdersVia = (via: Holder["via"]) => holders.filter((holder) => holder.via === via).map((holder) => holder.id);
+  const invalidatedParents = holdersVia("invalidated_parent");
+  const heldBy = holdersVia("split");
   return {
     ...node,
     stage_exists: stageIsLive(graph, node.type, node.stage),
     turn: turnOf(graph, node),
     available_outcomes: [...outcomesOf(graph, node)].map(([outcome, target]) => ({ outcome, target })),
-    stale: staleBecause.length > 0,
-    stale_because: staleBecause,
-    blocked_by: blockersOf(db, node.id).map((blocker) => blocker.id),
+    invalidated_by_parent: invalidatedParents.length > 0,
+    invalidated_ancestors: invalidatedParents,
+    blocked_by: holdersVia("blocks"),
+    held: heldBy.length > 0,
+    held_by: heldBy,
   };
 }
 
@@ -97,21 +126,55 @@ export function isValidCron(cron: string): boolean {
   return fields.length === 5 && fields.every((field) => /^[\w*,/?#-]+$/.test(field));
 }
 
+/** Built-ins with state of their own, which their actions collect. Create and move can't land on them. */
+const OWN_ACTIONS = new Map([
+  ["invalidated", "Use the invalidate action, which requires a reason"],
+  ["ask_human_question", "Use the ask action, which requires a question"],
+  ["failed", "Use the fail action"],
+  ["externally_blocked", "Use the block action, which requires a reason"],
+  ["splitting", "Use split start, from an agent stage"],
+]);
+
+function assertNoOwnAction(stage: string): void {
+  const action = OWN_ACTIONS.get(stage);
+  if (action !== undefined) throw badRequest(action);
+}
+
+/** Where a new node goes: the top-level `start`, unless the caller chose a type or a stage. */
+function resolveStart(
+  graph: StageGraph,
+  input: { type?: string | undefined; stage?: string | undefined },
+): { type: string; stage: string } {
+  if (input.stage === undefined) {
+    const type = input.type ?? graph.start;
+    const def = graph.types.get(type);
+    if (!def) throw badRequest(`Unknown type "${type}". Types: ${[...graph.types.keys()].join(", ")}`);
+    return { type, stage: def.start };
+  }
+  assertNoOwnAction(input.stage);
+  if (input.stage === "broken_down") throw refused("Can't start at broken_down: a new node has no subtask children");
+  return { type: resolveStageType(graph, graph.start, input.stage, input.type), stage: input.stage };
+}
+
 export function createNode(
   db: Db,
   projectId: string,
-  input: { type: string; title: string; body?: string | undefined; cron?: string | undefined; actor: Actor },
+  input: {
+    type?: string | undefined;
+    stage?: string | undefined;
+    title: string;
+    body?: string | undefined;
+    cron?: string | undefined;
+    actor: Actor;
+  },
 ): NodeView {
   const { graph } = projectConfig(db, projectId);
-  const type = graph.types.get(input.type);
-  if (!type) {
-    throw badRequest(`Unknown type "${input.type}". Types: ${[...graph.types.keys()].join(", ")}`);
-  }
-  if (type.start === "scheduled") {
-    if (input.cron === undefined) throw badRequest(`Type "${input.type}" starts at scheduled, so it requires a cron`);
+  const { type, stage } = resolveStart(graph, input);
+  if (stage === "scheduled") {
+    if (input.cron === undefined) throw badRequest("A node starting at scheduled requires a cron");
     if (!isValidCron(input.cron)) throw badRequest(`Invalid cron "${input.cron}": expected five fields`);
   } else if (input.cron !== undefined) {
-    throw badRequest(`cron only applies to a scheduled node, and type "${input.type}" starts at "${type.start}"`);
+    throw badRequest(`cron only applies to a scheduled node, and this one starts at "${stage}"`);
   }
 
   const id = newId();
@@ -119,19 +182,28 @@ export function createNode(
     db.prepare(
       `INSERT INTO nodes (id, created_at, project_id, title, body, type, stage, cron)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(id, now(), projectId, input.title, input.body ?? "", input.type, type.start, input.cron ?? null);
-    appendEvent(db, id, input.actor, "node_created", { type: input.type, stage: type.start, title: input.title });
+    ).run(id, now(), projectId, input.title, input.body ?? "", type, stage, input.cron ?? null);
+    appendEvent(db, id, input.actor, "node_created", { type, stage, title: input.title });
   })();
   return getNode(db, id);
 }
 
-/** Edits the description. The event keeps the old text, because nothing else does. */
-export function setBody(db: Db, nodeId: string, input: { body: string; actor: Actor }): NodeView {
+/** Edits the title or description. Each event keeps the old text, because nothing else does. */
+export function editNode(
+  db: Db,
+  nodeId: string,
+  input: { title?: string | undefined; body?: string | undefined; actor: Actor },
+): NodeView {
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
-    if (node.body === input.body) return;
-    db.prepare("UPDATE nodes SET body = ? WHERE id = ?").run(input.body, nodeId);
-    appendEvent(db, nodeId, input.actor, "description_edited", { previous: node.body });
+    if (input.title !== undefined && input.title !== node.title) {
+      db.prepare("UPDATE nodes SET title = ? WHERE id = ?").run(input.title, nodeId);
+      appendEvent(db, nodeId, input.actor, "title_edited", { previous: node.title });
+    }
+    if (input.body !== undefined && input.body !== node.body) {
+      db.prepare("UPDATE nodes SET body = ? WHERE id = ?").run(input.body, nodeId);
+      appendEvent(db, nodeId, input.actor, "description_edited", { previous: node.body });
+    }
   })();
   return getNode(db, nodeId);
 }
@@ -146,15 +218,19 @@ interface StageChange {
   actor: Actor;
   /** Extra fields for the event's data. */
   detail?: Record<string, unknown>;
+  /** The agent carries on working through this change, so it keeps its claim. */
+  keepsAgentClaim?: boolean;
 }
 
 /**
  * The only way a node's stage changes. Leaving a stage clears its `return_stage` and
  * `invalidation_reason`; the event keeps the previous state, which is what restore reads.
+ * A human's claim survives. An agent's doesn't, because a stage change ends its run.
  */
 function applyStageChange(db: Db, node: NodeRow, change: StageChange): void {
+  const dropsClaim = node.claimed_by === "agent" && change.keepsAgentClaim !== true;
   db.prepare(
-    `UPDATE nodes SET stage = ?, type = ?, return_stage = ?, invalidation_reason = ?, cron = ?
+    `UPDATE nodes SET stage = ?, type = ?, return_stage = ?, invalidation_reason = ?, cron = ?, claimed_by = ?
       WHERE id = ?`,
   ).run(
     change.stage,
@@ -162,6 +238,7 @@ function applyStageChange(db: Db, node: NodeRow, change: StageChange): void {
     change.returnStage ?? null,
     change.reason ?? null,
     change.cron ?? node.cron,
+    dropsClaim ? null : node.claimed_by,
     node.id,
   );
   appendEvent(db, node.id, change.actor, "stage_changed", {
@@ -173,6 +250,7 @@ function applyStageChange(db: Db, node: NodeRow, change: StageChange): void {
     to_type: change.type,
     ...change.detail,
   });
+  if (dropsClaim) appendEvent(db, node.id, "system", "claim_released", { holder: "agent", via: change.via });
 }
 
 function hasSubtaskChildren(db: Db, nodeId: string): boolean {
@@ -191,6 +269,19 @@ function assertCanEnter(db: Db, node: NodeRow, stage: string, cron?: string): vo
   }
 }
 
+/** A split's blocks belong on its children. A human move skips this, as the escape hatch. */
+function assertBlocksMoved(db: Db, node: NodeRow): void {
+  const edge = db
+    .prepare(
+      `SELECT 1 FROM edges WHERE (source_id = @id OR target_id = @id)
+        AND kind = 'blocks' AND removed_at IS NULL LIMIT 1`,
+    )
+    .get({ id: node.id });
+  if (edge !== undefined) {
+    throw refused("Can't move to broken_down: the node still has blocks edges. Move them to the relevant children first");
+  }
+}
+
 function assertAgentStage(graph: StageGraph, node: NodeRow, action: string): void {
   if (turnOf(graph, node) !== "agent") {
     throw refused(`Can't ${action}: stage "${node.stage}" is not an agent stage`);
@@ -204,11 +295,43 @@ function assertCanReturn(graph: StageGraph, type: string, stage: string): void {
   }
 }
 
-export function next(
+interface StageEntry {
+  from_stage: string;
+  from_type: string;
+  from_return_stage: string | null;
+}
+
+/** What the latest stage change made through `via` left behind, read from its event. */
+function lastEntry(db: Db, nodeId: string, via: string): StageEntry | undefined {
+  const event = db
+    .prepare(
+      `SELECT data FROM events
+        WHERE node_id = ? AND kind = 'stage_changed' AND json_extract(data, '$.via') = ?
+        ORDER BY rowid DESC LIMIT 1`,
+    )
+    .get(nodeId, via) as { data: string } | undefined;
+  return event ? (JSON.parse(event.data) as StageEntry) : undefined;
+}
+
+/**
+ * Where an answer or a retry sends a node. Going back to `splitting` needs a `return_stage` of its
+ * own: the agent stage that began the split, which is what gets restarted.
+ */
+function returnPlacement(
   db: Db,
-  nodeId: string,
-  input: { outcome: string; actor: Actor; reason?: string | undefined },
-): NodeView {
+  graph: StageGraph,
+  node: NodeRow,
+  stage: string,
+): { stage: string; returnStage: string | null } {
+  assertCanReturn(graph, node.type, stage);
+  if (stage !== "splitting") return { stage, returnStage: null };
+  const origin = lastEntry(db, node.id, "split_start")?.from_stage;
+  if (origin === undefined) throw refused("Can't return to splitting: no event records what began the split");
+  assertCanReturn(graph, node.type, origin);
+  return { stage, returnStage: origin };
+}
+
+export function next(db: Db, nodeId: string, input: { outcome: string; actor: Actor }): NodeView {
   const graph = graphForNode(db, nodeId);
 
   db.transaction(() => {
@@ -230,35 +353,29 @@ export function next(
       });
     }
 
-    // Validation guarantees the target is a stage in this type, another type, or a built-in.
+    // Validation guarantees the target is a stage in this type, another type, done or broken_down.
     const enteredType = graph.types.get(node.type)?.stages.has(target) ? undefined : graph.types.get(target);
     const toType = enteredType ? target : node.type;
     const toStage = enteredType ? enteredType.start : target;
 
     assertCanEnter(db, node, toStage);
-    if (toStage === "invalidated" && input.reason === undefined) {
-      throw refused(`Outcome "${input.outcome}" invalidates the node, so it requires a reason`);
-    }
-    const waits = toStage === "ask_human_question" || toStage === "failed";
-    const reason = toStage === "invalidated" ? input.reason : undefined;
+    if (toStage === "broken_down") assertBlocksMoved(db, node);
     applyStageChange(db, node, {
       stage: toStage,
       type: toType,
-      returnStage: waits ? node.stage : null,
-      reason: reason ?? null,
       via: "next",
       actor: input.actor,
-      detail: { outcome: input.outcome, ...(reason !== undefined ? { reason } : {}) },
+      detail: { outcome: input.outcome },
     });
   })();
   return getNode(db, nodeId);
 }
 
 /**
- * Finds the type a human move lands in. A stage in the node's own type wins; otherwise the stage
- * must belong to exactly one type, or the caller has to say which.
+ * Finds the type a stage lands in, for a human move or a new node. A stage in `ownType` wins;
+ * otherwise the stage must belong to exactly one type, or the caller has to say which.
  */
-function resolveMoveType(graph: StageGraph, node: NodeRow, stage: string, type?: string): string {
+function resolveStageType(graph: StageGraph, ownType: string, stage: string, type?: string): string {
   const isAnywhere = isBuiltIn(stage) && stage !== "scheduled";
   if (type !== undefined) {
     const def = graph.types.get(type);
@@ -266,7 +383,7 @@ function resolveMoveType(graph: StageGraph, node: NodeRow, stage: string, type?:
     if (!isAnywhere && !def.stages.has(stage)) throw badRequest(`Stage "${stage}" isn't in type "${type}"`);
     return type;
   }
-  if (isAnywhere || graph.types.get(node.type)?.stages.has(stage)) return node.type;
+  if (isAnywhere || graph.types.get(ownType)?.stages.has(stage)) return ownType;
 
   const candidates = [...graph.types].filter(([, def]) => def.stages.has(stage)).map(([name]) => name);
   const [only] = candidates;
@@ -285,10 +402,7 @@ export function move(
 ): NodeView {
   const graph = graphForNode(db, nodeId);
 
-  // These carry state of their own, which their actions collect.
-  if (input.stage === "invalidated") throw badRequest("Use the invalidate action, which requires a reason");
-  if (input.stage === "ask_human_question") throw badRequest("Use the ask action, which requires a question");
-  if (input.stage === "failed") throw badRequest("Use the fail action");
+  assertNoOwnAction(input.stage);
   if (input.cron !== undefined) {
     if (input.stage !== "scheduled") throw badRequest("cron only applies when moving to scheduled");
     if (!isValidCron(input.cron)) throw badRequest(`Invalid cron "${input.cron}": expected five fields`);
@@ -296,7 +410,7 @@ export function move(
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
-    const type = resolveMoveType(graph, node, input.stage, input.type);
+    const type = resolveStageType(graph, node.type, input.stage, input.type);
     assertCanEnter(db, node, input.stage, input.cron);
     applyStageChange(db, node, {
       stage: input.stage,
@@ -344,9 +458,9 @@ export function answer(db: Db, nodeId: string, input: { answer: string }): NodeV
     if (node.stage !== "ask_human_question" || node.return_stage === null) {
       throw refused(`Can't answer: the node is at "${node.stage}", not ask_human_question`);
     }
-    assertCanReturn(graph, node.type, node.return_stage);
+    const placement = returnPlacement(db, graph, node, node.return_stage);
     postMessage(db, node.id, "ask_human_question", "human", input.answer);
-    applyStageChange(db, node, { stage: node.return_stage, type: node.type, via: "answer", actor: "human" });
+    applyStageChange(db, node, { ...placement, type: node.type, via: "answer", actor: "human" });
   })();
   return getNode(db, nodeId);
 }
@@ -381,8 +495,8 @@ export function retry(db: Db, nodeId: string): NodeView {
     if (node.stage !== "failed" || node.return_stage === null) {
       throw refused(`Can't retry: the node is at "${node.stage}", not failed`);
     }
-    assertCanReturn(graph, node.type, node.return_stage);
-    applyStageChange(db, node, { stage: node.return_stage, type: node.type, via: "retry", actor: "human" });
+    const placement = returnPlacement(db, graph, node, node.return_stage);
+    applyStageChange(db, node, { ...placement, type: node.type, via: "retry", actor: "human" });
   })();
   return getNode(db, nodeId);
 }
@@ -438,6 +552,118 @@ export function restore(db: Db, nodeId: string): NodeView {
   return getNode(db, nodeId);
 }
 
+function assertHuman(actor: Actor, action: string): void {
+  if (actor !== "human") throw refused(`Only a human can ${action}`);
+}
+
+/** Waits on something outside AOP. Human-only, and the reason is posted to the node. */
+export function block(db: Db, nodeId: string, input: { reason: string; actor: Actor }): NodeView {
+  assertHuman(input.actor, "mark a node externally blocked");
+  db.transaction(() => {
+    const node = getNodeRow(db, nodeId);
+    if (["done", "broken_down", "invalidated", "externally_blocked"].includes(node.stage)) {
+      throw refused(`Can't block: the node is at "${node.stage}"`);
+    }
+    applyStageChange(db, node, {
+      stage: "externally_blocked",
+      type: node.type,
+      returnStage: node.stage,
+      via: "block",
+      actor: "human",
+      detail: { reason: input.reason },
+    });
+    postMessage(db, node.id, "externally_blocked", "human", input.reason);
+  })();
+  return getNode(db, nodeId);
+}
+
+/** Returns a blocked node to where it was, including that stage's own `return_stage`. */
+export function unblock(db: Db, nodeId: string, input: { actor: Actor }): NodeView {
+  assertHuman(input.actor, "unblock a node");
+  const graph = graphForNode(db, nodeId);
+
+  db.transaction(() => {
+    const node = getNodeRow(db, nodeId);
+    if (node.stage !== "externally_blocked" || node.return_stage === null) {
+      throw refused(`Can't unblock: the node is at "${node.stage}", not externally_blocked`);
+    }
+    assertCanReturn(graph, node.type, node.return_stage);
+    applyStageChange(db, node, {
+      stage: node.return_stage,
+      type: node.type,
+      returnStage: lastEntry(db, node.id, "block")?.from_return_stage ?? null,
+      via: "unblock",
+      actor: "human",
+    });
+  })();
+  return getNode(db, nodeId);
+}
+
+/** Lets an agent create children and edges without any of them starting early. */
+export function splitStart(db: Db, nodeId: string): NodeView {
+  const graph = graphForNode(db, nodeId);
+
+  db.transaction(() => {
+    const node = getNodeRow(db, nodeId);
+    if (node.stage === "splitting") throw refused("The node is already splitting");
+    assertAgentStage(graph, node, "start a split");
+    applyStageChange(db, node, {
+      stage: "splitting",
+      type: node.type,
+      // The agent stage that began the split, which an answer or a retry restarts.
+      returnStage: node.stage,
+      via: "split_start",
+      actor: "agent",
+      keepsAgentClaim: true,
+    });
+  })();
+  return getNode(db, nodeId);
+}
+
+export function splitFinish(db: Db, nodeId: string): NodeView {
+  db.transaction(() => {
+    const node = getNodeRow(db, nodeId);
+    if (node.stage !== "splitting") {
+      throw refused(`Can't finish a split: the node is at "${node.stage}", not splitting`);
+    }
+    assertCanEnter(db, node, "broken_down");
+    assertBlocksMoved(db, node);
+    applyStageChange(db, node, { stage: "broken_down", type: node.type, via: "split_finish", actor: "agent" });
+  })();
+  return getNode(db, nodeId);
+}
+
+const holderName = (holder: "human" | "agent") => (holder === "agent" ? "an agent run" : "a human");
+
+/**
+ * Takes the node's one claim. A human can claim again, so that a session can be reopened, but
+ * neither side can take a claim the other holds, and only one agent run can hold it.
+ */
+export function claim(db: Db, nodeId: string, input: { actor: "human" | "agent" }): NodeView {
+  db.transaction(() => {
+    const node = getNodeRow(db, nodeId);
+    if (node.claimed_by === "human" && input.actor === "human") return;
+    if (node.claimed_by !== null) throw refused(`Can't claim: ${holderName(node.claimed_by)} holds this node`);
+    db.prepare("UPDATE nodes SET claimed_by = ? WHERE id = ?").run(input.actor, nodeId);
+    appendEvent(db, nodeId, input.actor, "claim_taken", { holder: input.actor });
+  })();
+  return getNode(db, nodeId);
+}
+
+/** Each side releases its own claim. A human ends an agent's by stopping its run, not here. */
+export function releaseClaim(db: Db, nodeId: string, input: { actor: "human" | "agent" }): NodeView {
+  db.transaction(() => {
+    const node = getNodeRow(db, nodeId);
+    if (node.claimed_by === null) throw refused("Can't release: the node isn't claimed");
+    if (node.claimed_by !== input.actor) {
+      throw refused(`Can't release: the claim belongs to ${holderName(node.claimed_by)}`);
+    }
+    db.prepare("UPDATE nodes SET claimed_by = NULL WHERE id = ?").run(nodeId);
+    appendEvent(db, nodeId, input.actor, "claim_released", { holder: input.actor });
+  })();
+  return getNode(db, nodeId);
+}
+
 export function addMessage(db: Db, nodeId: string, input: { author: Actor; body: string }): MessageRow {
   return db.transaction(() => {
     const node = getNodeRow(db, nodeId);
@@ -475,6 +701,22 @@ export function listLinks(db: Db, nodeId: string): LinkRow[] {
   return db.prepare("SELECT * FROM links WHERE node_id = ? ORDER BY rowid").all(nodeId) as LinkRow[];
 }
 
+/** Whether `from` blocks `to`, directly or through other nodes. */
+function blocksReach(db: Db, from: string, to: string): boolean {
+  const row = db
+    .prepare(
+      `WITH RECURSIVE reached(id) AS (
+         SELECT ?
+         UNION
+         SELECT e.target_id FROM edges e JOIN reached r ON e.source_id = r.id
+          WHERE e.kind = 'blocks' AND e.removed_at IS NULL
+       )
+       SELECT 1 FROM reached WHERE id = ?`,
+    )
+    .get(from, to);
+  return row !== undefined;
+}
+
 /** `source` is the parent of a `subtask` edge and the blocker of a `blocks` edge. */
 export function addEdge(
   db: Db,
@@ -482,8 +724,15 @@ export function addEdge(
   input: { target_id: string; kind: EdgeRow["kind"]; actor: Actor },
 ): EdgeRow {
   return db.transaction(() => {
-    getNodeRow(db, sourceId);
-    getNodeRow(db, input.target_id);
+    const source = getNodeRow(db, sourceId);
+    const target = getNodeRow(db, input.target_id);
+    if (input.kind === "blocks" && (source.stage === "broken_down" || target.stage === "broken_down")) {
+      throw refused("Can't add a blocks edge to or from a broken_down node. Add it to the relevant child instead");
+    }
+    // A self edge reaches itself too, but the schema refuses that one with its own constraint.
+    if (input.kind === "blocks" && sourceId !== input.target_id && blocksReach(db, input.target_id, sourceId)) {
+      throw refused("Can't add this edge: it would create a blocks cycle");
+    }
     const edge: EdgeRow = {
       id: newId(),
       created_at: now(),

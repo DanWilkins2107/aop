@@ -11,6 +11,8 @@ export const BUILT_IN_STAGES = [
   "scheduled",
   "ask_human_question",
   "failed",
+  "externally_blocked",
+  "splitting",
 ] as const;
 
 export type BuiltInStage = (typeof BUILT_IN_STAGES)[number];
@@ -18,6 +20,9 @@ export type BuiltInStage = (typeof BUILT_IN_STAGES)[number];
 export function isBuiltIn(name: string): name is BuiltInStage {
   return (BUILT_IN_STAGES as readonly string[]).includes(name);
 }
+
+/** The only built-ins `next` can target. The others are entered through their own actions. */
+const NEXT_TARGET_BUILT_INS: readonly string[] = ["done", "broken_down"];
 
 export type { Turn };
 
@@ -36,11 +41,15 @@ export interface TypeDef {
 
 /** A validated `stages.yaml`. Maps, so that names like "constructor" can't hit Object.prototype. */
 export interface StageGraph {
+  /** The type new nodes enter. Empty only when validation reported that it's missing. */
+  start: string;
   stages: Map<string, StageDef>;
   types: Map<string, TypeDef>;
 }
 
 const fileSchema = z.strictObject({
+  // Optional here so that leaving it out doesn't hide every other problem. Checked below.
+  start: z.string().min(1).optional(),
   stages: z.record(z.string(), z.unknown()),
   types: z.record(z.string(), z.unknown()),
 });
@@ -79,7 +88,7 @@ export function validateStages(
   baseDir: string,
 ): { graph: StageGraph; problems: string[] } {
   const problems: string[] = [];
-  const graph: StageGraph = { stages: new Map(), types: new Map() };
+  const graph: StageGraph = { start: "", stages: new Map(), types: new Map() };
 
   const file = fileSchema.safeParse(raw);
   if (!file.success) {
@@ -87,6 +96,13 @@ export function validateStages(
   }
   const poolNames = new Set(Object.keys(file.data.stages));
   const typeNames = new Set(Object.keys(file.data.types));
+
+  if (file.data.start === undefined) {
+    problems.push('stages.yaml: the top-level "start" is missing');
+  } else {
+    graph.start = file.data.start;
+    if (!typeNames.has(file.data.start)) problems.push(`stages.yaml: start "${file.data.start}" is not a type`);
+  }
 
   for (const [name, rawStage] of Object.entries(file.data.stages)) {
     const label = `stage "${name}"`;
@@ -143,14 +159,15 @@ export function validateStages(
       }
       const next = new Map(Object.entries(typeStage.data.next));
       for (const [outcome, target] of next) {
-        const resolves =
-          memberNames.has(target) ||
-          typeNames.has(target) ||
-          // `scheduled` must be listed in the type, which says where its children start.
-          (isBuiltIn(target) && target !== "scheduled");
-        if (!resolves) {
+        if (isBuiltIn(target)) {
+          if (!NEXT_TARGET_BUILT_INS.includes(target)) {
+            problems.push(
+              `${stageLabel}: outcome "${outcome}" targets "${target}", but done and broken_down are the only built-ins next can target`,
+            );
+          }
+        } else if (!memberNames.has(target) && !typeNames.has(target)) {
           problems.push(
-            `${stageLabel}: outcome "${outcome}" targets "${target}", which is not a stage in this type, a type, or a built-in`,
+            `${stageLabel}: outcome "${outcome}" targets "${target}", which is not a stage in this type, a type, done or broken_down`,
           );
         }
       }
@@ -168,6 +185,7 @@ export function validateStages(
 /** What the UI needs to draw a process. Leaves out prompt paths, which are the server's business. */
 export function describeStages(graph: StageGraph): StagesView {
   return {
+    start: graph.start,
     stages: [...graph.stages].map(([name, def]) => ({ name, turn: def.turn, color: def.color ?? null })),
     types: [...graph.types].map(([name, def]) => ({
       name,
@@ -184,7 +202,7 @@ export function describeStages(graph: StageGraph): StagesView {
 export function loadStagesFile(path: string): { graph: StageGraph; problems: string[] } {
   const parsed = parseYamlFile(path);
   if (!parsed.ok) {
-    return { graph: { stages: new Map(), types: new Map() }, problems: parsed.problems };
+    return { graph: { start: "", stages: new Map(), types: new Map() }, problems: parsed.problems };
   }
   return validateStages(parsed.value, dirname(path));
 }

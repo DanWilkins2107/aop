@@ -8,6 +8,8 @@ import { registerProject } from "../../src/server/projects.js";
 
 /** The process from specs/stages.md, plus a stage reused by two types. */
 export const STAGES_YAML = `
+start: triage
+
 stages:
   assess:         { turn: agent, color: "#5c7cfa", prompt: ./prompts/assess.md }
   split_proposed: { turn: human, color: "#ffc107" }
@@ -21,7 +23,7 @@ types:
   triage:
     start: assess
     stages:
-      assess:         { next: { ready: dev, split: split_proposed, reject: invalidated } }
+      assess:         { next: { ready: dev, split: split_proposed } }
       split_proposed: { next: { approve: split_approved, reject: assess } }
       split_approved: { next: { done: broken_down } }
   dev:

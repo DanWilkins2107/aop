@@ -39,7 +39,7 @@ describe("UI API", () => {
     const res = await h.call<{ error: { code: string; details: string[] } }>("GET", `/api/projects/${h.projectId}/stages`);
     expect(res.status).toBe(422);
     expect(res.body.error.code).toBe("config_invalid");
-    expect(res.body.error.details).toHaveLength(2);
+    expect(res.body.error.details).toHaveLength(3);
   });
 
   it("404s the stages and edges of an unknown project", async () => {
