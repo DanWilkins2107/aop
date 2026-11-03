@@ -434,7 +434,7 @@ describe("upgrading a database with projects that must have a path", () => {
   it("keeps every project, in order, and everything that hangs off them", () => {
     const upgraded = openDb(atVersion3());
     try {
-      expect(upgraded.pragma("user_version", { simple: true })).toBe(4);
+      expect(upgraded.pragma("user_version", { simple: true })).toBe(migrations.at(-1)?.version);
       expect(upgraded.prepare("SELECT * FROM projects ORDER BY rowid").all()).toEqual([
         { id: "z", created_at: T, name: "First", repo_path: "/repo/first" },
         { id: "a", created_at: T, name: "Second", repo_path: "/repo/second" },

@@ -85,16 +85,13 @@ export function agentStartPath(project: Pick<ProjectRow, "repo_path">, config: P
   return project.repo_path ?? config.openFromPath;
 }
 
-/** Stops any agent processes working on a project. There are none yet: the orchestrator fills this in. */
-export function stopProjectAgents(_db: Db, _projectId: string): void {}
-
 /**
  * Permanently deletes a project and everything recorded about it, or nothing if any step fails.
- * Only touches the database: the repo folder is the user's.
+ * Only touches the database: the repo folder is the user's. Stopping the project's agents comes
+ * first, and is the caller's job because it takes time: see `Orchestrator.stopProjectAgents`.
  */
 export function deleteProject(db: Db, id: string): ProjectRow {
   const project = getProject(db, id);
-  stopProjectAgents(db, id);
 
   const projectNodes = "(SELECT id FROM nodes WHERE project_id = @id)";
   allowProjectDeletion(db, id, () => {

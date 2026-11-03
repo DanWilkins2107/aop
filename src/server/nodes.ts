@@ -98,6 +98,9 @@ function toView(db: Db, graph: StageGraph, node: NodeRow): NodeView {
   const holdersVia = (via: Holder["via"]) => holders.filter((holder) => holder.via === via).map((holder) => holder.id);
   const invalidatedParents = holdersVia("invalidated_parent");
   const heldBy = holdersVia("split");
+  const latestRun = db.prepare("SELECT id, status FROM runs WHERE node_id = ? ORDER BY rowid DESC LIMIT 1").get(node.id) as
+    | { id: string; status: string }
+    | undefined;
   return {
     ...node,
     stage_exists: stageIsLive(graph, node.type, node.stage),
@@ -108,6 +111,8 @@ function toView(db: Db, graph: StageGraph, node: NodeRow): NodeView {
     blocked_by: holdersVia("blocks"),
     held: heldBy.length > 0,
     held_by: heldBy,
+    run_id: latestRun?.status === "running" ? latestRun.id : null,
+    last_run_id: latestRun?.id ?? null,
   };
 }
 
@@ -166,6 +171,7 @@ export function createNode(
     title: string;
     body?: string | undefined;
     cron?: string | undefined;
+    parent_id?: string | undefined;
     actor: Actor;
   },
 ): NodeView {
@@ -185,6 +191,13 @@ export function createNode(
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(id, now(), projectId, input.title, input.body ?? "", type, stage, input.cron ?? null);
     appendEvent(db, id, input.actor, "node_created", { type, stage, title: input.title });
+    // In the same transaction, so a child being split off can't be started before its parent holds it.
+    if (input.parent_id !== undefined) {
+      if (getNodeRow(db, input.parent_id).project_id !== projectId) {
+        throw badRequest(`Parent ${input.parent_id} is in another project`);
+      }
+      addEdge(db, input.parent_id, { target_id: id, kind: "subtask", actor: input.actor });
+    }
   })();
   return getNode(db, id);
 }
@@ -226,7 +239,8 @@ interface StageChange {
 /**
  * The only way a node's stage changes. Leaving a stage clears its `return_stage` and
  * `invalidation_reason`; the event keeps the previous state, which is what restore reads.
- * A human's claim survives. An agent's doesn't, because a stage change ends its run.
+ * A human's claim survives. An agent's doesn't, because a stage change ends its run, and marking the
+ * run here, in the same transaction, is how the orchestrator finds out.
  */
 function applyStageChange(db: Db, node: NodeRow, change: StageChange): void {
   const dropsClaim = node.claimed_by === "agent" && change.keepsAgentClaim !== true;
@@ -252,6 +266,54 @@ function applyStageChange(db: Db, node: NodeRow, change: StageChange): void {
     ...change.detail,
   });
   if (dropsClaim) appendEvent(db, node.id, "system", "claim_released", { holder: "agent", via: change.via });
+  if (change.keepsAgentClaim !== true) {
+    db.prepare(
+      `UPDATE runs SET left_via = ?, left_actor = ?, left_at = ?
+        WHERE node_id = ? AND status = 'running' AND left_via IS NULL`,
+    ).run(change.via, change.actor, now(), node.id);
+  }
+}
+
+/**
+ * An agent gets one outcome. Without this, one that reported and is still exiting could move the
+ * node on again from its next stage. A new run can't start until the old one has ended, so an agent
+ * call arriving in this window can only be the old run's.
+ */
+function assertRunStillOnNode(db: Db, nodeId: string): void {
+  const run = db.prepare("SELECT left_via FROM runs WHERE node_id = ? AND status = 'running'").get(nodeId) as
+    | { left_via: string | null }
+    | undefined;
+  if (run?.left_via != null) {
+    throw refused("This agent run has already moved the node on, and is expected to exit");
+  }
+}
+
+/** Nodes an agent should start on now: on an agent stage, unclaimed, not held, with no run still leaving. */
+export function startableNodes(db: Db, graph: StageGraph): NodeRow[] {
+  const rows = db
+    .prepare(
+      `SELECT * FROM nodes n WHERE claimed_by IS NULL
+        AND NOT EXISTS (SELECT 1 FROM runs r WHERE r.node_id = n.id AND r.status = 'running')
+        ORDER BY rowid`,
+    )
+    .all() as NodeRow[];
+  return rows.filter((node) => turnOf(graph, node) === "agent" && holdersOf(db, node.id).length === 0);
+}
+
+/**
+ * AOP's own move to `failed`, for a run that ended without reporting. Unlike `fail` it doesn't read
+ * `stages.yaml`, because a run can die while that file is invalid and its node must still say so.
+ * The caller holds the transaction.
+ */
+export function markFailed(db: Db, node: NodeRow, input: { reason: string; runId: string }): void {
+  applyStageChange(db, node, {
+    stage: "failed",
+    type: node.type,
+    returnStage: node.stage,
+    via: "fail",
+    actor: "system",
+    detail: { reason: input.reason, run_id: input.runId },
+  });
 }
 
 function hasSubtaskChildren(db: Db, nodeId: string): boolean {
@@ -337,6 +399,7 @@ export function next(db: Db, nodeId: string, input: { outcome: string; actor: Ac
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
+    if (input.actor === "agent") assertRunStillOnNode(db, nodeId);
     if (node.stage === "scheduled") {
       throw refused("Can't call next on a scheduled node: it stays there and creates children when it fires");
     }
@@ -438,6 +501,7 @@ export function ask(db: Db, nodeId: string, input: { question: string }): NodeVi
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
+    assertRunStillOnNode(db, nodeId);
     assertAgentStage(graph, node, "ask");
     applyStageChange(db, node, {
       stage: "ask_human_question",
@@ -606,6 +670,7 @@ export function splitStart(db: Db, nodeId: string): NodeView {
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
+    assertRunStillOnNode(db, nodeId);
     if (node.stage === "splitting") throw refused("The node is already splitting");
     assertAgentStage(graph, node, "start a split");
     applyStageChange(db, node, {
@@ -624,6 +689,7 @@ export function splitStart(db: Db, nodeId: string): NodeView {
 export function splitFinish(db: Db, nodeId: string): NodeView {
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
+    assertRunStillOnNode(db, nodeId);
     if (node.stage !== "splitting") {
       throw refused(`Can't finish a split: the node is at "${node.stage}", not splitting`);
     }

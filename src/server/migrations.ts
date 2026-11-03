@@ -170,4 +170,67 @@ DROP TABLE projects;
 ALTER TABLE projects_new RENAME TO projects;
 `,
   },
+  {
+    version: 5,
+    // How a run ended, and when its node moved on while it was still running. `agent_processes` is
+    // every process AOP may need to find again. It has no foreign keys because it has to outlive the
+    // run and the node: a process whose project was deleted is exactly what `aop reap` looks for.
+    sql: `
+ALTER TABLE runs ADD COLUMN left_via TEXT;
+ALTER TABLE runs ADD COLUMN left_actor TEXT
+  CONSTRAINT runs_left_actor_known CHECK (left_actor IS NULL OR left_actor IN ('human', 'agent', 'system'));
+ALTER TABLE runs ADD COLUMN left_at TEXT;
+ALTER TABLE runs ADD COLUMN end_reason TEXT
+  CONSTRAINT runs_end_reason_known
+    CHECK (end_reason IS NULL OR end_reason IN ('reported', 'failed', 'stopped', 'held', 'shutdown'));
+
+CREATE TABLE agent_processes (
+  id            TEXT PRIMARY KEY NOT NULL,
+  created_at    TEXT NOT NULL,
+  node_id       TEXT NOT NULL,
+  pid           INTEGER NOT NULL CHECK (pid > 0),
+  process_start TEXT,
+  children      TEXT CHECK (children IS NULL OR json_valid(children)),
+  command       TEXT NOT NULL
+) STRICT;
+`,
+  },
+  {
+    version: 6,
+    // Triggers keep these in step with every write, whichever code makes it. They key on rowid, which
+    // only VACUUM could renumber, and AOP never runs that. The WHEN clause matters: every stage change
+    // writes invalidation_reason, usually with the value it already had.
+    sql: `
+CREATE VIRTUAL TABLE nodes_fts USING fts5(title, body, invalidation_reason, tokenize = 'porter unicode61');
+CREATE VIRTUAL TABLE messages_fts USING fts5(body, tokenize = 'porter unicode61');
+
+INSERT INTO nodes_fts (rowid, title, body, invalidation_reason)
+  SELECT rowid, title, body, coalesce(invalidation_reason, '') FROM nodes;
+INSERT INTO messages_fts (rowid, body) SELECT rowid, body FROM messages;
+
+CREATE TRIGGER nodes_fts_insert AFTER INSERT ON nodes
+BEGIN
+  INSERT INTO nodes_fts (rowid, title, body, invalidation_reason)
+    VALUES (NEW.rowid, NEW.title, NEW.body, coalesce(NEW.invalidation_reason, ''));
+END;
+
+CREATE TRIGGER nodes_fts_update AFTER UPDATE OF title, body, invalidation_reason ON nodes
+WHEN OLD.title IS NOT NEW.title OR OLD.body IS NOT NEW.body
+  OR OLD.invalidation_reason IS NOT NEW.invalidation_reason
+BEGIN
+  DELETE FROM nodes_fts WHERE rowid = OLD.rowid;
+  INSERT INTO nodes_fts (rowid, title, body, invalidation_reason)
+    VALUES (NEW.rowid, NEW.title, NEW.body, coalesce(NEW.invalidation_reason, ''));
+END;
+
+CREATE TRIGGER nodes_fts_delete AFTER DELETE ON nodes
+BEGIN DELETE FROM nodes_fts WHERE rowid = OLD.rowid; END;
+
+CREATE TRIGGER messages_fts_insert AFTER INSERT ON messages
+BEGIN INSERT INTO messages_fts (rowid, body) VALUES (NEW.rowid, NEW.body); END;
+
+CREATE TRIGGER messages_fts_delete AFTER DELETE ON messages
+BEGIN DELETE FROM messages_fts WHERE rowid = OLD.rowid; END;
+`,
+  },
 ];

@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { serveStatic } from "@hono/node-server/serve-static";
@@ -9,11 +9,16 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { z } from "zod";
 import { ChangeFeed } from "./changes.js";
 import type { Db } from "./db.js";
-import { ApiError, badRequest, ConfigError } from "./errors.js";
+import { nodeContext } from "./context.js";
+import { ApiError, badRequest, ConfigError, notFound, refused } from "./errors.js";
 import * as nodes from "./nodes.js";
 import { describeConfig, loadConfig } from "./config.js";
+import type { Orchestrator } from "./orchestrator.js";
 import { addProject, deleteProject, getProject, listProjects, updateProject } from "./projects.js";
+import { getRun } from "./runs.js";
+import { search } from "./search.js";
 import { describeStages } from "./stages.js";
+import { prepareSteer } from "./steer.js";
 
 const BUILT_WEB_DIR = fileURLToPath(new URL("../../dist/web", import.meta.url));
 const STREAM_KEEP_ALIVE_MS = 25_000;
@@ -35,6 +40,7 @@ const createNodeBody = z.strictObject({
   title,
   body: z.string().optional(),
   cron: nonBlank.optional(),
+  parent_id: nonBlank.optional(),
   actor: actor.default("human"),
 });
 const editNodeBody = z
@@ -50,6 +56,8 @@ const askBody = z.strictObject({ question: nonBlank });
 const answerBody = z.strictObject({ answer: nonBlank });
 const failBody = z.strictObject({ actor: actor.default("system"), reason: nonBlank.optional() });
 const invalidateBody = z.strictObject({ reason: nonBlank, actor: actor.default("human") });
+const actorBody = z.strictObject({ actor: actor.default("human") });
+const steerBody = z.strictObject({ no_sandbox: z.boolean().default(false) });
 const blockBody = z.strictObject({ reason: nonBlank, actor: actor.default("human") });
 const unblockBody = z.strictObject({ actor: actor.default("human") });
 const claimBody = z.strictObject({ actor: z.enum(["human", "agent"]).default("human") });
@@ -110,12 +118,18 @@ export interface AppOptions {
   changes?: ChangeFeed;
   /** The built web app. Skipped if the folder doesn't exist, so the API runs without a build. */
   webDir?: string;
+  /** Runs agents. The demo has none, so the routes that need it refuse there. */
+  orchestrator?: Orchestrator;
 }
 
 export function createApp(db: Db, options: AppOptions = {}): Hono {
   const app = new Hono();
   const changes = options.changes ?? new ChangeFeed();
   const webDir = options.webDir ?? BUILT_WEB_DIR;
+  const orchestrator = (): Orchestrator => {
+    if (!options.orchestrator) throw refused("This server doesn't run agents");
+    return options.orchestrator;
+  };
 
   // Keeps other websites out, including through DNS rebinding. Non-browser clients send no Origin.
   app.use("*", async (c, proceed) => {
@@ -177,12 +191,21 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
   app.patch("/api/projects/:id", async (c) =>
     c.json(updateProject(db, c.req.param("id"), await readBody(c, updateProjectBody))),
   );
-  app.delete("/api/projects/:id", (c) => c.json(deleteProject(db, c.req.param("id"))));
+  app.delete("/api/projects/:id", async (c) => {
+    const { id } = getProject(db, c.req.param("id"));
+    // Agents stop first, and none can start on the project until it has gone.
+    const reopen = await options.orchestrator?.stopProjectAgents(id);
+    try {
+      return c.json(deleteProject(db, id));
+    } finally {
+      reopen?.();
+    }
+  });
 
   // The one process, shared by all projects. Read from disk every time.
   app.get("/api/stages", (c) => c.json(describeStages(loadConfig().graph)));
 
-  // Read-only on purpose. Agents can reach this API, so no route may change commands or the sandbox.
+  // Read-only on purpose. Agents can reach this API, so no route may change commands.
   app.get("/api/config", (c) => c.json(describeConfig()));
 
   app.get("/api/projects/:id/edges", (c) => {
@@ -203,6 +226,11 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
   app.get("/api/nodes/:id", (c) => c.json(nodes.getNode(db, c.req.param("id"))));
   app.patch("/api/nodes/:id", async (c) =>
     c.json(nodes.editNode(db, c.req.param("id"), await readBody(c, editNodeBody))),
+  );
+
+  app.get("/api/nodes/:id/context", (c) => c.text(nodeContext(db, c.req.param("id"))));
+  app.post("/api/nodes/:id/steer", async (c) =>
+    c.json(prepareSteer(db, c.req.param("id"), await readBody(c, steerBody, true))),
   );
 
   // Stage changes
@@ -263,10 +291,33 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
   app.post("/api/nodes/:id/edges", async (c) =>
     c.json(nodes.addEdge(db, c.req.param("id"), await readBody(c, edgeBody)), 201),
   );
-  app.delete("/api/edges/:id", (c) => c.json(nodes.removeEdge(db, c.req.param("id"), "human")));
+  app.delete("/api/edges/:id", async (c) =>
+    c.json(nodes.removeEdge(db, c.req.param("id"), (await readBody(c, actorBody, true)).actor)),
+  );
 
   // Events
   app.get("/api/nodes/:id/events", (c) => c.json(nodes.listEvents(db, c.req.param("id"))));
+
+  // Search
+  app.get("/api/search", (c) => {
+    const query = c.req.query("q");
+    if (query === undefined || query.trim() === "") throw badRequest("Search needs a query, in q");
+    const project = c.req.query("project");
+    return c.json(search(db, query, project === undefined ? null : getProject(db, project).id));
+  });
+
+  // Agents
+  app.get("/api/agents", async (c) => c.json(await orchestrator().listAgents()));
+  app.post("/api/agents/reap", async (c) => c.json(await orchestrator().reap()));
+  app.post("/api/runs/:id/stop", async (c) => c.json(await orchestrator().stopRun(c.req.param("id"))));
+  app.get("/api/runs/:id/log", (c) => {
+    const run = getRun(db, c.req.param("id"));
+    if (!run) throw notFound(`No run ${c.req.param("id")}`);
+    if (!existsSync(run.log_path)) throw notFound(`The log for run ${run.id} is gone`);
+    // Text, and marked as such: what an agent printed must never run as a page on this origin.
+    c.header("X-Content-Type-Options", "nosniff");
+    return c.text(readFileSync(run.log_path, "utf8"));
+  });
 
   if (existsSync(webDir)) serveWeb(app, webDir);
 
