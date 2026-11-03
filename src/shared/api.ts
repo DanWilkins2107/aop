@@ -15,10 +15,8 @@ export interface ConfigView {
   config_path: string;
   problems: string[];
   settings: {
-    sandboxed_command: string | null;
-    non_sandboxed_command: string | null;
-    agent_args: string;
-    sandbox: boolean;
+    agent_session_command: string;
+    out_of_sandbox_command: string | null;
     open_from: string;
     open_from_path: string;
     agent_timeout_minutes: number;
@@ -56,6 +54,10 @@ export interface NodeView extends NodeRow {
   held: boolean;
   /** The parents doing that. */
   held_by: string[];
+  /** The run that's on this node now, including one on its way out after the node moved on. */
+  run_id: string | null;
+  /** The node's latest run, running or not, which is whose log a failed node links to. */
+  last_run_id: string | null;
 }
 
 export interface MessageRow {
@@ -91,6 +93,45 @@ export interface EventView {
   actor: Actor;
   kind: string;
   data: unknown;
+}
+
+/** One agent process AOP started and hasn't yet seen the end of, for `aop ps`. */
+export interface AgentProcessView {
+  run_id: string;
+  pid: number;
+  node_id: string;
+  /** Null once the node is gone, because its project was deleted. */
+  node_title: string | null;
+  stage: string | null;
+  /** `exiting`: its node moved on and it has a moment to leave. `orphaned`: it shouldn't exist. */
+  status: "running" | "exiting" | "orphaned";
+  /** `unverified`: AOP never learned its start time, so it can't be sure enough to kill it. */
+  identity: "confirmed" | "unverified";
+  started_at: string;
+  command: string;
+}
+
+export interface ReapResult {
+  killed: { run_id: string; pid: number; reason: string }[];
+  /** Left alone, because AOP couldn't confirm the process is the one it started. */
+  skipped: { run_id: string; pid: number; reason: string }[];
+}
+
+export interface SearchResult {
+  node_id: string;
+  project_id: string;
+  title: string;
+  type: string;
+  stage: string;
+  /** The matching text, with the matched words in [brackets]. */
+  snippet: string;
+}
+
+/** What `aop steer` needs to open a session. The node is already claimed by the time this returns. */
+export interface SteerSession {
+  node_id: string;
+  command: string;
+  cwd: string;
 }
 
 /** The shared `stages.yaml`, in file order. Built-in stages aren't listed unless a type uses one. */

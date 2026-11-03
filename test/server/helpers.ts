@@ -44,9 +44,8 @@ types:
 `;
 
 export const CONFIG_YAML = `
-sandboxed_command: sandboxed-claude
-non_sandboxed_command: claude
-agent_args: -p
+agent_session_command: sandboxed-claude
+out_of_sandbox_command: claude
 open_from: ~/code
 agent_timeout_minutes: 30
 stages: ./stages.yaml

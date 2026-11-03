@@ -10,10 +10,11 @@ import { parseYamlFile } from "./yamlFile.js";
 const command = z.string().trim().min(1);
 
 const settingsSchema = z.strictObject({
-  sandboxed_command: command.optional(),
-  non_sandboxed_command: command.optional(),
-  agent_args: z.string().default(""),
-  sandbox: z.boolean().default(true),
+  agent_session_command: z
+    .string({ error: (issue) => (issue.input === undefined ? "required" : "must be a command") })
+    .trim()
+    .min(1),
+  out_of_sandbox_command: command.optional(),
   open_from: z.string().trim().min(1).default("~/code"),
   agent_timeout_minutes: z.number().positive().default(60),
   stages: z.string().min(1),
@@ -31,18 +32,6 @@ export interface AopConfig extends Settings {
 
 const mappingSchema = z.record(z.string(), z.unknown());
 
-/** Each mode needs the command it would launch agents with. */
-function commandProblems(file: string, raw: Record<string, unknown>): string[] {
-  if (raw["sandbox"] === false) {
-    return raw["non_sandboxed_command"] === undefined
-      ? [`${file}: non_sandboxed_command: required when "sandbox: false" is set`]
-      : [];
-  }
-  return raw["sandboxed_command"] === undefined
-    ? [`${file}: sandboxed_command: required unless "sandbox: false" is set`]
-    : [];
-}
-
 /**
  * Loads and validates the machine's one config, `config.yaml` in AOP_HOME, and the `stages.yaml`
  * it links to. Throws ConfigError with every problem found across both files.
@@ -51,7 +40,7 @@ export function loadConfig(home: string = aopHome()): AopConfig {
   const file = configPath(home);
   if (!existsSync(file)) {
     throw new ConfigError([
-      `${file}: file not found. Create it, with at least "sandboxed_command: <your sandboxed agent command>" and "stages: ./stages.yaml".`,
+      `${file}: file not found. Create it, with at least "agent_session_command: <the command that starts an agent session>" and "stages: ./stages.yaml".`,
     ]);
   }
 
@@ -61,7 +50,7 @@ export function loadConfig(home: string = aopHome()): AopConfig {
   if (!mapping.success) throw new ConfigError([`${file}: must be a mapping of settings`]);
   const raw = mapping.data;
 
-  const problems = commandProblems(file, raw);
+  const problems: string[] = [];
   const settings = settingsSchema.safeParse(raw);
   if (!settings.success) {
     for (const issue of settings.error.issues) {
@@ -93,10 +82,8 @@ export function describeConfig(home: string = aopHome()): ConfigView {
       config_path,
       problems: [],
       settings: {
-        sandboxed_command: config.sandboxed_command ?? null,
-        non_sandboxed_command: config.non_sandboxed_command ?? null,
-        agent_args: config.agent_args,
-        sandbox: config.sandbox,
+        agent_session_command: config.agent_session_command,
+        out_of_sandbox_command: config.out_of_sandbox_command ?? null,
         open_from: config.open_from,
         open_from_path: config.openFromPath,
         agent_timeout_minutes: config.agent_timeout_minutes,

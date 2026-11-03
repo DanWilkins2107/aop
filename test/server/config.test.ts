@@ -53,10 +53,8 @@ describe("config loading", () => {
     const home = makeHome();
     const config = loadConfig(home);
     expect(config).toMatchObject({
-      sandboxed_command: "sandboxed-claude",
-      non_sandboxed_command: "claude",
-      agent_args: "-p",
-      sandbox: true,
+      agent_session_command: "sandboxed-claude",
+      out_of_sandbox_command: "claude",
       open_from: "~/code",
       agent_timeout_minutes: 30,
       stagesPath: join(home, "stages.yaml"),
@@ -78,26 +76,29 @@ describe("config loading", () => {
 
   it("follows an absolute stages link, with prompts relative to that file", () => {
     const shared = makeHome();
-    const home = makeHome({ "config.yaml": `sandboxed_command: s\nstages: ${JSON.stringify(join(shared, "stages.yaml"))}\n` });
+    const home = makeHome({ "config.yaml": `agent_session_command: s\nstages: ${JSON.stringify(join(shared, "stages.yaml"))}\n` });
     const config = loadConfig(home);
     expect(config.stagesPath).toBe(join(shared, "stages.yaml"));
     expect(config.graph.stages.get("awaiting_agent_breakdown")?.prompt).toBe(join(shared, "prompts", "awaiting_agent_breakdown.md"));
   });
 
   it("defaults the optional keys", () => {
-    const home = makeHome({ "config.yaml": `sandboxed_command: s\n${ONLY_STAGES}` });
-    expect(loadConfig(home)).toMatchObject({ agent_args: "", sandbox: true, open_from: "~/code", agent_timeout_minutes: 60 });
+    const home = makeHome({ "config.yaml": `agent_session_command: s\n${ONLY_STAGES}` });
+    expect(loadConfig(home)).toMatchObject({ open_from: "~/code", agent_timeout_minutes: 60 });
+    expect(loadConfig(home).out_of_sandbox_command).toBeUndefined();
   });
 
-  it("requires sandboxed_command unless sandbox is false", () => {
-    expect(problemsOf(makeHome({ "config.yaml": ONLY_STAGES })).join()).toContain("sandboxed_command: required");
-    expect(problemsOf(makeHome({ "config.yaml": `sandbox: true\n${ONLY_STAGES}` })).join()).toContain("sandboxed_command: required");
-    expect(problemsOf(makeHome({ "config.yaml": `sandbox: false\nnon_sandboxed_command: c\n${ONLY_STAGES}` }))).toEqual([]);
+  it("requires agent_session_command, even with an out-of-sandbox command", () => {
+    expect(problemsOf(makeHome({ "config.yaml": ONLY_STAGES })).join()).toContain("agent_session_command: required");
+    const other = makeHome({ "config.yaml": `out_of_sandbox_command: c\n${ONLY_STAGES}` });
+    expect(problemsOf(other).join()).toContain("agent_session_command: required");
   });
 
-  it("requires non_sandboxed_command when sandbox is false, which has nothing else to launch", () => {
-    const home = makeHome({ "config.yaml": `sandbox: false\nsandboxed_command: s\n${ONLY_STAGES}` });
-    expect(problemsOf(home).join()).toContain("non_sandboxed_command: required");
+  it("refuses the settings AOP now controls itself", () => {
+    for (const old of ["sandboxed_command: s", "non_sandboxed_command: c", "agent_args: -p", "sandbox: false"]) {
+      const home = makeHome({ "config.yaml": `${CONFIG_YAML}${old}\n` });
+      expect(problemsOf(home).join()).toContain(old.split(":")[0]);
+    }
   });
 
   it("no longer accepts the old keys", () => {
@@ -110,16 +111,14 @@ describe("config loading", () => {
   it("checks each key's value", () => {
     const home = makeHome({
       "config.yaml": `
-sandboxed_command: "  "
-non_sandboxed_command: 3
-agent_args: [a]
-sandbox: "no"
+agent_session_command: "  "
+out_of_sandbox_command: 3
 open_from: ""
 agent_timeout_minutes: 0
 ${ONLY_STAGES}`,
     });
     const problems = problemsOf(home).join("\n");
-    for (const key of ["sandboxed_command", "non_sandboxed_command", "agent_args", "sandbox", "open_from", "agent_timeout_minutes"]) {
+    for (const key of ["agent_session_command", "out_of_sandbox_command", "open_from", "agent_timeout_minutes"]) {
       expect(problems).toContain(`${key}:`);
     }
   });
@@ -129,19 +128,19 @@ ${ONLY_STAGES}`,
     const [problem] = problemsOf(home);
     expect(problem).toContain(join(home, "config.yaml"));
     expect(problem).toContain("Create it");
-    expect(problem).toContain("sandboxed_command");
+    expect(problem).toContain("agent_session_command");
     expect(problem).toContain("stages: ./stages.yaml");
   });
 
   it("says what file to create when the stages file is missing", () => {
-    const home = makeHome({ "config.yaml": `sandboxed_command: s\nstages: ./nope.yaml\n` });
+    const home = makeHome({ "config.yaml": `agent_session_command: s\nstages: ./nope.yaml\n` });
     const [problem] = problemsOf(home);
     expect(problem).toContain(join(home, "nope.yaml"));
     expect(problem).toContain("Create it");
   });
 
   it("requires a stages link", () => {
-    expect(problemsOf(makeHome({ "config.yaml": "sandboxed_command: s\n" })).join()).toContain("stages");
+    expect(problemsOf(makeHome({ "config.yaml": "agent_session_command: s\n" })).join()).toContain("stages");
   });
 
   it("reports config problems together with stages problems", () => {
@@ -150,7 +149,7 @@ ${ONLY_STAGES}`,
       "stages.yaml": `${pool}\ntypes: { t: { start: missing, stages: {} } }\n`,
     });
     const problems = problemsOf(home).join("\n");
-    expect(problems).toContain("sandboxed_command");
+    expect(problems).toContain("agent_session_command");
     expect(problems).toContain("agent_timeout_minutes");
     expect(problems).toContain("surprise");
     expect(problems).toContain('start "missing"');
@@ -162,8 +161,8 @@ ${ONLY_STAGES}`,
   });
 
   it("ignores any .aop folder or config.local.yaml", () => {
-    const home = makeHome({ "config.local.yaml": "sandboxed_command: other\n", ".aop/config.yaml": "nonsense: 1\n" });
-    expect(loadConfig(home).sandboxed_command).toBe("sandboxed-claude");
+    const home = makeHome({ "config.local.yaml": "agent_session_command: other\n", ".aop/config.yaml": "nonsense: 1\n" });
+    expect(loadConfig(home).agent_session_command).toBe("sandboxed-claude");
   });
 });
 

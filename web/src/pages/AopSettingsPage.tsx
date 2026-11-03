@@ -4,10 +4,11 @@ import { ErrorNotice } from "../components/ErrorNotice.js";
 import { api } from "../lib/api.js";
 import { useLiveData } from "../lib/live.js";
 
-function Setting({ name, value, resolved }: { name: string; value: ReactNode; resolved?: string }) {
+function Setting({ name, about, value, resolved }: { name: string; about: ReactNode; value: ReactNode; resolved?: string }) {
   return (
     <div className="setting">
-      <dt className="mono">{name}</dt>
+      <dt>{name}</dt>
+      <dd className="setting-about">{about}</dd>
       <dd className="mono">{value}</dd>
       {resolved ? (
         <dd className="setting-resolved">
@@ -20,7 +21,7 @@ function Setting({ name, value, resolved }: { name: string; value: ReactNode; re
 
 const NOT_SET = <span className="muted">Not set</span>;
 
-/** Read-only by design: agents can reach the API, so nothing here can change commands or the sandbox. */
+/** Read-only by design: agents can reach the API, so nothing here can change commands. */
 export function AopSettingsPage() {
   const { data, error } = useLiveData(() => api.config(), "config");
   const settings = data?.settings;
@@ -48,13 +49,42 @@ export function AopSettingsPage() {
       ) : null}
       {settings ? (
         <dl className="settings-list">
-          <Setting name="sandboxed_command" value={settings.sandboxed_command ?? NOT_SET} />
-          <Setting name="non_sandboxed_command" value={settings.non_sandboxed_command ?? NOT_SET} />
-          <Setting name="agent_args" value={settings.agent_args || NOT_SET} />
-          <Setting name="sandbox" value={String(settings.sandbox)} />
-          <Setting name="open_from" value={settings.open_from} resolved={settings.open_from_path} />
-          <Setting name="agent_timeout_minutes" value={settings.agent_timeout_minutes} />
-          <Setting name="stages" value={settings.stages} resolved={settings.stages_path} />
+          <Setting
+            name="Agent session command"
+            about="This is the session your agents are starting in. Strongly consider having this command start sessions inside a sandbox."
+            value={settings.agent_session_command}
+          />
+          <Setting
+            name="Out of sandbox command"
+            about={
+              <>
+                Sometimes you may need to run and supervise a session that runs outside of a sandbox (using{" "}
+                <code>aop steer --no-sandbox</code>). Not needed if you're not running sessions sandboxed.
+              </>
+            }
+            value={settings.out_of_sandbox_command ?? NOT_SET}
+          />
+          <Setting
+            name="Open from"
+            about="Where sessions start for projects with no path."
+            value={settings.open_from}
+            resolved={settings.open_from_path}
+          />
+          <Setting
+            name="Agent timeout"
+            about={
+              <>
+                How long an agent can run before it's stopped and its node goes to <code>failed</code>.
+              </>
+            }
+            value={`${settings.agent_timeout_minutes} minutes`}
+          />
+          <Setting
+            name="Stages"
+            about="The file that defines your process."
+            value={settings.stages}
+            resolved={settings.stages_path}
+          />
         </dl>
       ) : null}
     </div>

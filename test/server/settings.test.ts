@@ -14,7 +14,7 @@ const ROOT = resolve(import.meta.dirname, "../..");
 
 describe("open_from", () => {
   const withOpenFrom = (value: string) =>
-    makeHome({ "config.yaml": `sandboxed_command: s\nstages: ./stages.yaml\nopen_from: ${JSON.stringify(value)}\n` });
+    makeHome({ "config.yaml": `agent_session_command: s\nstages: ./stages.yaml\nopen_from: ${JSON.stringify(value)}\n` });
 
   it("takes an absolute path as written", () => {
     const absolute = resolve("/somewhere/else");
@@ -33,7 +33,7 @@ describe("open_from", () => {
   });
 
   it("defaults to ~/code, which doesn't have to exist", () => {
-    const home = makeHome({ "config.yaml": "sandboxed_command: s\nstages: ./stages.yaml\n" });
+    const home = makeHome({ "config.yaml": "agent_session_command: s\nstages: ./stages.yaml\n" });
     expect(loadConfig(home)).toMatchObject({ open_from: "~/code", openFromPath: join(homedir(), "code") });
   });
 
@@ -94,10 +94,8 @@ describe("reading the config over the API", () => {
       config_path: configPath(),
       problems: [],
       settings: {
-        sandboxed_command: "sandboxed-claude",
-        non_sandboxed_command: "claude",
-        agent_args: "-p",
-        sandbox: true,
+        agent_session_command: "sandboxed-claude",
+        out_of_sandbox_command: "claude",
         open_from: "~/code",
         open_from_path: join(homedir(), "code"),
         agent_timeout_minutes: 30,
@@ -108,9 +106,9 @@ describe("reading the config over the API", () => {
   });
 
   it("shows an unset command as null and defaults filled in", async () => {
-    writeFiles(aopHome(), { "config.yaml": "sandboxed_command: s\nstages: ./stages.yaml\n" });
+    writeFiles(aopHome(), { "config.yaml": "agent_session_command: s\nstages: ./stages.yaml\n" });
     const { settings } = (await h.call<ConfigView>("GET", "/api/config")).body;
-    expect(settings).toMatchObject({ non_sandboxed_command: null, agent_args: "", agent_timeout_minutes: 60 });
+    expect(settings).toMatchObject({ out_of_sandbox_command: null, agent_timeout_minutes: 60 });
   });
 
   it("still answers while the config is invalid, listing the problems", async () => {
@@ -123,8 +121,8 @@ describe("reading the config over the API", () => {
   });
 
   it("re-reads the file each time", async () => {
-    writeFiles(aopHome(), { "config.yaml": CONFIG_YAML.replace("agent_args: -p", "agent_args: --print") });
-    expect((await h.call<ConfigView>("GET", "/api/config")).body.settings?.agent_args).toBe("--print");
+    writeFiles(aopHome(), { "config.yaml": CONFIG_YAML.replace("out_of_sandbox_command: claude", "out_of_sandbox_command: other") });
+    expect((await h.call<ConfigView>("GET", "/api/config")).body.settings?.out_of_sandbox_command).toBe("other");
   });
 });
 
@@ -139,21 +137,21 @@ describe("nothing can write the config", () => {
 
   it("refuses every write method on the config routes, leaving the files as they were", async () => {
     const before = readFileSync(configPath(), "utf8");
-    const attempt = { sandbox: false, sandboxed_command: "evil", open_from: "/evil" };
+    const attempt = { agent_session_command: "evil", open_from: "/evil" };
     for (const method of WRITES) {
-      for (const path of ["/api/config", "/api/config/sandbox", "/api/settings", "/api/stages"]) {
+      for (const path of ["/api/config", "/api/settings", "/api/stages"]) {
         expect((await h.call(method, path, attempt)).status).toBe(404);
       }
     }
     expect(readFileSync(configPath(), "utf8")).toBe(before);
     expect(readFileSync(join(aopHome(), "stages.yaml"), "utf8")).toBe(STAGES_YAML);
-    expect((await h.call<ConfigView>("GET", "/api/config")).body.settings?.sandbox).toBe(true);
+    expect((await h.call<ConfigView>("GET", "/api/config")).body.settings?.agent_session_command).toBe("sandboxed-claude");
   });
 
-  it("has no write route outside projects, nodes and edges", () => {
+  it("has no write route outside projects, nodes, edges, agents and runs", () => {
     const writes = createApp(h.db).routes.filter((route) => WRITES.includes(route.method));
     expect(writes.length).toBeGreaterThan(0);
-    for (const { path } of writes) expect(path).toMatch(/^\/api\/(projects|nodes|edges)(\/|$)/);
+    for (const { path } of writes) expect(path).toMatch(/^\/api\/(projects|nodes|edges|agents|runs)(\/|$)/);
   });
 
   it("gives the project routes no way in to the config", async () => {
@@ -163,10 +161,11 @@ describe("nothing can write the config", () => {
     expect(readFileSync(configPath(), "utf8")).toBe(before);
   });
 
-  it("doesn't import anything that writes files anywhere in the server", () => {
+  it("doesn't import anything that writes files anywhere in the server, except for run logs", () => {
     const READ_ONLY = new Set(["existsSync", "readFileSync", "realpathSync", "statSync"]);
     const folder = join(ROOT, "src", "server");
     for (const file of readdirSync(folder)) {
+      if (file === "runLog.ts") continue;
       const source = readFileSync(join(folder, file), "utf8");
       expect(source, file).not.toMatch(/from "(node:)?fs\/promises"/);
       for (const [, names] of source.matchAll(/import \{([^}]*)\} from "(?:node:)?fs"/g)) {
