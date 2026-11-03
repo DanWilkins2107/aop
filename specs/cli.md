@@ -29,8 +29,8 @@ aop split finish
 aop init                        # one-time machine setup: commands, sandbox, plugin, ~/.aop
 aop project add <path>
 aop serve
-aop steer <node>                # runs sandboxed_command
-aop steer <node> --no-sandbox   # runs non_sandboxed_command
+aop steer <node>                # runs agent_session_command
+aop steer <node> --no-sandbox   # runs out_of_sandbox_command
 ```
 
 - `aop steer` opens your own session on a node, in the project's path or `open_from`, with `AOP_NODE_ID` set so the commands above work. It claims the node for you, and errors if an agent run holds it. See claims in [orchestrator.md](orchestrator.md).

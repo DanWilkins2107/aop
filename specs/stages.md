@@ -21,7 +21,7 @@ types:                        # a mini graph for each part of the workflow
       awaiting_agent_breakdown: { next: { ready: dev, split: split_proposed, human_only: human_only_action } }
       human_only_action: { next: { done: done } }
       split_proposed: { next: { approve: split_approved, reject: awaiting_agent_breakdown } }
-      split_approved: { next: {} }    # finishes through `aop split finish`
+      split_approved: { next: { done: broken_down } }
   dev:
     start: implement
     stages:
@@ -43,6 +43,7 @@ types:                        # a mini graph for each part of the workflow
 ## `next`
 - Each key is an outcome: a button for humans, reported through the CLI by agents.
 - Each target is a stage in the same type, another type (entering at its `start`), `done` or `broken_down`.
+- `split_approved` still lists `broken_down` so the pipeline shows where it ends. An agent using `aop split start` reaches it through `aop split finish`.
 - `next` always moves the same node. Types only split a large graph into chunks that are easier to reason about, so a node carries on through them with one history.
 
 ## Built-in stages
