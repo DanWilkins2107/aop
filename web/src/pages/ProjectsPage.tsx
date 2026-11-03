@@ -30,8 +30,8 @@ export function ProjectsPage() {
     <div className="page page-narrow">
       <div className="projects-head">
         <h1>Projects</h1>
-        <button type="button" className="btn-create" onClick={() => setAdding(true)}>
-          + Add project
+        <button type="button" className="btn-small" onClick={() => setAdding(true)}>
+          Add project
         </button>
       </div>
       {error ? <ErrorNotice error={error} /> : null}
@@ -49,17 +49,13 @@ export function ProjectsPage() {
               <span className="project-path">{project.repo_path}</span>
             </Link>
             <div className="project-actions">
-              <button type="button" className="btn-small" onClick={() => setOpen({ dialog: "rename", projectId: project.id })}>
+              <button type="button" className="btn-quiet" onClick={() => setOpen({ dialog: "rename", projectId: project.id })}>
                 Rename
               </button>
-              <button type="button" className="btn-small" onClick={() => setOpen({ dialog: "path", projectId: project.id })}>
+              <button type="button" className="btn-quiet" onClick={() => setOpen({ dialog: "path", projectId: project.id })}>
                 Change path
               </button>
-              <button
-                type="button"
-                className="btn-small btn-danger-outline"
-                onClick={() => setOpen({ dialog: "delete", projectId: project.id })}
-              >
+              <button type="button" className="btn-quiet" onClick={() => setOpen({ dialog: "delete", projectId: project.id })}>
                 Delete
               </button>
             </div>

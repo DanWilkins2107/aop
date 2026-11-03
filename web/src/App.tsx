@@ -10,7 +10,6 @@ function LiveIndicator() {
   const status = useLiveStatus();
   return (
     <span className={`live live-${status}`} title="Updates from the server">
-      <span className="live-dot" />
       {STATUS_LABEL[status]}
     </span>
   );
@@ -22,10 +21,11 @@ export function App() {
       <header className="topbar">
         <Link to="/" className="brand">
           <svg viewBox="0 0 32 32" width="18" height="18" aria-hidden="true">
-            <path d="M16 9 9 23M16 9l7 14" stroke="#868e96" strokeWidth="2" />
-            <circle cx="16" cy="8" r="5" fill="#ffc107" />
-            <circle cx="8" cy="24" r="5" fill="#5c7cfa" />
-            <circle cx="24" cy="24" r="5" fill="#12b886" />
+            <rect width="32" height="32" rx="7" fill="#1f2226" />
+            <path d="M16 7 7 25M16 7l9 18" stroke="#ffffff" strokeWidth="4.5" />
+            <circle cx="16" cy="7" r="4.5" fill="#ffc107" />
+            <circle cx="7" cy="25" r="4.5" fill="#748ffc" />
+            <circle cx="25" cy="25" r="4.5" fill="#20c997" />
           </svg>
           AOP
         </Link>
