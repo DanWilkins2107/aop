@@ -1,11 +1,21 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { serveStatic } from "@hono/node-server/serve-static";
 import Database from "better-sqlite3";
 import { type Context, Hono } from "hono";
+import { streamSSE } from "hono/streaming";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { z } from "zod";
+import { ChangeFeed } from "./changes.js";
 import type { Db } from "./db.js";
 import { ApiError, badRequest, ConfigError } from "./errors.js";
 import * as nodes from "./nodes.js";
-import { getProject, listProjects, registerProject } from "./projects.js";
+import { getProject, listProjects, projectConfig, registerProject } from "./projects.js";
+import { describeStages } from "./stages.js";
+
+const BUILT_WEB_DIR = fileURLToPath(new URL("../../dist/web", import.meta.url));
+const STREAM_KEEP_ALIVE_MS = 25_000;
 
 const LOCAL_HOST = /^(localhost|127\.0\.0\.1)(:\d+)?$/i;
 
@@ -21,6 +31,7 @@ const createNodeBody = z.strictObject({
   cron: nonBlank.optional(),
   actor: actor.default("human"),
 });
+const editNodeBody = z.strictObject({ body: z.string(), actor: actor.default("human") });
 const nextBody = z.strictObject({
   outcome: nonBlank,
   actor: actor.default("human"),
@@ -78,8 +89,26 @@ function ownOrigins(host: string): string[] {
   return [`http://localhost${suffix}`, `http://127.0.0.1${suffix}`];
 }
 
-export function createApp(db: Db): Hono {
+const isApiPath = (path: string) => path === "/api" || path.startsWith("/api/");
+
+/** Serves the built app. Any other path gets `index.html`, because the routes live in the browser. */
+function serveWeb(app: Hono, dir: string): void {
+  const files = serveStatic({ root: dir });
+  const page = serveStatic({ path: join(dir, "index.html") });
+  app.use("*", (c, proceed) => (isApiPath(c.req.path) ? proceed() : files(c, proceed)));
+  app.use("*", (c, proceed) => (isApiPath(c.req.path) ? proceed() : page(c, proceed)));
+}
+
+export interface AppOptions {
+  changes?: ChangeFeed;
+  /** The built web app. Skipped if the folder doesn't exist, so the API runs without a build. */
+  webDir?: string;
+}
+
+export function createApp(db: Db, options: AppOptions = {}): Hono {
   const app = new Hono();
+  const changes = options.changes ?? new ChangeFeed();
+  const webDir = options.webDir ?? BUILT_WEB_DIR;
 
   // Keeps other websites out, including through DNS rebinding. Non-browser clients send no Origin.
   app.use("*", async (c, proceed) => {
@@ -93,6 +122,12 @@ export function createApp(db: Db): Hono {
     }
     await proceed();
     return;
+  });
+
+  // Every write comes through here, and refused ones change nothing.
+  app.use("/api/*", async (c, proceed) => {
+    await proceed();
+    if (!["GET", "HEAD"].includes(c.req.method) && c.res.status < 400) changes.notify();
   });
 
   app.onError((error, c) => {
@@ -111,12 +146,37 @@ export function createApp(db: Db): Hono {
 
   app.get("/api/health", (c) => c.json({ ok: true }));
 
+  // Fires whenever data changes. `ready` lets a client catch up on anything missed while away.
+  app.get("/api/events", (c) =>
+    streamSSE(c, async (stream) => {
+      await new Promise<void>((finished) => {
+        const unsubscribe = changes.subscribe(() => void stream.writeSSE({ event: "change", data: "{}" }));
+        const keepAlive = setInterval(() => void stream.write(": keep-alive\n\n"), STREAM_KEEP_ALIVE_MS);
+        stream.onAbort(() => {
+          unsubscribe();
+          clearInterval(keepAlive);
+          finished();
+        });
+        void stream.writeSSE({ event: "ready", data: "{}" });
+      });
+    }),
+  );
+
   // Projects
   app.get("/api/projects", (c) => c.json(listProjects(db)));
   app.post("/api/projects", async (c) => {
     const body = await readBody(c, registerProjectBody);
     const { project, created } = registerProject(db, body.repo_path, body.name);
     return c.json(project, created ? 201 : 200);
+  });
+
+  app.get("/api/projects/:id/stages", (c) => {
+    const project = getProject(db, c.req.param("id"));
+    return c.json(describeStages(projectConfig(db, project.id).graph));
+  });
+  app.get("/api/projects/:id/edges", (c) => {
+    const project = getProject(db, c.req.param("id"));
+    return c.json(nodes.listProjectEdges(db, project.id));
   });
 
   // Nodes
@@ -130,6 +190,9 @@ export function createApp(db: Db): Hono {
     return c.json(nodes.createNode(db, project.id, body), 201);
   });
   app.get("/api/nodes/:id", (c) => c.json(nodes.getNode(db, c.req.param("id"))));
+  app.patch("/api/nodes/:id", async (c) =>
+    c.json(nodes.setBody(db, c.req.param("id"), await readBody(c, editNodeBody))),
+  );
 
   // Stage changes
   app.post("/api/nodes/:id/next", async (c) =>
@@ -176,6 +239,8 @@ export function createApp(db: Db): Hono {
 
   // Events
   app.get("/api/nodes/:id/events", (c) => c.json(nodes.listEvents(db, c.req.param("id"))));
+
+  if (existsSync(webDir)) serveWeb(app, webDir);
 
   return app;
 }

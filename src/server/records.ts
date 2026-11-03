@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
+import type { Actor } from "../shared/api.js";
 import type { Db } from "./db.js";
 
-export type Actor = "human" | "agent" | "system";
+export type { Actor };
 
 export const newId = (): string => randomUUID();
 export const now = (): string => new Date().toISOString();

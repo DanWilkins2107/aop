@@ -1,34 +1,11 @@
 import type { Db } from "./db.js";
 import { badRequest, notFound, refused } from "./errors.js";
 import { projectConfig } from "./projects.js";
+import type { EdgeRow, EventView, LinkRow, MessageRow, NodeRow, NodeView, Turn } from "../shared/api.js";
 import { appendEvent, newId, now, type Actor } from "./records.js";
-import { isBuiltIn, type StageGraph, type Turn } from "./stages.js";
+import { isBuiltIn, type StageGraph } from "./stages.js";
 
-export interface NodeRow {
-  id: string;
-  created_at: string;
-  project_id: string;
-  title: string;
-  body: string;
-  type: string;
-  stage: string;
-  cron: string | null;
-  invalidation_reason: string | null;
-  return_stage: string | null;
-  spawned_by: string | null;
-}
-
-export interface NodeView extends NodeRow {
-  /** False when the stage is gone from the node's type in `stages.yaml`: a human must move it. */
-  stage_exists: boolean;
-  turn: Turn | null;
-  available_outcomes: { outcome: string; target: string }[];
-  stale: boolean;
-  /** Invalidated ancestors, through `subtask` edges. */
-  stale_because: string[];
-  /** Unfinished nodes whose `blocks` edges hold this one. */
-  blocked_by: string[];
-}
+export type { EdgeRow, EventView, LinkRow, MessageRow, NodeRow, NodeView };
 
 export function getNodeRow(db: Db, id: string): NodeRow {
   const node = db.prepare("SELECT * FROM nodes WHERE id = ?").get(id) as NodeRow | undefined;
@@ -146,6 +123,17 @@ export function createNode(
     appendEvent(db, id, input.actor, "node_created", { type: input.type, stage: type.start, title: input.title });
   })();
   return getNode(db, id);
+}
+
+/** Edits the description. The event keeps the old text, because nothing else does. */
+export function setBody(db: Db, nodeId: string, input: { body: string; actor: Actor }): NodeView {
+  db.transaction(() => {
+    const node = getNodeRow(db, nodeId);
+    if (node.body === input.body) return;
+    db.prepare("UPDATE nodes SET body = ? WHERE id = ?").run(input.body, nodeId);
+    appendEvent(db, nodeId, input.actor, "description_edited", { previous: node.body });
+  })();
+  return getNode(db, nodeId);
 }
 
 interface StageChange {
@@ -321,15 +309,6 @@ export function move(
   return getNode(db, nodeId);
 }
 
-export interface MessageRow {
-  id: string;
-  created_at: string;
-  node_id: string;
-  stage: string;
-  author: Actor;
-  body: string;
-}
-
 function postMessage(db: Db, nodeId: string, stage: string, author: Actor, body: string): MessageRow {
   const message: MessageRow = { id: newId(), created_at: now(), node_id: nodeId, stage, author, body };
   db.prepare(
@@ -471,14 +450,6 @@ export function listMessages(db: Db, nodeId: string): MessageRow[] {
   return db.prepare("SELECT * FROM messages WHERE node_id = ? ORDER BY rowid").all(nodeId) as MessageRow[];
 }
 
-export interface LinkRow {
-  id: string;
-  created_at: string;
-  node_id: string;
-  kind: "ticket" | "pr";
-  url: string;
-}
-
 export function addLink(
   db: Db,
   nodeId: string,
@@ -502,15 +473,6 @@ export function addLink(
 export function listLinks(db: Db, nodeId: string): LinkRow[] {
   getNodeRow(db, nodeId);
   return db.prepare("SELECT * FROM links WHERE node_id = ? ORDER BY rowid").all(nodeId) as LinkRow[];
-}
-
-export interface EdgeRow {
-  id: string;
-  created_at: string;
-  source_id: string;
-  target_id: string;
-  kind: "subtask" | "blocks";
-  removed_at: string | null;
 }
 
 /** `source` is the parent of a `subtask` edge and the blocker of a `blocks` edge. */
@@ -546,6 +508,16 @@ export function addEdge(
   })();
 }
 
+/** Every active edge in a project, for drawing its graph. */
+export function listProjectEdges(db: Db, projectId: string): EdgeRow[] {
+  return db
+    .prepare(
+      `SELECT e.* FROM edges e JOIN nodes n ON n.id = e.source_id
+        WHERE n.project_id = ? AND e.removed_at IS NULL ORDER BY e.rowid`,
+    )
+    .all(projectId) as EdgeRow[];
+}
+
 /** Edges touching the node in either direction. Removed ones appear only on request. */
 export function listEdges(db: Db, nodeId: string, includeRemoved: boolean): EdgeRow[] {
   getNodeRow(db, nodeId);
@@ -571,15 +543,6 @@ export function removeEdge(db: Db, edgeId: string, actor: Actor): EdgeRow {
     });
     return { ...edge, removed_at: removedAt };
   })();
-}
-
-export interface EventView {
-  id: string;
-  created_at: string;
-  node_id: string;
-  actor: Actor;
-  kind: string;
-  data: unknown;
 }
 
 export function listEvents(db: Db, nodeId: string): EventView[] {

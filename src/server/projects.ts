@@ -1,16 +1,12 @@
 import { realpathSync } from "node:fs";
 import { basename, resolve } from "node:path";
+import type { ProjectRow } from "../shared/api.js";
 import { loadProjectConfig, type ProjectConfig } from "./config.js";
 import type { Db } from "./db.js";
 import { ConfigError, notFound } from "./errors.js";
 import { newId, now } from "./records.js";
 
-export interface ProjectRow {
-  id: string;
-  created_at: string;
-  name: string;
-  repo_path: string;
-}
+export type { ProjectRow };
 
 /** The same folder must give the same `repo_path` however it was spelled. */
 function canonicalRepoPath(repoPath: string): string {

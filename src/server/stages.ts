@@ -1,6 +1,7 @@
 import { existsSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { z } from "zod";
+import type { StagesView, Turn } from "../shared/api.js";
 import { parseYamlFile } from "./yamlFile.js";
 
 export const BUILT_IN_STAGES = [
@@ -18,7 +19,7 @@ export function isBuiltIn(name: string): name is BuiltInStage {
   return (BUILT_IN_STAGES as readonly string[]).includes(name);
 }
 
-export type Turn = "agent" | "human";
+export type { Turn };
 
 export interface StageDef {
   turn: Turn;
@@ -162,6 +163,21 @@ export function validateStages(
   }
 
   return { graph, problems };
+}
+
+/** What the UI needs to draw a process. Leaves out prompt paths, which are the server's business. */
+export function describeStages(graph: StageGraph): StagesView {
+  return {
+    stages: [...graph.stages].map(([name, def]) => ({ name, turn: def.turn, color: def.color ?? null })),
+    types: [...graph.types].map(([name, def]) => ({
+      name,
+      start: def.start,
+      stages: [...def.stages].map(([stage, next]) => ({
+        name: stage,
+        next: [...next].map(([outcome, target]) => ({ outcome, target })),
+      })),
+    })),
+  };
 }
 
 /** Returns the parsed file and every problem in it. Never throws for bad content. */
