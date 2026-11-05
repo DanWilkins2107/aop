@@ -14,6 +14,7 @@ import { ApiError, badRequest, ConfigError, notFound, refused } from "./errors.j
 import * as nodes from "./nodes.js";
 import { describeConfig, loadConfig } from "./config.js";
 import type { Orchestrator } from "./orchestrator.js";
+import { describeProcess } from "./process.js";
 import { addProject, deleteProject, getProject, listProjects, updateProject } from "./projects.js";
 import { getRun } from "./runs.js";
 import { search } from "./search.js";
@@ -204,6 +205,8 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
 
   // The one process, shared by all projects. Read from disk every time.
   app.get("/api/stages", (c) => c.json(describeStages(loadConfig().graph)));
+  // For the process page, which still answers when the config is invalid, listing the problems.
+  app.get("/api/process", (c) => c.json(describeProcess()));
 
   // Read-only on purpose. Agents can reach this API, so no route may change commands.
   app.get("/api/config", (c) => c.json(describeConfig()));

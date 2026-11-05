@@ -5,6 +5,7 @@ import { openDb, type Db } from "./db.js";
 import { ConfigError } from "./errors.js";
 import { Orchestrator } from "./orchestrator.js";
 import { configPath, dbPath } from "./paths.js";
+import { Scheduler } from "./scheduler.js";
 import { HOSTNAME, startServer } from "./server.js";
 
 const DEFAULT_PORT = 4317;
@@ -35,6 +36,7 @@ export async function runServer(argv: string[], usage: string): Promise<void> {
     db = openDb();
     const changes = new ChangeFeed();
     const orchestrator = new Orchestrator(db, { changes });
+    const scheduler = new Scheduler(db, { changes });
     // Binding the port comes before touching any agent, so a second server on this port stops here.
     const server = await startServer(db, port, { changes, orchestrator });
     const url = `http://${HOSTNAME}:${server.port}`;
@@ -46,6 +48,7 @@ export async function runServer(argv: string[], usage: string): Promise<void> {
     const shutdown = () => {
       if (stopping) return;
       stopping = true;
+      scheduler.stop();
       console.log("Stopping agents...");
       void orchestrator
         .shutdown()
@@ -61,6 +64,8 @@ export async function runServer(argv: string[], usage: string): Promise<void> {
     for (const signal of ["SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK"] as const) process.on(signal, shutdown);
 
     await orchestrator.start(url);
+    // After the orchestrator, so the first children it creates are picked up straight away.
+    if (!stopping) scheduler.start();
   } catch (error) {
     db?.close();
     // A bad config is the expected failure here: print its problems, not a stack trace.

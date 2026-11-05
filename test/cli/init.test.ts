@@ -350,4 +350,17 @@ describe("aop init from the CLI", () => {
     expect(again.status).toBe(1);
     expect(again.stderr).toContain("already exists");
   }, 60_000);
+
+  it("shares its usage line with the CLI's help", () => {
+    const box = sandbox();
+    const cli = (...args: string[]) =>
+      spawnSync(process.execPath, [...nodeArgs("src/cli/main.ts"), ...args], { encoding: "utf8", env: cliEnv(box) });
+    const line = cli("help").stdout.split("\n").find((l) => l.trim().startsWith("aop init"));
+    expect(line).toBeDefined();
+    const bad = cli("init", "--bogus");
+    expect(bad.status).toBe(2);
+    expect(bad.stderr).toContain(`Usage: ${line!.trim()}`);
+    expect(cli("init", "--help").stdout).toContain("--fill-missing       Config exists");
+    expect(existsSync(box.home)).toBe(false);
+  }, 60_000);
 });

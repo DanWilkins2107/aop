@@ -10,10 +10,8 @@ import { ConfigError } from "../server/errors.js";
 import { loadStagesFile } from "../server/stages.js";
 import { parseYamlFile } from "../server/yamlFile.js";
 
-export const INIT_USAGE = `Usage: aop init [--yes] [--fill-missing] [--agent-session-command <cmd>] [--out-of-sandbox-command <cmd>]
-                [--open-from <dir>] [--create-open-from] [--agent-timeout-minutes <n>] [--stages <file>]
-
-Sets up AOP_HOME, or ~/.aop. Asks for each setting, unless a flag gives it.
+/** What `aop init --help` adds under the CLI's usage line. */
+const FLAG_HELP = `Sets up AOP_HOME, or ~/.aop. Asks for each setting, unless a flag gives it.
   --yes                Don't ask. Settings not given by flags use their defaults.
   --fill-missing       Config exists: only add missing default files. Never overwrites.
   --stages <file>      Use your own stages file instead of the default process.
@@ -30,6 +28,8 @@ export interface InitIo {
   platform: NodeJS.Platform;
   /** The installed package, holding `defaults/` and `plugin/`. */
   packageRoot: string;
+  /** The usage line from the CLI's command table, for help and usage errors. */
+  usage: string;
 }
 
 const PACKAGE_ROOT = fileURLToPath(new URL("../..", import.meta.url));
@@ -359,11 +359,11 @@ async function init(argv: string[], io: InitIo): Promise<void> {
       },
     }).values;
     if ((values as { help?: boolean }).help) {
-      io.output.write(`${INIT_USAGE}\n`);
+      io.output.write(`${io.usage}\n\n${FLAG_HELP}\n`);
       return;
     }
   } catch (error) {
-    throw new UsageFailure(`${(error as Error).message}\n\n${INIT_USAGE}`);
+    throw new UsageFailure(`${(error as Error).message}\n${io.usage}`);
   }
 
   const say = (text: string) => io.output.write(`${text}\n`);
@@ -436,6 +436,7 @@ export async function runInit(argv: string[], partial: Partial<InitIo> = {}): Pr
     cwd: process.cwd(),
     platform: process.platform,
     packageRoot: PACKAGE_ROOT,
+    usage: "Usage: aop init [options]",
     ...partial,
   };
   try {

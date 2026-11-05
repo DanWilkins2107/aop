@@ -861,3 +861,26 @@ p.action-text:last-child {
   justify-content: flex-end;
   gap: 8px;
 }
+
+/* ---- process ---- */
+
+.process-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.process-type {
+  padding: 10px 0 14px;
+  border-top: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+.process-type:last-child {
+  border-bottom: 1px solid var(--border);
+}
+.process-type h2 {
+  font-size: 14px;
+  margin: 0;
+}
+.process-type .setting-about {
+  margin: 2px 0 8px;
+}

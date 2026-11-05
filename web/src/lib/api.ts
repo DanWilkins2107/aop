@@ -6,6 +6,7 @@ import type {
   MessageRow,
   NodeView,
   ProjectRow,
+  ProcessView,
   StagesView,
 } from "../../../src/shared/api.js";
 
@@ -58,6 +59,7 @@ export const api = {
   projectEdges: (projectId: string) => send<EdgeRow[]>("GET", `${projectPath(projectId)}/edges`),
   stages: () => send<StagesView>("GET", "/stages"),
   config: () => send<ConfigView>("GET", "/config"),
+  process: () => send<ProcessView>("GET", "/process"),
   createNode: (projectId: string, body: { type?: string; stage?: string; title: string; body: string; cron?: string }) =>
     send<NodeView>("POST", `${projectPath(projectId)}/nodes`, body),
 

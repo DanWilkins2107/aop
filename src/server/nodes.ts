@@ -3,6 +3,7 @@ import type { Db } from "./db.js";
 import { badRequest, notFound, refused } from "./errors.js";
 import type { EdgeRow, EventView, LinkRow, MessageRow, NodeRow, NodeView, Turn } from "../shared/api.js";
 import { appendEvent, newId, now, type Actor } from "./records.js";
+import { cronProblem } from "./cron.js";
 import { isBuiltIn, type StageGraph } from "./stages.js";
 
 export type { EdgeRow, EventView, LinkRow, MessageRow, NodeRow, NodeView };
@@ -126,10 +127,9 @@ export function listNodes(db: Db, projectId: string): NodeView[] {
   return rows.map((node) => toView(db, graph, node));
 }
 
-/** A shape check only, until the scheduler brings a real cron parser. */
-export function isValidCron(cron: string): boolean {
-  const fields = cron.trim().split(/\s+/);
-  return fields.length === 5 && fields.every((field) => /^[\w*,/?#-]+$/.test(field));
+function assertValidCron(cron: string): void {
+  const problem = cronProblem(cron);
+  if (problem !== null) throw badRequest(`Invalid cron "${cron}": ${problem}`);
 }
 
 /** Built-ins with state of their own, which their actions collect. Create and move can't land on them. */
@@ -179,7 +179,7 @@ export function createNode(
   const { type, stage } = resolveStart(graph, input);
   if (stage === "scheduled") {
     if (input.cron === undefined) throw badRequest("A node starting at scheduled requires a cron");
-    if (!isValidCron(input.cron)) throw badRequest(`Invalid cron "${input.cron}": expected five fields`);
+    assertValidCron(input.cron);
   } else if (input.cron !== undefined) {
     throw badRequest(`cron only applies to a scheduled node, and this one starts at "${stage}"`);
   }
@@ -351,10 +351,15 @@ function assertAgentStage(graph: StageGraph, node: NodeRow, action: string): voi
   }
 }
 
-/** Refuses a return to a stage that has since been removed. A human move is the way out of that. */
-function assertCanReturn(graph: StageGraph, type: string, stage: string): void {
-  if (!stageIsLive(graph, type, stage)) {
-    throw refused(`Can't return to "${stage}": it no longer exists in type "${type}". Use a human move instead`);
+/**
+ * Refuses a return to a stage that has since been removed. A human move is the way out of that.
+ * Going back to `splitting` restarts the agent stage that began the split, so that must exist too.
+ */
+function assertCanReturn(graph: StageGraph, type: string, stage: string, returnStage: string | null): void {
+  for (const target of stage === "splitting" && returnStage !== null ? [stage, returnStage] : [stage]) {
+    if (!stageIsLive(graph, type, target)) {
+      throw refused(`Can't return to "${target}": it no longer exists in type "${type}". Use a human move instead`);
+    }
   }
 }
 
@@ -386,11 +391,13 @@ function returnPlacement(
   node: NodeRow,
   stage: string,
 ): { stage: string; returnStage: string | null } {
-  assertCanReturn(graph, node.type, stage);
-  if (stage !== "splitting") return { stage, returnStage: null };
+  if (stage !== "splitting") {
+    assertCanReturn(graph, node.type, stage, null);
+    return { stage, returnStage: null };
+  }
   const origin = lastEntry(db, node.id, "split_start")?.from_stage;
   if (origin === undefined) throw refused("Can't return to splitting: no event records what began the split");
-  assertCanReturn(graph, node.type, origin);
+  assertCanReturn(graph, node.type, stage, origin);
   return { stage, returnStage: origin };
 }
 
@@ -469,7 +476,7 @@ export function move(
   assertNoOwnAction(input.stage);
   if (input.cron !== undefined) {
     if (input.stage !== "scheduled") throw badRequest("cron only applies when moving to scheduled");
-    if (!isValidCron(input.cron)) throw badRequest(`Invalid cron "${input.cron}": expected five fields`);
+    assertValidCron(input.cron);
   }
 
   db.transaction(() => {
@@ -539,6 +546,7 @@ export function fail(
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
+    if (input.actor === "agent") assertRunStillOnNode(db, nodeId);
     assertAgentStage(graph, node, "fail");
     applyStageChange(db, node, {
       stage: "failed",
@@ -591,21 +599,11 @@ export function restore(db: Db, nodeId: string): NodeView {
     if (node.stage !== "invalidated") {
       throw refused(`Can't restore: the node is at "${node.stage}", not invalidated`);
     }
-    const event = db
-      .prepare(
-        `SELECT data FROM events
-          WHERE node_id = ? AND kind = 'stage_changed' AND json_extract(data, '$.to_stage') = 'invalidated'
-          ORDER BY rowid DESC LIMIT 1`,
-      )
-      .get(node.id) as { data: string } | undefined;
-    if (!event) throw refused("Can't restore: no event records where this node was invalidated from");
-    const from = JSON.parse(event.data) as {
-      from_stage: string;
-      from_type: string;
-      from_return_stage: string | null;
-    };
+    // Invalidating is the only way in: create and move refuse this stage.
+    const from = lastEntry(db, node.id, "invalidate");
+    if (!from) throw refused("Can't restore: no event records where this node was invalidated from");
 
-    assertCanReturn(graph, from.from_type, from.from_stage);
+    assertCanReturn(graph, from.from_type, from.from_stage, from.from_return_stage);
     applyStageChange(db, node, {
       stage: from.from_stage,
       type: from.from_type,
@@ -652,11 +650,12 @@ export function unblock(db: Db, nodeId: string, input: { actor: Actor }): NodeVi
     if (node.stage !== "externally_blocked" || node.return_stage === null) {
       throw refused(`Can't unblock: the node is at "${node.stage}", not externally_blocked`);
     }
-    assertCanReturn(graph, node.type, node.return_stage);
+    const returnStage = lastEntry(db, node.id, "block")?.from_return_stage ?? null;
+    assertCanReturn(graph, node.type, node.return_stage, returnStage);
     applyStageChange(db, node, {
       stage: node.return_stage,
       type: node.type,
-      returnStage: lastEntry(db, node.id, "block")?.from_return_stage ?? null,
+      returnStage,
       via: "unblock",
       actor: "human",
     });
