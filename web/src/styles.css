@@ -632,6 +632,12 @@ label {
   font-weight: 600;
   overflow-wrap: anywhere;
 }
+/* Bigger, with a thicker ring, so it stands out on any stage colour, green ones included. */
+.stage-band .claim-dot {
+  width: 10px;
+  height: 10px;
+  border-width: 2px;
+}
 .meta-note {
   margin: 6px 0 0;
   font-size: 13px;
