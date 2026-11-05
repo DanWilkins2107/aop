@@ -19,7 +19,6 @@ function ReasonButton({
   hint,
   placeholder,
   submitLabel,
-  submitClass = "",
   action,
   reload,
 }: {
@@ -28,7 +27,6 @@ function ReasonButton({
   hint: string;
   placeholder: string;
   submitLabel: string;
-  submitClass?: string;
   action: (reason: string) => Promise<unknown>;
   reload: Reload;
 }) {
@@ -48,7 +46,7 @@ function ReasonButton({
           onSubmit={() => void run(() => action(reason.trim())).then((ok) => ok && setOpen(false))}
           error={error}
           submitLabel={submitLabel}
-          submitClass={submitClass}
+          submitClass=""
           canSubmit={reason.trim() !== ""}
         >
           <p className="field-hint">{hint}</p>
@@ -148,7 +146,6 @@ export function Details({
               hint="Its descendants will read as invalidated by parent. It can be restored later."
               placeholder="Why is this no longer valid?"
               submitLabel="Invalidate"
-              submitClass="btn-danger"
               action={(reason) => api.invalidate(node.id, reason)}
               reload={reload}
             />

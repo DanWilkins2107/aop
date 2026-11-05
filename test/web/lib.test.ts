@@ -5,8 +5,8 @@ import type { EventView, NodeView, TypeView } from "../../src/shared/api.js";
 import { contrast, parseHex, readableText, visibleOn } from "../../web/src/lib/color.js";
 import { CARD_HEIGHT, CARD_WIDTH, fittedViewport, graphView, layoutGraph, smoothPath } from "../../web/src/lib/layout.js";
 import { originalStage, stageDrawing } from "../../web/src/lib/stageGraph.js";
-import { describeEvent, humanize, stageOptionGroups } from "../../web/src/lib/format.js";
-import { cardKind, cardLook, cardType, isFinished, isInvalidated, lookOf, stageColor, stageLabel } from "../../web/src/lib/stageStyle.js";
+import { claimLabel, describeEvent, humanize, stageOptionGroups } from "../../web/src/lib/format.js";
+import { cardKind, cardLook, cardType, isInvalidated, lookOf, stageColor, stageLabel } from "../../web/src/lib/stageStyle.js";
 
 const COLORS = ["#ffc107", "#cddc39", "#000000", "#ffffff", "#123", "#4263eb", "#e91e63", "#808080", "#12b886aa"];
 
@@ -394,6 +394,49 @@ describe("graph layout", () => {
     });
   });
 
+  describe("moves as little as it can when a child is added", () => {
+    const xsOf = (at: Map<string, { x: number; y: number }>, ids: string[]) => ids.map((id) => at.get(id)!.x);
+    const ascending = (xs: number[]) => xs.every((x, i) => i === 0 || x > xs[i - 1]!);
+    // Two earlier groups, then a tree that gets new children: under the root, and under a child.
+    const ids = ["solo", "a", "a1", "a2", "t", "t1", "t2", "t3", "t11", "t12", "t31"];
+    const edges = [
+      edge("e1", "a", "a1", "subtask"),
+      edge("e2", "a", "a2", "subtask"),
+      edge("e3", "a1", "a2", "blocks"),
+      edge("e4", "t", "t1", "subtask"),
+      edge("e5", "t", "t2", "subtask"),
+      edge("e6", "t", "t3", "subtask"),
+      edge("e7", "t1", "t11", "subtask"),
+      edge("e8", "t1", "t12", "subtask"),
+      edge("e9", "t3", "t31", "subtask"),
+      edge("e10", "t12", "t3", "blocks"),
+    ];
+    const before = layoutGraph(ids, edges).positions;
+    const rows = (at: Map<string, { x: number; y: number }>) => {
+      const byY = new Map<number, string[]>();
+      for (const id of ids.slice(4)) byY.set(at.get(id)!.y, [...(byY.get(at.get(id)!.y) ?? []), id]);
+      return [...byY.values()].map((row) => row.sort((p, q) => at.get(p)!.x - at.get(q)!.x));
+    };
+
+    for (const [parent, child] of [["t", "t4"], ["t1", "t13"], ["t31", "t311"]] as const) {
+      it(`leaves earlier groups alone and keeps the order in each row, adding ${child} under ${parent}`, () => {
+        const after = layoutGraph([...ids, child], [...edges, edge("new", parent, child, "subtask")]).positions;
+        for (const id of ids.slice(0, 4)) expect(after.get(id)).toEqual(before.get(id));
+        for (const row of rows(before)) {
+          expect(new Set(row.map((id) => after.get(id)!.y)).size).toBe(1);
+          expect(ascending(xsOf(after, row))).toBe(true);
+        }
+        // The new child goes after the siblings it already had.
+        const siblings = edges.filter((e) => e.source_id === parent && e.kind === "subtask").map((e) => e.target_id);
+        for (const sibling of siblings) expect(after.get(child)!.x).toBeGreaterThan(after.get(sibling)!.x);
+      });
+    }
+
+    it("lays out the same graph the same way, whatever order the edges arrive in", () => {
+      expect(layoutGraph(ids, [...edges].reverse()).positions).toEqual(before);
+    });
+  });
+
   it("routes a long edge around a card in its way", () => {
     const edges = [edge("1", "a", "b", "subtask"), edge("2", "b", "c", "blocks"), edge("3", "a", "c", "subtask")];
     const { positions, routes } = layoutGraph(["a", "b", "c"], edges);
@@ -404,15 +447,30 @@ describe("graph layout", () => {
     }
   });
 
-  it("fits every card in view, centred", () => {
+  it("fits every card in view, from the top of the canvas", () => {
     const options = { padding: { x: 20, y: 20 }, minZoom: 0.1, maxZoom: 1 };
     const positions = [{ x: 0, y: 0 }, { x: 1000, y: 500 }];
     const { x, y, zoom } = fittedViewport(positions, { width: 800, height: 400 }, options);
     expect(zoom).toBeLessThan(1);
     expect(x).toBeGreaterThanOrEqual(20);
-    expect(y).toBeGreaterThanOrEqual(20);
+    expect(y).toBe(20);
     expect(x + (1000 + CARD_WIDTH) * zoom).toBeLessThanOrEqual(780.01);
     expect(y + (500 + CARD_HEIGHT) * zoom).toBeLessThanOrEqual(380.01);
+  });
+
+  it("puts a short graph at the top rather than in the middle", () => {
+    const options = { padding: { x: 56, y: 24 }, minZoom: 0.5, maxZoom: 1 };
+    const row = [0, 1, 2].map((i) => ({ x: i * 292, y: 0 }));
+    const { x, y, zoom } = fittedViewport(row, { width: 1440, height: 800 }, options);
+    expect(zoom).toBe(1);
+    expect(y).toBe(24);
+    expect(x).toBeCloseTo((1440 - (2 * 292 + CARD_WIDTH)) / 2);
+  });
+
+  it("stops at the floor for a wide graph, at its top left", () => {
+    const options = { padding: { x: 56, y: 24 }, minZoom: 0.5, maxZoom: 1 };
+    const wide = Array.from({ length: 20 }, (_, i) => ({ x: i * 292, y: (i % 3) * 138 }));
+    expect(fittedViewport(wide, { width: 1440, height: 800 }, options)).toEqual({ x: 56, y: 24, zoom: 0.5 });
   });
 
   it("won't zoom past the maximum, and centres a small graph", () => {
@@ -433,6 +491,16 @@ describe("graph layout", () => {
     expect(zoom).toBe(0.7);
     expect(x).toBeCloseTo(16 - 100 * 0.7);
     expect(y).toBeCloseTo(16 - 50 * 0.7);
+  });
+
+  it("names a claim by its holder, or by an agent's short run ID", () => {
+    expect(claimLabel({ claimed_by: null, run_id: null })).toBeNull();
+    expect(claimLabel({ claimed_by: "human", run_id: null })).toEqual({ text: "human", title: "Claimed by human" });
+    expect(claimLabel({ claimed_by: "agent", run_id: "0123456789abcdef" })).toEqual({
+      text: "01234567",
+      title: "Claimed by agent run 0123456789abcdef",
+    });
+    expect(claimLabel({ claimed_by: "agent", run_id: null })).toEqual({ text: "agent", title: "Claimed by agent" });
   });
 
   it("draws a path through a route", () => {
@@ -523,13 +591,6 @@ describe("waiting and hidden cards", () => {
     expect(stageLabel(nodeAt("pr_review"))).toBe("PR review");
     expect(stageLabel(nodeAt("beta", { invalidated_by_parent: true }))).toBe("Invalidated by parent");
     expect(stageLabel(nodeAt("legal_signoff", { stage_exists: false }))).toBe("Legal signoff: stage gone");
-  });
-
-  it("counts only done and broken down nodes as finished", () => {
-    expect(isFinished(nodeAt("done"))).toBe(true);
-    expect(isFinished(nodeAt("broken_down"))).toBe(true);
-    expect(isFinished(nodeAt("beta"))).toBe(false);
-    expect(isFinished(nodeAt("invalidated"))).toBe(false);
   });
 
   it("counts a node as invalidated if it or a parent is", () => {

@@ -1,5 +1,9 @@
+import { randomUUID } from "node:crypto";
 import type { Hono } from "hono";
 import type { Db } from "../src/server/db.js";
+import type { NodeRow } from "../src/server/nodes.js";
+import { logPathFor } from "../src/server/runLog.js";
+import { beginRun } from "../src/server/runs.js";
 import type { NodeView } from "../src/shared/api.js";
 
 /**
@@ -67,15 +71,40 @@ export async function seed(app: Hono, db: Db, projectId: string): Promise<void> 
   // A human is steering this one, whatever stage it reaches.
   await call("POST", `/nodes/${exportPdf.id}/claim`, { actor: "human" });
 
-  // A blocked node: the emails wait for the webhooks, which an agent is still working on.
+  // A blocked node: the emails wait for the webhooks, which an agent is still working on. The demo
+  // runs no agents, so the run is recorded directly, the way the orchestrator opens one, to show
+  // its ID on the claim.
   await edge(webhooks, emails, "blocks");
-  await call("POST", `/nodes/${webhooks.id}/claim`, { actor: "agent" });
+  const runId = randomUUID();
+  beginRun(db, webhooks as unknown as NodeRow, runId, logPathFor(runId));
 
   // A question and a failure.
   await call("POST", `/nodes/${rounding.id}/ask`, {
     question: "Should tax round per line or per invoice? Finance's export rounds per line, the old system per invoice.",
   });
   await call("POST", `/nodes/${migrate.id}/fail`, { reason: "Agent exited with code 1 during the backfill." });
+
+  // Back and forth between the agent and review, with messages on every visit.
+  const receipts = await create(
+    "dev",
+    "Stop duplicate receipts when a payment retries",
+    "A retried charge sends the customer a second receipt. Send one per payment, whatever the retries.",
+  );
+  await say(receipts, "Adding an idempotency key on the receipt job, built from the payment ID.");
+  await outcome(receipts, "pr_raised");
+  await say(receipts, "PR is up. The key is checked before the send, with a test for a retried charge.");
+  await say(
+    receipts,
+    "If the first send times out after the provider accepted it, the retry still goes out. Can the key cover that?",
+    "human",
+  );
+  await outcome(receipts, "changes");
+  await say(receipts, "Reproduced the timeout case. The key is now recorded before the send and released only on a hard failure.");
+  await say(receipts, "Also add a test that drops the connection mid-send.", "human");
+  await say(receipts, "Added. It fakes a dropped connection after the provider accepts the email.");
+  await outcome(receipts, "pr_raised");
+  await say(receipts, "Updated the PR with both fixes. All receipt tests pass.");
+  await say(receipts, "Looks right now. I'll give it a final read this afternoon.", "human");
 
   // An invalidated node with a child it invalidates.
   const reporting = await create("triage", "Rewrite the reporting pipeline", "Move reporting onto the warehouse.");

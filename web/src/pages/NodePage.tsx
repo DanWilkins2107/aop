@@ -46,13 +46,6 @@ function ancestorsOf(node: NodeView, nodes: NodeView[], edges: EdgeRow[]): NodeV
   }
 }
 
-function turnLabel(node: NodeView): string | null {
-  if (!node.stage_exists) return "Needs a human to move it";
-  if (node.turn === "human") return "Your turn";
-  if (node.turn === "agent") return "Agent's turn";
-  return null;
-}
-
 const LINK_LABELS: Record<LinkRow["kind"], string> = { pr: "PR", ticket: "Ticket" };
 
 /** Plain links named by kind. A second of the same kind gets a number, to tell them apart. */
@@ -116,19 +109,10 @@ export function NodePage() {
 
         <header className="panel node-meta">
           <p className="stage-band" style={{ background: band.background, color: band.text }}>
-            {humanize(node.stage)}
-          </p>
-          <h1 className={node.stage === "invalidated" || byParent ? "title-dead" : undefined}>{node.title}</h1>
-          <p className="meta-line">
-            {[humanize(node.type), turnLabel(node)].map((part) =>
-              part ? (
-                <span key={part} className="meta-part">
-                  {part}
-                </span>
-              ) : null,
-            )}
+            <span>{humanize(node.stage)}</span>
             <ClaimMark node={node} />
           </p>
+          <h1 className={node.stage === "invalidated" || byParent ? "title-dead" : undefined}>{node.title}</h1>
           {!node.stage_exists ? (
             <p className="meta-note meta-note-alert" role="alert">
               This node's stage is gone. <code>{node.stage}</code> is no longer in type <code>{node.type}</code> in
@@ -168,7 +152,7 @@ export function NodePage() {
         </header>
 
         <Description node={node} reload={reload} />
-        <Messages node={node} messages={messages} events={events} reload={reload} />
+        <Messages node={node} messages={messages} stages={stages} reload={reload} />
         <Details node={node} edges={data.edges} nodes={projectNodes} events={events} stages={stages} titleOf={titleOf} reload={reload} />
       </div>
     </div>

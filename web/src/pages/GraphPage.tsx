@@ -8,7 +8,7 @@ import { StageCard, type StageCardNode } from "../components/StageCard.js";
 import { api } from "../lib/api.js";
 import { CARD_HEIGHT, CARD_WIDTH, fittedViewport, graphView, type FitOptions } from "../lib/layout.js";
 import { useLiveData } from "../lib/live.js";
-import { isFinished, isInvalidated } from "../lib/stageStyle.js";
+import { isInvalidated } from "../lib/stageStyle.js";
 
 const nodeTypes = { stage: StageCard };
 const edgeTypes = { routed: RoutedEdge };
@@ -19,17 +19,16 @@ const BLOCKS_STROKE = "#495057";
 /** Below this the canvas is a small window, so cards stay big enough to read. */
 const NARROW_WIDTH = 640;
 
-// The left side clears the zoom controls. A project too wide even at this zoom pans instead.
-const WIDE_FIT: FitOptions = { padding: { x: 56, y: 24 }, minZoom: 0.25, maxZoom: 1 };
+// The left side clears the zoom controls. Below half size the text can't be read, so a project too
+// wide for that starts at its top left and pans instead.
+const WIDE_FIT: FitOptions = { padding: { x: 56, y: 24 }, minZoom: 0.5, maxZoom: 1 };
 const NARROW_FIT: FitOptions = { padding: { x: 16, y: 16 }, minZoom: 0.7, maxZoom: 1 };
 // What the fit button does: the whole graph, however small.
 const FIT_ALL = { padding: "16px", maxZoom: 1 } as const;
 
-type HideToggle = "hideInvalidated" | "hideFinished";
-
-/** A toggle remembered per project. */
-function useHide(toggle: HideToggle, projectId: string) {
-  const key = `aop:${toggle}:${projectId}`;
+/** "Hide invalidated", remembered per project. */
+function useHideInvalidated(projectId: string) {
+  const key = `aop:hideInvalidated:${projectId}`;
   const [hide, setHide] = useState(() => {
     try {
       return localStorage.getItem(key) === "1";
@@ -85,8 +84,7 @@ export function GraphPage() {
   const { projectId = "" } = useParams();
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
-  const [hideInvalidated, setHideInvalidated] = useHide("hideInvalidated", projectId);
-  const [hideFinished, setHideFinished] = useHide("hideFinished", projectId);
+  const [hideInvalidated, setHideInvalidated] = useHideInvalidated(projectId);
   const { ref: canvasRef, size } = useSize();
   // React Flow applies its starting view just after it mounts, so it stays hidden until then.
   const [readyFor, setReadyFor] = useState<string | null>(null);
@@ -108,7 +106,7 @@ export function GraphPage() {
     const { nodes, edges, positions, routes } = graphView(
       data.nodes,
       data.edges,
-      (n) => (hideInvalidated && isInvalidated(n)) || (hideFinished && isFinished(n)),
+      (n) => hideInvalidated && isInvalidated(n),
     );
     const stageOf = new Map(nodes.map((n) => [n.id, n.stage]));
     const flowNodes: StageCardNode[] = nodes.map((node) => ({
@@ -139,7 +137,7 @@ export function GraphPage() {
     });
     const shownAt = flowNodes.map((node) => node.position);
     return { flowNodes, flowEdges, viewport: fittedViewport(shownAt, size, narrow ? NARROW_FIT : WIDE_FIT) };
-  }, [data, hideInvalidated, hideFinished, size, narrow]);
+  }, [data, hideInvalidated, size, narrow]);
 
   return (
     <div className="graph-page">
@@ -153,10 +151,6 @@ export function GraphPage() {
           <label className="graph-filter">
             <input type="checkbox" checked={hideInvalidated} onChange={(e) => setHideInvalidated(e.target.checked)} />
             Hide invalidated
-          </label>
-          <label className="graph-filter">
-            <input type="checkbox" checked={hideFinished} onChange={(e) => setHideFinished(e.target.checked)} />
-            Hide finished
           </label>
           <Link to={`/p/${projectId}/settings`} className="quiet-link">
             Settings
@@ -182,11 +176,7 @@ export function GraphPage() {
           <div className="graph-empty">
             <strong>Every node here is hidden</strong>
             <span className="muted">
-              {hideInvalidated && hideFinished
-                ? 'They\'re all invalidated or finished. Turn off "Hide invalidated" or "Hide finished" to see them.'
-                : hideFinished
-                  ? 'They\'re all done or broken down. Turn off "Hide finished" to see them.'
-                  : 'They\'re all invalidated or invalidated by a parent. Turn off "Hide invalidated" to see them.'}
+              They're all invalidated or invalidated by a parent. Turn off "Hide invalidated" to see them.
             </span>
           </div>
         ) : null}
