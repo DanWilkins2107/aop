@@ -45,6 +45,17 @@ export const directives = (...lines: string[]) => lines.map((line) => `@@${line}
  */
 export const settle = (ms = 1_500) => new Promise((done) => setTimeout(done, ms));
 
+/** Waits for the process ID that a fake agent's `@@pid` or `@@child` writes to a file. */
+export function pidIn(file: string): Promise<number> {
+  return until(`a process ID in ${file}`, () => {
+    try {
+      return Number(readFileSync(file, "utf8")) || null;
+    } catch {
+      return null;
+    }
+  });
+}
+
 export async function until<T>(what: string, check: () => T | undefined | null | false, timeoutMs = 30_000): Promise<T> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
@@ -200,13 +211,7 @@ export async function world(options: { config?: string; graceMs?: number; home?:
       return self.node(nodeId);
     },
     async pidFrom(name) {
-      const pid = await until(`pid file ${name}`, () => {
-        try {
-          return Number(readFileSync(self.file(name), "utf8")) || null;
-        } catch {
-          return null;
-        }
-      });
+      const pid = await pidIn(self.file(name));
       pids.add(pid);
       return pid;
     },

@@ -1,12 +1,11 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished } from "vitest";
 import { openDb } from "../../src/server/db.js";
 import { isAlive, killTree, readProcessStarts, waitGone } from "../../src/server/processes.js";
 import { listProcesses, recordProcess } from "../../src/server/runs.js";
 import type { AgentProcessView, NodeView, ProjectRow, ReapResult } from "../../src/shared/api.js";
-import { aopShim, directives, fakeConfig, nodeArgs, settle, until, world, type World } from "./agents.helpers.js";
+import { aopShim, directives, fakeConfig, nodeArgs, pidIn, settle, until, world, type World } from "./agents.helpers.js";
 import { makeHome, makeRepo } from "./helpers.js";
 
 const TIMEOUT = { timeout: 120_000 };
@@ -276,6 +275,15 @@ describe("a real server process", () => {
     return { home, shim, first, url, post, project };
   }
 
+  /** A fake agent's process, killed when the test finishes if a failure left it running. */
+  async function agentPid(file: string): Promise<number> {
+    const pid = await pidIn(file);
+    onTestFinished(async () => {
+      if (isAlive(pid)) await killTree(pid);
+    });
+    return pid;
+  }
+
   function dbNode(home: string, id: string): NodeView {
     const db = openDb(join(home, "aop.db"));
     try {
@@ -294,14 +302,8 @@ describe("a real server process", () => {
       title: "t",
       body: directives(`pid ${pidFile}`, `child ${childFile}`, "hang"),
     });
-    const pid = await until("the agent's pid", () => {
-      try {
-        return Number(readFileSync(pidFile, "utf8")) && Number(readFileSync(childFile, "utf8")) ? Number(readFileSync(pidFile, "utf8")) : null;
-      } catch {
-        return null;
-      }
-    });
-    const child = Number(readFileSync(childFile, "utf8"));
+    const pid = await agentPid(pidFile);
+    const child = await agentPid(childFile);
     await until("the process record", () => {
       const db = openDb(join(home, "aop.db"));
       try {
@@ -326,8 +328,6 @@ describe("a real server process", () => {
     } finally {
       second.child.kill("SIGKILL");
       await second.exited;
-      if (isAlive(pid)) await killTree(pid);
-      if (isAlive(child)) await killTree(child);
     }
   });
 
@@ -339,13 +339,7 @@ describe("a real server process", () => {
       title: "t",
       body: directives(`pid ${pidFile}`, "hang"),
     });
-    const pid = await until("the agent's pid", () => {
-      try {
-        return Number(readFileSync(pidFile, "utf8")) || null;
-      } catch {
-        return null;
-      }
-    });
+    const pid = await agentPid(pidFile);
     first.child.kill("SIGKILL");
     await first.exited;
     await killTree(pid);
@@ -371,13 +365,7 @@ describe("a real server process", () => {
       title: "t",
       body: directives(`pid ${pidFile}`, "hang"),
     });
-    const pid = await until("the agent's pid", () => {
-      try {
-        return Number(readFileSync(pidFile, "utf8")) || null;
-      } catch {
-        return null;
-      }
-    });
+    const pid = await agentPid(pidFile);
     first.child.kill("SIGTERM");
     await first.exited;
     expect(isAlive(pid)).toBe(false);
