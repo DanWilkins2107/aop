@@ -22,19 +22,22 @@ function boxLook(kind: BoxKind) {
   }
 }
 
-/** A drawing of one type's stages from `stages.yaml`, with the node's own stage highlighted. */
+/**
+ * A drawing of one type's stages from `stages.yaml`, with the node's own stage highlighted. With no
+ * node, as on the process page, it's the type alone with nothing highlighted.
+ */
 export function PipelineGraph({
   node,
   type,
-  returnTo,
+  returnTo = null,
 }: {
-  node: NodeView;
+  node?: Pick<NodeView, "type" | "stage">;
   type: TypeView | undefined;
   /** Set when the node is on a global stage: the stage it goes back to. */
-  returnTo: string | null;
+  returnTo?: string | null;
 }) {
-  if (!type) return <p className="muted section-text">Type "{node.type}" isn't in stages.yaml, so there's no pipeline to draw.</p>;
-  const drawing = stageDrawing(type, node.stage, returnTo);
+  if (!type) return <p className="muted section-text">Type "{node?.type}" isn't in stages.yaml, so there's no pipeline to draw.</p>;
+  const drawing = stageDrawing(type, node?.stage ?? null, returnTo);
   const returnDrawn = drawing.boxes.some((box) => box.kind === "return");
 
   return (

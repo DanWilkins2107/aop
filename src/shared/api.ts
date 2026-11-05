@@ -147,3 +147,11 @@ export interface TypeView {
   start: string;
   stages: { name: string; next: { outcome: string; target: string }[] }[];
 }
+
+/** The process page: `stages.yaml` as far as it could be read, with every problem in the config. */
+export interface ProcessView {
+  /** Absolute path, or null when `config.yaml` doesn't say where the file is. */
+  stages_path: string | null;
+  problems: string[];
+  process: StagesView | null;
+}
