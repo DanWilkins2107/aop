@@ -542,6 +542,10 @@ export function fail(
   nodeId: string,
   input: { actor: Actor; reason?: string | undefined },
 ): NodeView {
+  // `failed` is AOP's record of a run that ended without finishing. A human stops the run instead.
+  if (input.actor === "human") {
+    throw refused("Only AOP marks a node failed. Stop its agent run, or move the node");
+  }
   const graph = currentGraph();
 
   db.transaction(() => {
