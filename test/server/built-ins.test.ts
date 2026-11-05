@@ -576,6 +576,26 @@ describe("claims", () => {
   });
 });
 
+describe("one outcome per agent run", () => {
+  it("refuses every agent move once the run has moved the node on, including fail", async () => {
+    // Moves on to write_spec, another agent stage, while the run that reported is still exiting.
+    const node = await h.create("triage");
+    h.db
+      .prepare("INSERT INTO runs (id, created_at, node_id, stage, status, log_path) VALUES ('r1', 'now', ?, 'awaiting_agent_breakdown', 'running', '/log')")
+      .run(node.id);
+    expect((await h.post(node.id, "next", { outcome: "ready", actor: "agent" })).body.stage).toBe("write_spec");
+
+    expect((await h.post(node.id, "fail", { actor: "agent" })).status).toBe(409);
+    expect((await h.post(node.id, "next", { outcome: "done", actor: "agent" })).status).toBe(409);
+    expect((await h.post(node.id, "ask", { question: "Q?" })).status).toBe(409);
+    expect((await h.post(node.id, "split/start")).status).toBe(409);
+    expect((await h.node(node.id)).stage).toBe("write_spec");
+
+    // Only an agent's report is the old run's. AOP and humans can still act on the node.
+    expect((await h.post(node.id, "fail", { actor: "system" })).body.stage).toBe("failed");
+  });
+});
+
 describe("blocks cycles", () => {
   it("refuses a direct and a longer cycle, changing nothing", async () => {
     const a = await h.create("dev");

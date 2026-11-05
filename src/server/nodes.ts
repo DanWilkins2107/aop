@@ -539,6 +539,7 @@ export function fail(
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
+    if (input.actor === "agent") assertRunStillOnNode(db, nodeId);
     assertAgentStage(graph, node, "fail");
     applyStageChange(db, node, {
       stage: "failed",
