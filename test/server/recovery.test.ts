@@ -6,7 +6,7 @@ import { openDb } from "../../src/server/db.js";
 import { isAlive, killTree, readProcessStarts, waitGone } from "../../src/server/processes.js";
 import { listProcesses, recordProcess } from "../../src/server/runs.js";
 import type { AgentProcessView, NodeView, ProjectRow, ReapResult } from "../../src/shared/api.js";
-import { aopShim, directives, fakeConfig, nodeArgs, until, world, type World } from "./agents.helpers.js";
+import { aopShim, directives, fakeConfig, nodeArgs, settle, until, world, type World } from "./agents.helpers.js";
 import { makeHome, makeRepo } from "./helpers.js";
 
 const TIMEOUT = { timeout: 120_000 };
@@ -176,7 +176,7 @@ describe("reap and identity", () => {
     const res = await w.call<ReapResult>("POST", "/agents/reap");
     expect(res.body.killed).toEqual([]);
     expect(res.body.skipped.map((s) => s.run_id)).toEqual(["old-run"]);
-    await new Promise((done) => setTimeout(done, 500));
+    await settle(500);
     expect(isAlive(innocent.pid)).toBe(true);
     // It isn't this record's process, so the record goes.
     expect(listProcesses(w.db)).toEqual([]);

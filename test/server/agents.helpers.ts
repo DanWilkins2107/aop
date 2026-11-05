@@ -39,6 +39,12 @@ export function fakeConfig(extra = ""): string {
 
 export const directives = (...lines: string[]) => lines.map((line) => `@@${line}`).join("\n");
 
+/**
+ * Gives the system time to do something it mustn't, before checking that it didn't. Only for that: wait
+ * for something that should happen with `until` or `expect.poll`, which wait no longer than they need.
+ */
+export const settle = (ms = 1_500) => new Promise((done) => setTimeout(done, ms));
+
 export async function until<T>(what: string, check: () => T | undefined | null | false, timeoutMs = 30_000): Promise<T> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {

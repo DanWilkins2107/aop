@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { HEADLESS_AGENT_FLAGS } from "../../src/server/orchestrator.js";
 import { isAlive, waitGone } from "../../src/server/processes.js";
 import type { EventView, MessageRow, NodeView } from "../../src/shared/api.js";
-import { directives, until, world, type World } from "./agents.helpers.js";
+import { directives, settle, until, world, type World } from "./agents.helpers.js";
 import { makeRepo, STAGES_YAML } from "./helpers.js";
 
 const TIMEOUT = { timeout: 90_000 };
@@ -16,8 +16,8 @@ const logOf = async (runId: string) => (await w.call<string>("GET", `/runs/${run
 const recorded = (name: string) =>
   JSON.parse(readFileSync(w.file(name), "utf8")) as { stdin: string; argv: string[]; cwd: string; env: Record<string, string> };
 
-/** Gives the system time to do something it mustn't. */
-const settle = () => new Promise((done) => setTimeout(done, 1_500));
+/** For a log, which is finished soon after its run ends, once the output has drained. */
+const POLL = { timeout: 10_000, interval: 50 };
 
 describe("starting", () => {
   it("launches the command in the project's path, with the prompt on stdin only", TIMEOUT, async () => {
@@ -167,8 +167,7 @@ describe("how a run ends", () => {
 
     const failure = (await events(node.id)).find((event) => (event.data as { via?: string }).via === "fail");
     expect(JSON.stringify(failure?.data)).toContain("exit code 3");
-    await settle();
-    expect(await logOf(run!.id)).toContain("a line for the log");
+    await expect.poll(() => logOf(run!.id), POLL).toContain("a line for the log");
     expect((await w.call("GET", `/nodes/${node.id}`)).body).toMatchObject({ run_id: null, last_run_id: run!.id });
 
     // Nothing retries by itself.
@@ -187,8 +186,7 @@ describe("how a run ends", () => {
     const node = await w.create(directives('aop ["next","nonsense"]'));
     await w.atStage(node.id, "failed");
     const [run] = await w.runsEnded(node.id);
-    await settle();
-    expect(await logOf(run!.id)).toContain("isn't available");
+    await expect.poll(() => logOf(run!.id), POLL).toContain("isn't available");
   });
 
   it("a command that doesn't exist fails the run, with the shell's error in the log", TIMEOUT, async () => {
@@ -197,8 +195,7 @@ describe("how a run ends", () => {
     const node = await w.create("");
     await w.atStage(node.id, "failed");
     const [run] = await w.runsEnded(node.id);
-    await settle();
-    expect(await logOf(run!.id)).toContain("aop-no-such-command-anywhere");
+    await expect.poll(() => logOf(run!.id), POLL).toContain("aop-no-such-command-anywhere");
   });
 
   it("a missing start folder fails the run clearly", TIMEOUT, async () => {
