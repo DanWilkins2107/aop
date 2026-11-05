@@ -7,6 +7,11 @@
   "bin": {
     "aop": "dist/cli/main.js"
   },
+  "files": [
+    "dist",
+    "plugin",
+    "defaults"
+  ],
   "engines": {
     "node": ">=22"
   },
