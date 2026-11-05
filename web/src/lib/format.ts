@@ -101,7 +101,19 @@ export function describeEvent(event: EventView, titleOf: (id: string) => string)
       return `${data["kind"] === "blocks" ? "Now blocks" : "Subtask added:"} ${titleOf(text(data["target_id"]))}`;
     case "edge_removed":
       return `${data["kind"] === "blocks" ? "No longer blocks" : "Subtask removed:"} ${titleOf(text(data["target_id"]))}`;
+    case "scheduled_run":
+      return "Schedule fired: created a child";
+    case "scheduled_run_skipped":
+      return `Scheduled run skipped: ${SKIP_REASONS[text(data["reason"])] ?? humanize(text(data["reason"]))}`;
     default:
       return humanize(event.kind);
   }
 }
+
+const SKIP_REASONS: Record<string, string> = {
+  previous_unfinished: "the previous child hasn't finished",
+  blocks: "blocked by another node",
+  split: "a parent is still splitting",
+  invalidated_parent: "a parent is invalidated",
+  child_refused: "the child couldn't be created",
+};

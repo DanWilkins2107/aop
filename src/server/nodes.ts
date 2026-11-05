@@ -3,6 +3,7 @@ import type { Db } from "./db.js";
 import { badRequest, notFound, refused } from "./errors.js";
 import type { EdgeRow, EventView, LinkRow, MessageRow, NodeRow, NodeView, Turn } from "../shared/api.js";
 import { appendEvent, newId, now, type Actor } from "./records.js";
+import { cronProblem } from "./cron.js";
 import { isBuiltIn, type StageGraph } from "./stages.js";
 
 export type { EdgeRow, EventView, LinkRow, MessageRow, NodeRow, NodeView };
@@ -126,10 +127,9 @@ export function listNodes(db: Db, projectId: string): NodeView[] {
   return rows.map((node) => toView(db, graph, node));
 }
 
-/** A shape check only, until the scheduler brings a real cron parser. */
-export function isValidCron(cron: string): boolean {
-  const fields = cron.trim().split(/\s+/);
-  return fields.length === 5 && fields.every((field) => /^[\w*,/?#-]+$/.test(field));
+function assertValidCron(cron: string): void {
+  const problem = cronProblem(cron);
+  if (problem !== null) throw badRequest(`Invalid cron "${cron}": ${problem}`);
 }
 
 /** Built-ins with state of their own, which their actions collect. Create and move can't land on them. */
@@ -179,7 +179,7 @@ export function createNode(
   const { type, stage } = resolveStart(graph, input);
   if (stage === "scheduled") {
     if (input.cron === undefined) throw badRequest("A node starting at scheduled requires a cron");
-    if (!isValidCron(input.cron)) throw badRequest(`Invalid cron "${input.cron}": expected five fields`);
+    assertValidCron(input.cron);
   } else if (input.cron !== undefined) {
     throw badRequest(`cron only applies to a scheduled node, and this one starts at "${stage}"`);
   }
@@ -469,7 +469,7 @@ export function move(
   assertNoOwnAction(input.stage);
   if (input.cron !== undefined) {
     if (input.stage !== "scheduled") throw badRequest("cron only applies when moving to scheduled");
-    if (!isValidCron(input.cron)) throw badRequest(`Invalid cron "${input.cron}": expected five fields`);
+    assertValidCron(input.cron);
   }
 
   db.transaction(() => {
