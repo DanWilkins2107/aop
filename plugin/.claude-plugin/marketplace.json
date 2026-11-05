@@ -1,0 +1,13 @@
+{
+  "name": "aop",
+  "description": "Local marketplace for the AOP plugin",
+  "owner": { "name": "Dan Wilkins" },
+  "plugins": [
+    {
+      "name": "aop",
+      "description": "Skills that teach agents to work AOP nodes through the aop CLI: context, rules and writing style.",
+      "version": "0.0.0",
+      "source": "./"
+    }
+  ]
+}
