@@ -1,0 +1,19 @@
+# AOP machine config, shared by all projects. Lives at ~/.aop/config.yaml.
+# Relative paths start from this file's folder. `~` is your home folder.
+
+# Required. The command that starts an agent session. AOP appends `-p` and sends the
+# prompt on stdin. AOP doesn't ship or check a sandbox, so point this at your own
+# sandboxed wrapper before letting agents run unattended.
+agent_session_command: claude
+
+# Optional. Used only by `aop steer <node> --no-sandbox`.
+out_of_sandbox_command: claude
+
+# Where sessions start for projects with no path.
+open_from: ~/code
+
+# An agent running longer than this moves its node to failed.
+agent_timeout_minutes: 60
+
+# The process: stages, types and their prompts. Can live anywhere.
+stages: ./stages.yaml
