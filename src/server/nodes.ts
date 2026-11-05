@@ -351,10 +351,15 @@ function assertAgentStage(graph: StageGraph, node: NodeRow, action: string): voi
   }
 }
 
-/** Refuses a return to a stage that has since been removed. A human move is the way out of that. */
-function assertCanReturn(graph: StageGraph, type: string, stage: string): void {
-  if (!stageIsLive(graph, type, stage)) {
-    throw refused(`Can't return to "${stage}": it no longer exists in type "${type}". Use a human move instead`);
+/**
+ * Refuses a return to a stage that has since been removed. A human move is the way out of that.
+ * Going back to `splitting` restarts the agent stage that began the split, so that must exist too.
+ */
+function assertCanReturn(graph: StageGraph, type: string, stage: string, returnStage: string | null): void {
+  for (const target of stage === "splitting" && returnStage !== null ? [stage, returnStage] : [stage]) {
+    if (!stageIsLive(graph, type, target)) {
+      throw refused(`Can't return to "${target}": it no longer exists in type "${type}". Use a human move instead`);
+    }
   }
 }
 
@@ -386,11 +391,13 @@ function returnPlacement(
   node: NodeRow,
   stage: string,
 ): { stage: string; returnStage: string | null } {
-  assertCanReturn(graph, node.type, stage);
-  if (stage !== "splitting") return { stage, returnStage: null };
+  if (stage !== "splitting") {
+    assertCanReturn(graph, node.type, stage, null);
+    return { stage, returnStage: null };
+  }
   const origin = lastEntry(db, node.id, "split_start")?.from_stage;
   if (origin === undefined) throw refused("Can't return to splitting: no event records what began the split");
-  assertCanReturn(graph, node.type, origin);
+  assertCanReturn(graph, node.type, stage, origin);
   return { stage, returnStage: origin };
 }
 
@@ -592,21 +599,11 @@ export function restore(db: Db, nodeId: string): NodeView {
     if (node.stage !== "invalidated") {
       throw refused(`Can't restore: the node is at "${node.stage}", not invalidated`);
     }
-    const event = db
-      .prepare(
-        `SELECT data FROM events
-          WHERE node_id = ? AND kind = 'stage_changed' AND json_extract(data, '$.to_stage') = 'invalidated'
-          ORDER BY rowid DESC LIMIT 1`,
-      )
-      .get(node.id) as { data: string } | undefined;
-    if (!event) throw refused("Can't restore: no event records where this node was invalidated from");
-    const from = JSON.parse(event.data) as {
-      from_stage: string;
-      from_type: string;
-      from_return_stage: string | null;
-    };
+    // Invalidating is the only way in: create and move refuse this stage.
+    const from = lastEntry(db, node.id, "invalidate");
+    if (!from) throw refused("Can't restore: no event records where this node was invalidated from");
 
-    assertCanReturn(graph, from.from_type, from.from_stage);
+    assertCanReturn(graph, from.from_type, from.from_stage, from.from_return_stage);
     applyStageChange(db, node, {
       stage: from.from_stage,
       type: from.from_type,
@@ -653,11 +650,12 @@ export function unblock(db: Db, nodeId: string, input: { actor: Actor }): NodeVi
     if (node.stage !== "externally_blocked" || node.return_stage === null) {
       throw refused(`Can't unblock: the node is at "${node.stage}", not externally_blocked`);
     }
-    assertCanReturn(graph, node.type, node.return_stage);
+    const returnStage = lastEntry(db, node.id, "block")?.from_return_stage ?? null;
+    assertCanReturn(graph, node.type, node.return_stage, returnStage);
     applyStageChange(db, node, {
       stage: node.return_stage,
       type: node.type,
-      returnStage: lastEntry(db, node.id, "block")?.from_return_stage ?? null,
+      returnStage,
       via: "unblock",
       actor: "human",
     });
