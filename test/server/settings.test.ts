@@ -161,11 +161,12 @@ describe("nothing can write the config", () => {
     expect(readFileSync(configPath(), "utf8")).toBe(before);
   });
 
-  it("doesn't import anything that writes files anywhere in the server, except for run logs", () => {
-    const READ_ONLY = new Set(["existsSync", "readFileSync", "realpathSync", "statSync"]);
+  it("doesn't import anything that writes files anywhere in the server, except for run logs and the server lock", () => {
+    const READ_ONLY = new Set(["existsSync", "readdirSync", "readFileSync", "realpathSync", "statSync"]);
     const folder = join(ROOT, "src", "server");
     for (const file of readdirSync(folder)) {
-      if (file === "runLog.ts") continue;
+      // Each writes only under AOP_HOME: the run logs, and the lock that keeps a second server off it.
+      if (file === "runLog.ts" || file === "serverLock.ts") continue;
       const source = readFileSync(join(folder, file), "utf8");
       expect(source, file).not.toMatch(/from "(node:)?fs\/promises"/);
       for (const [, names] of source.matchAll(/import \{([^}]*)\} from "(?:node:)?fs"/g)) {

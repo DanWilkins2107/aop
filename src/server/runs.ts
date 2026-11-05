@@ -111,6 +111,14 @@ export function listProcesses(db: Db): ProcessRow[] {
   return db.prepare("SELECT * FROM agent_processes ORDER BY rowid").all() as ProcessRow[];
 }
 
+/** Every log a project's runs wrote, for deleting along with the project. */
+export function projectLogPaths(db: Db, projectId: string): string[] {
+  const rows = db
+    .prepare("SELECT log_path FROM runs WHERE node_id IN (SELECT id FROM nodes WHERE project_id = ?)")
+    .all(projectId) as Pick<RunRow, "log_path">[];
+  return rows.map((row) => row.log_path);
+}
+
 export function forgetProcess(db: Db, id: string): void {
   db.prepare("DELETE FROM agent_processes WHERE id = ?").run(id);
 }

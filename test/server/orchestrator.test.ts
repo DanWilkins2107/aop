@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { HEADLESS_AGENT_FLAGS } from "../../src/server/orchestrator.js";
@@ -347,8 +347,38 @@ describe("stopping", () => {
     expect(isAlive(doomedPid)).toBe(false);
     expect(await waitGone(doomedChild, 10_000)).toBe(true);
     expect(isAlive(safePid)).toBe(true);
-    expect(w.db.prepare("SELECT count(*) AS n FROM agent_processes WHERE node_id = ?").get(doomed.body.id)).toEqual({ n: 0 });
+    // The record goes once the clear-up of anything left behind has finished.
+    await until("the record to go", () => (w.db.prepare("SELECT count(*) AS n FROM agent_processes WHERE node_id = ?").get(doomed.body.id) as { n: number }).n === 0);
     expect(w.runs(safe.id)[0]?.status).toBe("running");
+  });
+
+  it("deleting a project deletes its run logs once its agents have stopped, and no other project's", TIMEOUT, async () => {
+    w = await world();
+    const other = await w.call<{ id: string }>("POST", "/projects", { name: "Other", repo_path: makeRepo() });
+    const doomed = await w.call<NodeView>("POST", `/projects/${other.body.id}/nodes`, {
+      type: "hotfix",
+      title: "doomed",
+      body: directives("say doomed output", `pid ${w.file("doomed.pid")}`, "hang"),
+    });
+    const finished = await w.call<NodeView>("POST", `/projects/${other.body.id}/nodes`, {
+      type: "hotfix",
+      title: "finished",
+      body: directives("exit 3"),
+    });
+    const safe = await w.create(directives(`pid ${w.file("safe.pid")}`, "hang"));
+    const [doomedPid, safePid] = [await w.pidFrom("doomed.pid"), await w.pidFrom("safe.pid")];
+    const doomedRun = await w.runStarted(doomed.body.id);
+    const [finishedRun] = await w.runsEnded(finished.body.id);
+    const safeRun = await w.runStarted(safe.id);
+    await until("the doomed agent's output", () => readFileSync(doomedRun.log_path, "utf8").includes("doomed output"));
+    expect([doomedRun, finishedRun!, safeRun].every((run) => existsSync(run.log_path))).toBe(true);
+
+    expect((await w.call("DELETE", `/projects/${other.body.id}`)).status).toBe(200);
+    expect(isAlive(doomedPid)).toBe(false);
+    expect(existsSync(doomedRun.log_path)).toBe(false);
+    expect(existsSync(finishedRun!.log_path)).toBe(false);
+    expect(existsSync(safeRun.log_path)).toBe(true);
+    expect(isAlive(safePid)).toBe(true);
   });
 
   it("clears up a child an agent left behind when it exited by itself", TIMEOUT, async () => {
@@ -358,6 +388,35 @@ describe("stopping", () => {
     const child = await w.pidFrom("child.pid");
     await w.atStage(node.id, "done");
     expect(await waitGone(child, 15_000)).toBe(true);
+  });
+
+  it("clears up the whole tree an agent left when it exited by itself, and nothing from another run", TIMEOUT, async () => {
+    w = await world({ graceMs: 60_000 });
+    const bystander = await w.create(directives(`pid ${w.file("bystander.pid")}`, `child ${w.file("bystander-child.pid")}`, "hang"));
+    // The grandchild's parent has exited before the agent does, so no parent link reaches it.
+    const node = await w.create(
+      directives(`child ${w.file("child.pid")}`, `grandchild ${w.file("grandchild.pid")}`, "sleep 4000", `grandchild ${w.file("late.pid")}`, 'aop ["next","fixed"]'),
+    );
+    const [child, grandchild] = [await w.pidFrom("child.pid"), await w.pidFrom("grandchild.pid")];
+    // Orphaned, and alive until the agent's run ends.
+    expect(isAlive(grandchild)).toBe(true);
+    const late = await w.pidFrom("late.pid");
+    const [other, otherChild] = [await w.pidFrom("bystander.pid"), await w.pidFrom("bystander-child.pid")];
+    await w.atStage(node.id, "done");
+    expect(await waitGone(child, 30_000)).toBe(true);
+    expect(await waitGone(grandchild, 30_000)).toBe(true);
+    expect(await waitGone(late, 30_000)).toBe(true);
+    await until("the record to go", () => !w.db.prepare("SELECT 1 FROM agent_processes WHERE node_id = ?").get(node.id));
+    expect(isAlive(other)).toBe(true);
+    expect(isAlive(otherChild)).toBe(true);
+    expect(w.runs(bystander.id)[0]?.status).toBe("running");
+  });
+
+  it("marks every process of a run with the run's ID", TIMEOUT, async () => {
+    w = await world();
+    const node = await w.create(directives(`record ${w.file("env.json")}`));
+    const [run] = await w.runsEnded(node.id);
+    expect(recorded("env.json").env["AOP_RUN_ID"]).toBe(run?.id);
   });
 
   it.skipIf(process.platform === "win32")("kills an agent that ignores SIGTERM", TIMEOUT, async () => {
