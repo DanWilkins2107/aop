@@ -12,30 +12,48 @@ import type {
   SteerSession,
 } from "../shared/api.js";
 
+/** Each command's usage, for both the help and its own usage errors, so the two can't drift apart. */
+const AGENT_COMMANDS = {
+  context: ["aop context [<id>]"],
+  next: ["aop next <outcome>"],
+  ask: ['aop ask "..."'],
+  message: ['aop message "..." [--node <id>]'],
+  link: ["aop link pr|ticket <url>"],
+  search: ["aop search <query> [--all]"],
+  "node create": ["aop node create --title ... [--body ...] [--parent ...] [--project ...] [--type ... | --stage ...]"],
+  "node edit": ["aop node edit [<id>] [--title ...] [--body ...]"],
+  edge: ["aop edge add blocks <from> <to>", "aop edge remove blocks <from> <to>"],
+  split: ["aop split start", "aop split finish"],
+} as const;
+const HUMAN_COMMANDS = {
+  project: ["aop project add <path>"],
+  serve: ["aop serve [--port <port>]"],
+  steer: ["aop steer <node> [--no-sandbox]"],
+  ps: ["aop ps"],
+  reap: ["aop reap"],
+} as const;
+type Usage = readonly string[];
+const COMMANDS: Record<keyof typeof AGENT_COMMANDS | keyof typeof HUMAN_COMMANDS, Usage> = { ...AGENT_COMMANDS, ...HUMAN_COMMANDS };
+
+const listed = (commands: Record<string, Usage>) =>
+  Object.values(commands)
+    .flat()
+    .map((line) => `  ${line}`)
+    .join("\n");
+
 const USAGE = `aop: agent orchestration platform
 
 For agents, acting on AOP_NODE_ID:
-  aop context [<id>]
-  aop next <outcome>
-  aop ask "..."
-  aop message "..." [--node <id>]
-  aop link pr|ticket <url>
-  aop search <query> [--all]
-  aop node create --title ... [--body ...] [--parent ...] [--project ...] [--type ... | --stage ...]
-  aop node edit [<id>] [--title ...] [--body ...]
-  aop edge add blocks <from> <to>
-  aop edge remove blocks <from> <to>
-  aop split start
-  aop split finish
+${listed(AGENT_COMMANDS)}
 
 For humans:
-  aop project add <path>
-  aop serve [--port <port>]
-  aop steer <node> [--no-sandbox]
-  aop ps
-  aop reap
+${listed(HUMAN_COMMANDS)}
 
 Finds the server through AOP_URL, or AOP_PORT on localhost, or else port 4317.`;
+
+/** A usage error that shows how the command is used, after what was wrong with it if there's more to say. */
+const usageError = (usage: Usage, problem?: string) =>
+  new UsageError(`${problem === undefined ? "" : `${problem}\n`}Usage: ${usage.join("\n       ")}`);
 
 const DEFAULT_PORT = "4317";
 /** The commands agents use all say so. `actor` is self-reported, and these are the agent's commands. */
@@ -46,7 +64,22 @@ class CliFailure extends Error {}
 
 const serverUrl = () => process.env["AOP_URL"] ?? `http://127.0.0.1:${process.env["AOP_PORT"] ?? DEFAULT_PORT}`;
 
-async function send<T>(method: string, path: string, body?: unknown): Promise<T> {
+/** Something answered on the API's address, but not as the API does, such as the web UI's dev server. */
+const notTheApi = () => new CliFailure(`What answered at ${serverUrl()} isn't the AOP server's API. Check AOP_URL and AOP_PORT.`);
+
+/** The API's own error, if that's what the body is. */
+function apiError(text: string): { message: string; details?: unknown } | undefined {
+  try {
+    const { error } = JSON.parse(text) as { error?: { message?: unknown; details?: unknown } };
+    if (typeof error?.message === "string") return { message: error.message, details: error.details };
+  } catch {
+    // Not JSON, or JSON null.
+  }
+  return undefined;
+}
+
+/** Calls the API. A failure becomes the API's own message, or else its status. */
+async function call(method: string, path: string, body?: unknown): Promise<{ type: string; text: string }> {
   const init: RequestInit = { method };
   if (body !== undefined) {
     init.headers = { "content-type": "application/json" };
@@ -60,17 +93,29 @@ async function send<T>(method: string, path: string, body?: unknown): Promise<T>
   }
   const text = await response.text();
   if (!response.ok) {
-    let message = `The server answered ${response.status}`;
-    try {
-      const { error } = JSON.parse(text) as { error: { message: string; details?: unknown } };
-      message = error.message;
-      if (error.details !== undefined) message += `\n${JSON.stringify(error.details)}`;
-    } catch {
-      // Not one of the API's own errors, so the status is all there is.
-    }
+    const error = apiError(text);
+    let message = error?.message ?? `The server answered ${response.status}`;
+    if (error?.details !== undefined) message += `\n${JSON.stringify(error.details)}`;
     throw new CliFailure(message);
   }
-  return (response.headers.get("content-type")?.includes("json") ? JSON.parse(text) : text) as T;
+  return { type: response.headers.get("content-type") ?? "", text };
+}
+
+/** Every route the CLI uses answers JSON, except a node's context. */
+async function send<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const { type, text } = await call(method, path, body);
+  if (!type.includes("json")) throw notTheApi();
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw notTheApi();
+  }
+}
+
+async function sendForText(path: string): Promise<string> {
+  const { type, text } = await call("GET", path);
+  if (!type.startsWith("text/plain")) throw notTheApi();
+  return text;
 }
 
 const nodePath = (id: string) => `/nodes/${encodeURIComponent(id)}`;
@@ -83,18 +128,23 @@ function ownNode(): string {
 }
 
 /** Reads the options of one command. A bad option is a usage error, not a stack trace. */
-function args<T extends NonNullable<ParseArgsConfig["options"]>>(argv: string[], options: T) {
+function args<T extends NonNullable<ParseArgsConfig["options"]>>(argv: string[], usage: Usage, options: T) {
   try {
     return parseArgs({ args: argv, options, allowPositionals: true, strict: true });
   } catch (error) {
-    throw new UsageError((error as Error).message);
+    throw usageError(usage, (error as Error).message);
   }
 }
 
-function only<T>(values: T[], usage: string): T {
+function only<T>(values: T[], usage: Usage): T {
   const [value] = values;
-  if (value === undefined || values.length !== 1) throw new UsageError(`Usage: ${usage}`);
+  if (value === undefined || values.length !== 1) throw usageError(usage);
   return value;
+}
+
+/** For commands that take no arguments at all. */
+function none(argv: string[], usage: Usage): void {
+  if (args(argv, usage, {}).positionals.length > 0) throw usageError(usage);
 }
 
 const movedTo = (node: NodeView) => console.log(`${node.id} is now at ${node.stage}`);
@@ -119,7 +169,8 @@ async function projectForNewNode(reference: string | undefined, parent: string |
 async function nodeCommand(argv: string[]): Promise<void> {
   const [action, ...rest] = argv;
   if (action === "create") {
-    const { values, positionals } = args(rest, {
+    const usage = COMMANDS["node create"];
+    const { values, positionals } = args(rest, usage, {
       title: { type: "string" },
       body: { type: "string" },
       parent: { type: "string" },
@@ -128,7 +179,7 @@ async function nodeCommand(argv: string[]): Promise<void> {
       stage: { type: "string" },
     });
     if (values.title === undefined || positionals.length > 0) {
-      throw new UsageError("Usage: aop node create --title ... [--body ...] [--parent ...] [--project ...] [--type ... | --stage ...]");
+      throw usageError(usage);
     }
     const project = await projectForNewNode(values.project, values.parent);
     const node = await send<NodeView>("POST", `/projects/${encodeURIComponent(project)}/nodes`, {
@@ -143,9 +194,10 @@ async function nodeCommand(argv: string[]): Promise<void> {
     return;
   }
   if (action === "edit") {
-    const { values, positionals } = args(rest, { title: { type: "string" }, body: { type: "string" } });
+    const usage = COMMANDS["node edit"];
+    const { values, positionals } = args(rest, usage, { title: { type: "string" }, body: { type: "string" } });
     if (positionals.length > 1 || (values.title === undefined && values.body === undefined)) {
-      throw new UsageError("Usage: aop node edit [<id>] [--title ...] [--body ...]");
+      throw usageError(usage);
     }
     const id = positionals[0] ?? ownNode();
     await send("PATCH", nodePath(id), {
@@ -156,13 +208,13 @@ async function nodeCommand(argv: string[]): Promise<void> {
     console.log(`Edited ${id}`);
     return;
   }
-  throw new UsageError("Usage: aop node create|edit ...");
+  throw usageError([...COMMANDS["node create"], ...COMMANDS["node edit"]]);
 }
 
 async function edgeCommand(argv: string[]): Promise<void> {
-  const usage = "Usage: aop edge add|remove blocks <from> <to>";
-  const [action, kind, from, to, ...extra] = argv;
-  if (kind !== "blocks" || from === undefined || to === undefined || extra.length > 0) throw new UsageError(usage);
+  const usage = COMMANDS.edge;
+  const [action, kind, from, to, ...extra] = args(argv, usage, {}).positionals;
+  if (kind !== "blocks" || from === undefined || to === undefined || extra.length > 0) throw usageError(usage);
   if (action === "add") {
     await send("POST", `${nodePath(from)}/edges`, { target_id: to, kind, actor: ACTOR });
     console.log(`${from} now blocks ${to}`);
@@ -176,12 +228,12 @@ async function edgeCommand(argv: string[]): Promise<void> {
     console.log(`${from} no longer blocks ${to}`);
     return;
   }
-  throw new UsageError(usage);
+  throw usageError(usage);
 }
 
 async function searchCommand(argv: string[]): Promise<void> {
-  const { values, positionals } = args(argv, { all: { type: "boolean" } });
-  if (positionals.length === 0) throw new UsageError("Usage: aop search <query> [--all]");
+  const { values, positionals } = args(argv, COMMANDS.search, { all: { type: "boolean" } });
+  if (positionals.length === 0) throw usageError(COMMANDS.search);
   const query = new URLSearchParams({ q: positionals.join(" ") });
   const own = process.env["AOP_NODE_ID"];
   // With no node there's no current project to narrow to.
@@ -195,8 +247,8 @@ async function searchCommand(argv: string[]): Promise<void> {
 }
 
 async function steerCommand(argv: string[]): Promise<void> {
-  const { values, positionals } = args(argv, { "no-sandbox": { type: "boolean" } });
-  const id = only(positionals, "aop steer <node> [--no-sandbox]");
+  const { values, positionals } = args(argv, COMMANDS.steer, { "no-sandbox": { type: "boolean" } });
+  const id = only(positionals, COMMANDS.steer);
   const session = await send<SteerSession>("POST", `${nodePath(id)}/steer`, { no_sandbox: values["no-sandbox"] === true });
   console.log(`Claimed ${id}. Opening a session in ${session.cwd}. Release the claim in the UI when you're done.`);
   // The command is the user's own config string, which may need a shell. No node text goes in it.
@@ -243,29 +295,31 @@ async function run(argv: string[]): Promise<void> {
       console.log(USAGE);
       return;
     case "context": {
-      const { positionals } = args(rest, {});
-      if (positionals.length > 1) throw new UsageError("Usage: aop context [<id>]");
-      console.log(await send<string>("GET", `${nodePath(positionals[0] ?? ownNode())}/context`));
+      const { positionals } = args(rest, COMMANDS.context, {});
+      if (positionals.length > 1) throw usageError(COMMANDS.context);
+      console.log(await sendForText(`${nodePath(positionals[0] ?? ownNode())}/context`));
       return;
     }
-    case "next":
-      movedTo(await send("POST", `${nodePath(ownNode())}/next`, { outcome: only(args(rest, {}).positionals, "aop next <outcome>"), actor: ACTOR }));
+    case "next": {
+      const outcome = only(args(rest, COMMANDS.next, {}).positionals, COMMANDS.next);
+      movedTo(await send("POST", `${nodePath(ownNode())}/next`, { outcome, actor: ACTOR }));
       return;
-    case "ask":
-      movedTo(await send("POST", `${nodePath(ownNode())}/ask`, { question: only(args(rest, {}).positionals, 'aop ask "..."') }));
+    }
+    case "ask": {
+      const question = only(args(rest, COMMANDS.ask, {}).positionals, COMMANDS.ask);
+      movedTo(await send("POST", `${nodePath(ownNode())}/ask`, { question }));
       return;
+    }
     case "message": {
-      const { values, positionals } = args(rest, { node: { type: "string" } });
-      const body = only(positionals, 'aop message "..." [--node <id>]');
+      const { values, positionals } = args(rest, COMMANDS.message, { node: { type: "string" } });
+      const body = only(positionals, COMMANDS.message);
       const message = await send<MessageRow>("POST", `${nodePath(values.node ?? ownNode())}/messages`, { body, author: ACTOR });
       console.log(`Posted to ${message.node_id}`);
       return;
     }
     case "link": {
-      const [kind, url, ...extra] = args(rest, {}).positionals;
-      if ((kind !== "pr" && kind !== "ticket") || url === undefined || extra.length > 0) {
-        throw new UsageError("Usage: aop link pr|ticket <url>");
-      }
+      const [kind, url, ...extra] = args(rest, COMMANDS.link, {}).positionals;
+      if ((kind !== "pr" && kind !== "ticket") || url === undefined || extra.length > 0) throw usageError(COMMANDS.link);
       await send("POST", `${nodePath(ownNode())}/links`, { kind, url, actor: ACTOR });
       console.log(`Linked ${kind} ${url}`);
       return;
@@ -277,14 +331,14 @@ async function run(argv: string[]): Promise<void> {
     case "edge":
       return edgeCommand(rest);
     case "split": {
-      const action = only(args(rest, {}).positionals, "aop split start|finish");
-      if (action !== "start" && action !== "finish") throw new UsageError("Usage: aop split start|finish");
+      const action = only(args(rest, COMMANDS.split, {}).positionals, COMMANDS.split);
+      if (action !== "start" && action !== "finish") throw usageError(COMMANDS.split);
       movedTo(await send("POST", `${nodePath(ownNode())}/split/${action}`));
       return;
     }
     case "project": {
-      const [action, path, ...extra] = args(rest, {}).positionals;
-      if (action !== "add" || path === undefined || extra.length > 0) throw new UsageError("Usage: aop project add <path>");
+      const [action, path, ...extra] = args(rest, COMMANDS.project, {}).positionals;
+      if (action !== "add" || path === undefined || extra.length > 0) throw usageError(COMMANDS.project);
       const project = await send<ProjectRow>("POST", "/projects", { repo_path: path });
       console.log(`Added project "${project.name}" (${project.id})`);
       return;
@@ -292,14 +346,16 @@ async function run(argv: string[]): Promise<void> {
     case "serve": {
       // Loaded here because every other command only talks HTTP, and shouldn't need the database's native module.
       const { runServer } = await import("../server/serve.js");
-      return runServer(rest, "Usage: aop serve [--port <port>]");
+      return runServer(rest, usageError(COMMANDS.serve).message);
     }
     case "steer":
       return steerCommand(rest);
     case "ps":
+      none(rest, COMMANDS.ps);
       printAgents(await send<AgentProcessView[]>("GET", "/agents"));
       return;
     case "reap":
+      none(rest, COMMANDS.reap);
       printReaped(await send<ReapResult>("POST", "/agents/reap"));
       return;
     case "init":
