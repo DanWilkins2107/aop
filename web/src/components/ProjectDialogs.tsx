@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { ProjectRow } from "../../../src/shared/api.js";
-import { api, failureText } from "../lib/api.js";
+import { api } from "../lib/api.js";
 import { useLiveData } from "../lib/live.js";
+import { useAction } from "../lib/useAction.js";
 import { Dialog } from "./Dialog.js";
 
 interface NewProjectProps {
@@ -17,19 +18,12 @@ interface ProjectProps extends NewProjectProps {
 
 /** Runs one request for a dialog, keeping it open with the reason if the server refuses. */
 function useSave(onDone: () => void) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const save = async (request: () => Promise<unknown>) => {
-    setBusy(true);
-    setError(null);
-    try {
+  const { busy, error, run } = useAction();
+  const save = (request: () => Promise<unknown>) =>
+    run(async () => {
       await request();
       onDone();
-    } catch (failure) {
-      setError(failureText(failure));
-      setBusy(false);
-    }
-  };
+    });
   return { busy, error, save };
 }
 

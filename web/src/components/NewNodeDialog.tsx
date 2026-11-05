@@ -1,8 +1,9 @@
 import { useState } from "react";
 import type { NodeView, StagesView } from "../../../src/shared/api.js";
-import { api, failureText } from "../lib/api.js";
+import { api } from "../lib/api.js";
 import { humanize } from "../lib/format.js";
 import { findType } from "../lib/stageStyle.js";
+import { useAction } from "../lib/useAction.js";
 import { Dialog } from "./Dialog.js";
 
 export function NewNodeDialog({
@@ -20,23 +21,15 @@ export function NewNodeDialog({
   const [body, setBody] = useState("");
   const [type, setType] = useState(stages.start);
   const [cron, setCron] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { busy, error, run } = useAction();
 
   // A node enters at its type's own start.
   const start = findType(stages, type)?.start;
   const scheduled = start === "scheduled";
 
   async function create() {
-    setBusy(true);
-    setError(null);
-    try {
-      const input = { type, title: title.trim(), body };
-      onCreated(await api.createNode(projectId, scheduled ? { ...input, cron: cron.trim() } : input));
-    } catch (failure) {
-      setError(failureText(failure));
-      setBusy(false);
-    }
+    const input = { type, title: title.trim(), body };
+    await run(async () => onCreated(await api.createNode(projectId, scheduled ? { ...input, cron: cron.trim() } : input)));
   }
 
   return (

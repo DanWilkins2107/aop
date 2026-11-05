@@ -5,7 +5,7 @@ import { ErrorNotice } from "../components/ErrorNotice.js";
 import { DeleteProjectDialog, RepoPathHint } from "../components/ProjectDialogs.js";
 import { api } from "../lib/api.js";
 import { useLiveData } from "../lib/live.js";
-import { useAction } from "./node/useAction.js";
+import { useAction } from "../lib/useAction.js";
 
 function DetailsForm({
   project,

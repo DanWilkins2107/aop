@@ -3,7 +3,7 @@ import type { NodeView, StagesView } from "../../../../src/shared/api.js";
 import { api } from "../../lib/api.js";
 import { humanize, stageOptionGroups } from "../../lib/format.js";
 import { FINISHED_STAGES } from "../../lib/stageStyle.js";
-import { useAction } from "./useAction.js";
+import { useAction } from "../../lib/useAction.js";
 
 /** The stages a human can send a node to. Other built-ins have their own actions. */
 function moveChoices(stages: StagesView): { group: string; options: { label: string; value: string }[] }[] {
