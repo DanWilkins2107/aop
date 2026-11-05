@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ErrorNotice } from "../components/ErrorNotice.js";
+import { ErrorNotice, ProblemBanner } from "../components/ErrorNotice.js";
 import { PipelineGraph } from "../components/PipelineGraph.js";
 import { api } from "../lib/api.js";
 import { humanize } from "../lib/format.js";
@@ -26,14 +26,7 @@ export function ProcessPage() {
         </p>
       ) : null}
       {data && data.problems.length > 0 ? (
-        <div className="banner banner-danger" role="alert">
-          <strong>The process is invalid, so no new agents start until it's fixed</strong>
-          <ul className="problem-list">
-            {data.problems.map((problem) => (
-              <li key={problem}>{problem}</li>
-            ))}
-          </ul>
-        </div>
+        <ProblemBanner title="The process is invalid, so no new agents start until it's fixed" problems={data.problems} />
       ) : null}
       {data ? (
         <p className="settings-note">

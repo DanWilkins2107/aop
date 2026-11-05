@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ErrorNotice } from "../components/ErrorNotice.js";
+import { ErrorNotice, ProblemBanner } from "../components/ErrorNotice.js";
 import { api } from "../lib/api.js";
 import { useLiveData } from "../lib/live.js";
 
@@ -38,14 +38,7 @@ export function AopSettingsPage() {
         </p>
       ) : null}
       {data && data.problems.length > 0 ? (
-        <div className="banner banner-danger" role="alert">
-          <strong>The AOP config is invalid</strong>
-          <ul className="problem-list">
-            {data.problems.map((problem) => (
-              <li key={problem}>{problem}</li>
-            ))}
-          </ul>
-        </div>
+        <ProblemBanner title="The AOP config is invalid" problems={data.problems} />
       ) : null}
       {settings ? (
         <dl className="settings-list">
