@@ -29,6 +29,7 @@ For agents, acting on AOP_NODE_ID:
   aop split finish
 
 For humans:
+  aop init [--yes] [--fill-missing] [--help]
   aop project add <path>
   aop serve [--port <port>]
   aop steer <node> [--no-sandbox]
@@ -302,8 +303,11 @@ async function run(argv: string[]): Promise<void> {
     case "reap":
       printReaped(await send<ReapResult>("POST", "/agents/reap"));
       return;
-    case "init":
-      throw new CliFailure("aop init isn't available yet. Create config.yaml in AOP_HOME or ~/.aop by hand for now.");
+    case "init": {
+      const { runInit } = await import("./init.js");
+      process.exitCode = await runInit(rest);
+      return;
+    }
     default:
       throw new UsageError(`Unknown command "${command}"\n\n${USAGE}`);
   }
