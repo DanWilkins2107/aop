@@ -65,8 +65,11 @@ function loopsBack(type: TypeView): Set<string> {
   return loops;
 }
 
-/** Lays out a type's stages with every outcome as an edge, so that forks and loops show as they are. */
-export function stageDrawing(type: TypeView, current: string, returnTo: string | null): StageDrawing {
+/**
+ * Lays out a type's stages with every outcome as an edge, so that forks and loops show as they are.
+ * `current` is null when no node is being shown, as on the process page.
+ */
+export function stageDrawing(type: TypeView, current: string | null, returnTo: string | null): StageDrawing {
   const graph = new Graph({ multigraph: true });
   graph.setGraph({ rankdir: "TB", nodesep: 22, edgesep: 12, ranksep: 26, marginx: MARGIN, marginy: MARGIN });
   graph.setDefaultEdgeLabel(() => ({}));
@@ -99,7 +102,7 @@ export function stageDrawing(type: TypeView, current: string, returnTo: string |
     }
   }
   // A global stage lives outside the pipeline. Anything else off the type, like `splitting`, sits beside it.
-  if (!GLOBAL_STAGES.includes(current)) addBox(current);
+  if (current !== null && !GLOBAL_STAGES.includes(current)) addBox(current);
 
   layout(graph);
 

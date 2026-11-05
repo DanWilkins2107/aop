@@ -3,6 +3,7 @@ import { useLiveStatus } from "./lib/live.js";
 import { AopSettingsPage } from "./pages/AopSettingsPage.js";
 import { GraphPage } from "./pages/GraphPage.js";
 import { NodePage } from "./pages/NodePage.js";
+import { ProcessPage } from "./pages/ProcessPage.js";
 import { ProjectSettingsPage } from "./pages/ProjectSettingsPage.js";
 import { ProjectsPage } from "./pages/ProjectsPage.js";
 
@@ -25,6 +26,9 @@ export function App() {
           AOP
         </Link>
         <span className="topbar-spacer" />
+        <Link to="/process" className="quiet-link">
+          Process
+        </Link>
         <Link to="/settings" className="quiet-link">
           AOP settings
         </Link>
@@ -34,6 +38,7 @@ export function App() {
         <Routes>
           <Route path="/" element={<ProjectsPage />} />
           <Route path="/settings" element={<AopSettingsPage />} />
+          <Route path="/process" element={<ProcessPage />} />
           <Route path="/p/:projectId" element={<GraphPage />} />
           <Route path="/p/:projectId/settings" element={<ProjectSettingsPage />} />
           <Route path="/n/:nodeId" element={<NodePage />} />
