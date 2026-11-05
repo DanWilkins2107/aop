@@ -15,7 +15,8 @@ import * as nodes from "./nodes.js";
 import { describeConfig, loadConfig } from "./config.js";
 import type { Orchestrator } from "./orchestrator.js";
 import { addProject, deleteProject, getProject, listProjects, updateProject } from "./projects.js";
-import { getRun } from "./runs.js";
+import { deleteLogs } from "./runLog.js";
+import { getRun, projectLogPaths } from "./runs.js";
 import { search } from "./search.js";
 import { describeStages } from "./stages.js";
 import { prepareSteer } from "./steer.js";
@@ -195,11 +196,17 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
     const { id } = getProject(db, c.req.param("id"));
     // Agents stop first, and none can start on the project until it has gone.
     const reopen = await options.orchestrator?.stopProjectAgents(id);
+    let deleted: ReturnType<typeof deleteProject>;
+    let logs: string[];
     try {
-      return c.json(deleteProject(db, id));
+      logs = projectLogPaths(db, id);
+      deleted = deleteProject(db, id);
     } finally {
       reopen?.();
     }
+    // Only once the project has gone, and its agents have stopped and closed their logs.
+    deleteLogs(logs);
+    return c.json(deleted);
   });
 
   // The one process, shared by all projects. Read from disk every time.

@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { HEADLESS_AGENT_FLAGS } from "../../src/server/orchestrator.js";
@@ -349,6 +349,35 @@ describe("stopping", () => {
     expect(isAlive(safePid)).toBe(true);
     expect(w.db.prepare("SELECT count(*) AS n FROM agent_processes WHERE node_id = ?").get(doomed.body.id)).toEqual({ n: 0 });
     expect(w.runs(safe.id)[0]?.status).toBe("running");
+  });
+
+  it("deleting a project deletes its run logs once its agents have stopped, and no other project's", TIMEOUT, async () => {
+    w = await world();
+    const other = await w.call<{ id: string }>("POST", "/projects", { name: "Other", repo_path: makeRepo() });
+    const doomed = await w.call<NodeView>("POST", `/projects/${other.body.id}/nodes`, {
+      type: "hotfix",
+      title: "doomed",
+      body: directives("say doomed output", `pid ${w.file("doomed.pid")}`, "hang"),
+    });
+    const finished = await w.call<NodeView>("POST", `/projects/${other.body.id}/nodes`, {
+      type: "hotfix",
+      title: "finished",
+      body: directives("exit 3"),
+    });
+    const safe = await w.create(directives(`pid ${w.file("safe.pid")}`, "hang"));
+    const [doomedPid, safePid] = [await w.pidFrom("doomed.pid"), await w.pidFrom("safe.pid")];
+    const doomedRun = await w.runStarted(doomed.body.id);
+    const [finishedRun] = await w.runsEnded(finished.body.id);
+    const safeRun = await w.runStarted(safe.id);
+    await until("the doomed agent's output", () => readFileSync(doomedRun.log_path, "utf8").includes("doomed output"));
+    expect([doomedRun, finishedRun!, safeRun].every((run) => existsSync(run.log_path))).toBe(true);
+
+    expect((await w.call("DELETE", `/projects/${other.body.id}`)).status).toBe(200);
+    expect(isAlive(doomedPid)).toBe(false);
+    expect(existsSync(doomedRun.log_path)).toBe(false);
+    expect(existsSync(finishedRun!.log_path)).toBe(false);
+    expect(existsSync(safeRun.log_path)).toBe(true);
+    expect(isAlive(safePid)).toBe(true);
   });
 
   it("clears up a child an agent left behind when it exited by itself", TIMEOUT, async () => {
