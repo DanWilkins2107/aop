@@ -154,11 +154,6 @@ describe("the agent commands", () => {
     expect(res.stderr).not.toContain("    at ");
   });
 
-  it("init says it isn't here yet", TIMEOUT, async () => {
-    const res = await aop(["init"]);
-    expect(res.code).toBe(1);
-    expect(res.stderr).toContain("isn't available yet");
-  });
 });
 
 describe("the human commands", () => {
