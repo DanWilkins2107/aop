@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { HEADLESS_AGENT_FLAGS } from "../../src/server/orchestrator.js";
 import { isAlive, waitGone } from "../../src/server/processes.js";
 import type { EventView, MessageRow, NodeView } from "../../src/shared/api.js";
@@ -9,10 +9,6 @@ import { makeRepo, STAGES_YAML } from "./helpers.js";
 
 const TIMEOUT = { timeout: 90_000 };
 let w: World;
-
-afterEach(async () => {
-  await w.close();
-});
 
 const claimOf = (id: string) => w.node(id).claimed_by;
 const events = async (id: string) => (await w.call<EventView[]>("GET", `/nodes/${id}/events`)).body;

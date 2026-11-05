@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { EdgeRow, EventView, LinkRow, MessageRow } from "../../src/shared/api.js";
 import { directives, fakeCommand, nodeArgs, world, type World } from "./agents.helpers.js";
 
@@ -12,10 +12,6 @@ beforeEach(async () => {
   // A one-line script as the interactive session, so `steer` launches no agent tool.
   w = await world({ config: `out_of_sandbox_command: ${JSON.stringify(fakeCommand + " --out")}\n` });
 });
-afterEach(async () => {
-  await w.close();
-});
-
 interface Result {
   code: number | null;
   stdout: string;

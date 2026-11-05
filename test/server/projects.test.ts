@@ -1,6 +1,6 @@
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { deleteProject } from "../../src/server/projects.js";
 import type { NodeView, ProjectRow } from "../../src/shared/api.js";
 import { harness, makeRepo, type Harness, type Res } from "./helpers.js";
@@ -10,7 +10,6 @@ let h: Harness;
 beforeEach(() => {
   h = harness();
 });
-afterEach(() => h.close());
 
 const codeOf = (res: Res) => (res.body["error"] as { code: string }).code;
 const messageOf = (res: Res) => (res.body["error"] as { message: string }).message;

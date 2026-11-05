@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import { createApp } from "../../src/server/api.js";
 import { loadConfig } from "../../src/server/config.js";
@@ -85,7 +85,6 @@ describe("reading the config over the API", () => {
   beforeEach(() => {
     h = harness();
   });
-  afterEach(() => h.close());
 
   it("shows the values, the real file path and where the links resolve", async () => {
     const res = await h.call<ConfigView>("GET", "/api/config");
@@ -131,7 +130,6 @@ describe("nothing can write the config", () => {
   beforeEach(() => {
     h = harness();
   });
-  afterEach(() => h.close());
 
   const WRITES = ["POST", "PUT", "PATCH", "DELETE"];
 

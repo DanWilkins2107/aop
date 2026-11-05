@@ -31,10 +31,7 @@ async function clearStrays(): Promise<void> {
 
 describe("recovery with the orchestrator restarted in place", () => {
   let w: World;
-  afterEach(async () => {
-    await w.close();
-    await clearStrays();
-  });
+  afterEach(clearStrays);
 
   it("a clean shutdown stops agents and returns nodes to the queue, not to failed", TIMEOUT, async () => {
     w = await world();
@@ -140,10 +137,7 @@ describe("recovery with the orchestrator restarted in place", () => {
 
 describe("reap and identity", () => {
   let w: World;
-  afterEach(async () => {
-    await w.close();
-    await clearStrays();
-  });
+  afterEach(clearStrays);
 
   async function onRecord(id: string, nodeId: string, process_: { pid: number }, start: string | null): Promise<void> {
     recordProcess(w.db, { id, node_id: nodeId }, process_.pid, "fake command");

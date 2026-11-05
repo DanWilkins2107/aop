@@ -1,5 +1,6 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { onTestFinished } from "vitest";
 import { createApp } from "../../src/server/api.js";
 import { openDb, type Db } from "../../src/server/db.js";
 import type { NodeView } from "../../src/server/nodes.js";
@@ -95,15 +96,31 @@ export interface Harness {
   post(nodeId: string, action: string, body?: unknown): Promise<Res<NodeView>>;
   node(nodeId: string): Promise<NodeView>;
   rewriteStages(yaml: string): void;
+  /** Happens by itself when the test finishes. Calling it again does nothing. */
   close(): void;
 }
 
-/** Fresh state, with AOP_HOME pointing at it until `close`, driven through the real Hono app. */
+/**
+ * Fresh state, with AOP_HOME pointing at it until `close`, driven through the real Hono app. Call it
+ * inside a test or `beforeEach`: it closes itself when the test finishes, and if it fails to start.
+ */
 export function harness(): Harness {
   const outerHome = process.env["AOP_HOME"];
   const home = makeHome();
+  let opened: Db | undefined;
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    opened?.close();
+    process.env["AOP_HOME"] = outerHome;
+    rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  };
+  onTestFinished(close);
+
   process.env["AOP_HOME"] = home;
   const db = openDb();
+  opened = db;
   const repo = makeRepo();
   const project = addProject(db, { repo_path: repo });
   const app = createApp(db);
@@ -139,10 +156,6 @@ export function harness(): Harness {
     rewriteStages(yaml) {
       writeFiles(home, { "stages.yaml": yaml });
     },
-    close() {
-      db.close();
-      process.env["AOP_HOME"] = outerHome;
-      rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
-    },
+    close,
   };
 }

@@ -15,7 +15,6 @@ describe("UI API", () => {
   beforeEach(() => {
     h = harness();
   });
-  afterEach(() => h.close());
 
   it("describes the shared stages in file order, without prompt paths", async () => {
     const res = await h.call<StagesView>("GET", "/api/stages");
