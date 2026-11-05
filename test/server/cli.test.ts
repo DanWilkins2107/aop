@@ -140,10 +140,29 @@ describe("the agent commands", () => {
   });
 
   it("bad usage is a clear message and exit code 2, with no stack trace", TIMEOUT, async () => {
-    for (const args of [["next"], ["node", "create"], ["edge", "add", "subtask", "a", "b"], ["link", "x", "y"], ["nonsense"], ["next", "--bad"], ["search"]]) {
+    const bad = [["next"], ["node", "create"], ["edge", "add", "subtask", "a", "b"], ["link", "x", "y"], ["nonsense"], ["next", "--bad"], ["search"], ["ps", "x"], ["reap", "--bad"]];
+    for (const args of bad) {
       const res = await aop(args, { node: "n" });
       expect(res.code, args.join(" ")).toBe(2);
       expect(res.stderr).not.toContain("    at ");
+    }
+    // Usage comes before the node, so it's the usage that's reported without one.
+    for (const args of [["next"], ["ask", "a", "b"], ["split", "sideways"]]) {
+      const res = await aop(args);
+      expect(res.code, args.join(" ")).toBe(2);
+      expect(res.stderr).toContain("Usage: aop ");
+    }
+  });
+
+  it("a usage error shows that command's usage, as the help lists it", TIMEOUT, async () => {
+    const help = (await aop(["help"])).stdout;
+    const option = await aop(["next", "--bad"], { node: "n" });
+    expect(option.stderr).toContain("--bad");
+    expect(option.stderr).toContain("Usage: aop next <outcome>");
+    const edge = await aop(["edge", "add"]);
+    expect(edge.stderr).toBe("Usage: aop edge add blocks <from> <to>\n       aop edge remove blocks <from> <to>\n");
+    for (const line of ["aop next <outcome>", "aop edge add blocks <from> <to>", "aop edge remove blocks <from> <to>", "aop ps"]) {
+      expect(help).toContain(`\n  ${line}\n`);
     }
   });
 
