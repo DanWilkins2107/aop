@@ -337,6 +337,60 @@ describe("a real server process", () => {
     }
   });
 
+  it("a crash straight after launch leaves nothing the next start can't find, even what the agent starts later", TIMEOUT, async () => {
+    const { home, shim, first, post, project } = await setUp();
+    const file = (name: string) => join(home, name);
+    const node = await post<NodeView>(`/projects/${project.id}/nodes`, {
+      type: "hotfix",
+      title: "t",
+      // Everything below the agent starts after the server has gone, so none of it is on record.
+      body: directives(`pid ${file("agent.pid")}`, "sleep 2500", `child ${file("child.pid")}`, `grandchild ${file("grandchild.pid")}`, "hang"),
+    });
+    const readPid = (name: string) => () => {
+      try {
+        return Number(readFileSync(file(name), "utf8")) || null;
+      } catch {
+        return null;
+      }
+    };
+    // As soon as the agent has its prompt, which is the earliest a crash leaves anything to find:
+    // before that, the broken pipe means the agent never gets its instructions.
+    const agent = await until("agent", readPid("agent.pid"), 30_000);
+    // TerminateProcess on Windows and SIGKILL elsewhere: no handler runs, which is what a crash is.
+    first.child.kill("SIGKILL");
+    await first.exited;
+    const db = openDb(join(home, "aop.db"));
+    const record = db.prepare("SELECT children FROM agent_processes").get() as { children: string | null };
+    db.close();
+    // What the agent starts from here on can't be on record, whatever the record already holds.
+    expect(record).toBeDefined();
+
+    const pids = [agent, await until("child", readPid("child.pid")), await until("grandchild", readPid("grandchild.pid"))];
+    expect(record.children ?? "").not.toContain(String(pids[1]));
+    try {
+      expect(pids.map(isAlive)).toEqual([true, true, true]);
+      const second = realServer(home, shim);
+      await second.url;
+      try {
+        for (const pid of pids) expect(await waitGone(pid, 30_000)).toBe(true);
+        await until("the node to fail", () => dbNode(home, node.id).stage === "failed");
+        await until("the record to go", () => {
+          const db = openDb(join(home, "aop.db"));
+          try {
+            return (db.prepare("SELECT count(*) AS n FROM agent_processes").get() as { n: number }).n === 0;
+          } finally {
+            db.close();
+          }
+        });
+      } finally {
+        second.child.kill("SIGKILL");
+        await second.exited;
+      }
+    } finally {
+      for (const pid of pids) if (isAlive(pid)) await killTree(pid);
+    }
+  });
+
   it("a second server on the same AOP_HOME refuses to start, names the first, and leaves its agents alone", TIMEOUT, async () => {
     const { home, shim, first, url, post, project } = await setUp();
     const pidFile = join(home, "agent.pid");

@@ -347,7 +347,8 @@ describe("stopping", () => {
     expect(isAlive(doomedPid)).toBe(false);
     expect(await waitGone(doomedChild, 10_000)).toBe(true);
     expect(isAlive(safePid)).toBe(true);
-    expect(w.db.prepare("SELECT count(*) AS n FROM agent_processes WHERE node_id = ?").get(doomed.body.id)).toEqual({ n: 0 });
+    // The record goes once the clear-up of anything left behind has finished.
+    await until("the record to go", () => (w.db.prepare("SELECT count(*) AS n FROM agent_processes WHERE node_id = ?").get(doomed.body.id) as { n: number }).n === 0);
     expect(w.runs(safe.id)[0]?.status).toBe("running");
   });
 
@@ -387,6 +388,35 @@ describe("stopping", () => {
     const child = await w.pidFrom("child.pid");
     await w.atStage(node.id, "done");
     expect(await waitGone(child, 15_000)).toBe(true);
+  });
+
+  it("clears up the whole tree an agent left when it exited by itself, and nothing from another run", TIMEOUT, async () => {
+    w = await world({ graceMs: 60_000 });
+    const bystander = await w.create(directives(`pid ${w.file("bystander.pid")}`, `child ${w.file("bystander-child.pid")}`, "hang"));
+    // The grandchild's parent has exited before the agent does, so no parent link reaches it.
+    const node = await w.create(
+      directives(`child ${w.file("child.pid")}`, `grandchild ${w.file("grandchild.pid")}`, "sleep 4000", `grandchild ${w.file("late.pid")}`, 'aop ["next","fixed"]'),
+    );
+    const [child, grandchild] = [await w.pidFrom("child.pid"), await w.pidFrom("grandchild.pid")];
+    // Orphaned, and alive until the agent's run ends.
+    expect(isAlive(grandchild)).toBe(true);
+    const late = await w.pidFrom("late.pid");
+    const [other, otherChild] = [await w.pidFrom("bystander.pid"), await w.pidFrom("bystander-child.pid")];
+    await w.atStage(node.id, "done");
+    expect(await waitGone(child, 30_000)).toBe(true);
+    expect(await waitGone(grandchild, 30_000)).toBe(true);
+    expect(await waitGone(late, 30_000)).toBe(true);
+    await until("the record to go", () => !w.db.prepare("SELECT 1 FROM agent_processes WHERE node_id = ?").get(node.id));
+    expect(isAlive(other)).toBe(true);
+    expect(isAlive(otherChild)).toBe(true);
+    expect(w.runs(bystander.id)[0]?.status).toBe("running");
+  });
+
+  it("marks every process of a run with the run's ID", TIMEOUT, async () => {
+    w = await world();
+    const node = await w.create(directives(`record ${w.file("env.json")}`));
+    const [run] = await w.runsEnded(node.id);
+    expect(recorded("env.json").env["AOP_RUN_ID"]).toBe(run?.id);
   });
 
   it.skipIf(process.platform === "win32")("kills an agent that ignores SIGTERM", TIMEOUT, async () => {

@@ -8,7 +8,18 @@ import { buildPrompt } from "./context.js";
 import type { Db } from "./db.js";
 import { ConfigError, refused } from "./errors.js";
 import { getNodeRow, holdersOf, markFailed, startableNodes, type NodeRow, type NodeView, getNode } from "./nodes.js";
-import { type Identity, killConfirmed, killLeftovers, killTree, readChildren, readProcessStarts, waitGone } from "./processes.js";
+import {
+  type Identity,
+  killConfirmed,
+  killLeftovers,
+  killTree,
+  prepareSweeps,
+  readChildren,
+  readProcessStarts,
+  RUN_MARKER,
+  sweepRuns,
+  waitGone,
+} from "./processes.js";
 import { agentStartPath, getProject } from "./projects.js";
 import { newId } from "./records.js";
 import { appendToLog, logPathFor, openLog } from "./runLog.js";
@@ -111,6 +122,7 @@ export class Orchestrator {
    */
   async start(url: string): Promise<void> {
     this.url = url;
+    prepareSweeps();
     await this.reap();
     this.releaseStrandedClaims();
     this.running = true;
@@ -206,7 +218,9 @@ export class Orchestrator {
       child = spawn(command, {
         shell: true,
         cwd,
-        env: { ...process.env, AOP_NODE_ID: node.id, AOP_URL: this.url },
+        // The run's marker is inherited by everything the agent starts, so a crash at any moment,
+        // even before anything below has been recorded, leaves its whole tree findable.
+        env: { ...process.env, AOP_NODE_ID: node.id, AOP_URL: this.url, [RUN_MARKER]: id },
         stdio: "pipe",
         windowsHide: true,
         // Its own process group, so that it can be killed along with its children. On Windows the
@@ -259,7 +273,13 @@ export class Orchestrator {
       this.finish(active, exitCode, signal, launchError);
       if (active.pid !== undefined) {
         const start = active.processStart;
-        this.inBackground(killLeftovers(active.pid, [...(start === null ? [] : [{ pid: active.pid, start }]), ...active.children]));
+        const parents = [...(start === null ? [] : [{ pid: active.pid, start }]), ...active.children];
+        // The record stays until this is done, so that a crash in the meantime leaves it for the reaper.
+        this.inBackground(
+          killLeftovers(active.id, active.pid, parents).finally(() => {
+            if (this.db.open) forgetProcess(this.db, active.id);
+          }),
+        );
       }
       closeLogWhenDrained(child, log, `[aop] exited, code ${exitCode ?? signal ?? launchError}\n`).then(markExited, logFailure);
     };
@@ -282,7 +302,8 @@ export class Orchestrator {
   /**
    * Notes who the process is, while it can still be asked, so that it can be found again after a
    * crash. That means its children too, because the launched shell can die with the server and leave
-   * the real agent running.
+   * the real agent running. This is the fallback where the run's marker can't be read (see
+   * `sweepRuns`): it only knows what existed when it looked, which is a second or more after launch.
    */
   private async recordIdentity(active: ActiveRun, pid: number): Promise<void> {
     const start = (await readProcessStarts([pid])).get(pid);
@@ -317,7 +338,8 @@ export class Orchestrator {
     if (!this.db.open) return;
 
     this.db.transaction(() => {
-      forgetProcess(this.db, active.id);
+      // Without a process ID nothing ran, so there's nothing left to clear up.
+      if (active.pid === undefined) forgetProcess(this.db, active.id);
       const run = getRun(this.db, active.id);
       if (!run) return; // Its project has been deleted.
 
@@ -445,6 +467,11 @@ export class Orchestrator {
     const result: ReapResult = { killed: [], skipped: [] };
     const rows = listProcesses(this.db);
     const starts = await this.startsOf(rows);
+    // Every run on record that this server isn't tracking shouldn't have processes, so anything still
+    // carrying its marker is killed straight away. That reaches what the record doesn't: a child
+    // started after it was written, or a crash before the start times were read.
+    const lost = rows.filter((row) => !this.active.has(row.id)).map((row) => row.id);
+    const swept = lost.length === 0 ? [] : ((await sweepRuns(lost, true)) ?? []);
 
     for (const row of rows) {
       if (!this.db.open) return result;
@@ -459,7 +486,16 @@ export class Orchestrator {
         continue;
       }
 
-      const confirmed = identitiesOf(row).filter(({ pid, start }) => starts.get(pid) === start);
+      const marked = swept.filter((found) => found.runId === row.id).map(({ pid }) => pid);
+      const confirmed = identitiesOf(row).filter(({ pid, start }) => starts.get(pid) === start && !marked.includes(pid));
+      if (marked.length > 0) {
+        const pid = marked.includes(row.pid) ? row.pid : (marked[0] as number);
+        result.killed.push({ run_id: row.id, pid, reason: this.whyCondemned(row) ?? "this server didn't start it" });
+        if (confirmed.length > 0) await killConfirmed(row.pid, confirmed);
+        const gone = await Promise.all([...marked, ...confirmed.map(({ pid }) => pid)].map((pid) => waitGone(pid, STOP_WAIT_MS)));
+        if (gone.every(Boolean)) forgetProcess(this.db, row.id);
+        continue;
+      }
       if (confirmed.length === 0) {
         if (row.process_start === null && starts.has(row.pid)) {
           // It stays on record until it's gone, because nothing can show it's safe to kill.

@@ -162,7 +162,7 @@ describe("nothing can write the config", () => {
   });
 
   it("doesn't import anything that writes files anywhere in the server, except for run logs and the server lock", () => {
-    const READ_ONLY = new Set(["existsSync", "readFileSync", "realpathSync", "statSync"]);
+    const READ_ONLY = new Set(["existsSync", "readdirSync", "readFileSync", "realpathSync", "statSync"]);
     const folder = join(ROOT, "src", "server");
     for (const file of readdirSync(folder)) {
       // Each writes only under AOP_HOME: the run logs, and the lock that keeps a second server off it.

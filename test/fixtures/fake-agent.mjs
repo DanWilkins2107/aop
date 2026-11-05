@@ -9,6 +9,8 @@
 //   @@hang                         never exits by itself
 //   @@exit <code>
 //   @@child <pidfile>              starts a long-running child and writes its process ID
+//   @@grandchild <pidfile>         starts a child that starts a long-running grandchild, writes the
+//                                  grandchild's process ID and exits, leaving the grandchild orphaned
 //   @@pid <pidfile>                writes this process's own ID
 //   @@ignore-term                  on macOS and Linux, survives SIGTERM
 //   @@say <text>                   prints to stdout, which is the run's log
@@ -75,6 +77,18 @@ async function perform(directive) {
       const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 60000)"], { stdio: "ignore" });
       child.unref();
       writeFileSync(rest, String(child.pid));
+      return;
+    }
+    case "grandchild": {
+      // A child that starts a long-running child of its own and then exits, so the grandchild's
+      // parent link leads nowhere. Detached on Windows, because Node there ends a process's other
+      // children when it exits, through a job object. Elsewhere it stays in the agent's group.
+      const script = `const { spawn } = require("node:child_process");
+        const grandchild = spawn(process.execPath, ["-e", "setInterval(() => {}, 60000)"],
+          { stdio: "ignore", windowsHide: true, detached: process.platform === "win32" });
+        grandchild.unref();
+        require("node:fs").writeFileSync(${JSON.stringify(rest)}, String(grandchild.pid));`;
+      spawnSync(process.execPath, ["-e", script], { stdio: "ignore" });
       return;
     }
     case "pid":
