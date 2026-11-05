@@ -64,7 +64,22 @@ class CliFailure extends Error {}
 
 const serverUrl = () => process.env["AOP_URL"] ?? `http://127.0.0.1:${process.env["AOP_PORT"] ?? DEFAULT_PORT}`;
 
-async function send<T>(method: string, path: string, body?: unknown): Promise<T> {
+/** Something answered on the API's address, but not as the API does, such as the web UI's dev server. */
+const notTheApi = () => new CliFailure(`What answered at ${serverUrl()} isn't the AOP server's API. Check AOP_URL and AOP_PORT.`);
+
+/** The API's own error, if that's what the body is. */
+function apiError(text: string): { message: string; details?: unknown } | undefined {
+  try {
+    const { error } = JSON.parse(text) as { error?: { message?: unknown; details?: unknown } };
+    if (typeof error?.message === "string") return { message: error.message, details: error.details };
+  } catch {
+    // Not JSON, or JSON null.
+  }
+  return undefined;
+}
+
+/** Calls the API. A failure becomes the API's own message, or else its status. */
+async function call(method: string, path: string, body?: unknown): Promise<{ type: string; text: string }> {
   const init: RequestInit = { method };
   if (body !== undefined) {
     init.headers = { "content-type": "application/json" };
@@ -78,17 +93,29 @@ async function send<T>(method: string, path: string, body?: unknown): Promise<T>
   }
   const text = await response.text();
   if (!response.ok) {
-    let message = `The server answered ${response.status}`;
-    try {
-      const { error } = JSON.parse(text) as { error: { message: string; details?: unknown } };
-      message = error.message;
-      if (error.details !== undefined) message += `\n${JSON.stringify(error.details)}`;
-    } catch {
-      // Not one of the API's own errors, so the status is all there is.
-    }
+    const error = apiError(text);
+    let message = error?.message ?? `The server answered ${response.status}`;
+    if (error?.details !== undefined) message += `\n${JSON.stringify(error.details)}`;
     throw new CliFailure(message);
   }
-  return (response.headers.get("content-type")?.includes("json") ? JSON.parse(text) : text) as T;
+  return { type: response.headers.get("content-type") ?? "", text };
+}
+
+/** Every route the CLI uses answers JSON, except a node's context. */
+async function send<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const { type, text } = await call(method, path, body);
+  if (!type.includes("json")) throw notTheApi();
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw notTheApi();
+  }
+}
+
+async function sendForText(path: string): Promise<string> {
+  const { type, text } = await call("GET", path);
+  if (!type.startsWith("text/plain")) throw notTheApi();
+  return text;
 }
 
 const nodePath = (id: string) => `/nodes/${encodeURIComponent(id)}`;
@@ -270,7 +297,7 @@ async function run(argv: string[]): Promise<void> {
     case "context": {
       const { positionals } = args(rest, COMMANDS.context, {});
       if (positionals.length > 1) throw usageError(COMMANDS.context);
-      console.log(await send<string>("GET", `${nodePath(positionals[0] ?? ownNode())}/context`));
+      console.log(await sendForText(`${nodePath(positionals[0] ?? ownNode())}/context`));
       return;
     }
     case "next": {

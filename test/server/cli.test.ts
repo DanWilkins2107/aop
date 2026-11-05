@@ -1,5 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { EdgeRow, EventView, LinkRow, MessageRow } from "../../src/shared/api.js";
@@ -171,6 +173,32 @@ describe("the agent commands", () => {
     expect(res.code).toBe(1);
     expect(res.stderr).toContain("aop serve");
     expect(res.stderr).not.toContain("    at ");
+  });
+
+  it("says when what answers isn't the API, and when an error isn't the API's", TIMEOUT, async () => {
+    // Stands in for something else on the port, such as the UI's dev server, which answers every path with a page.
+    const stub = (status: number, type: string, body: string) =>
+      new Promise<Server>((done) => {
+        const server = createServer((_req, res) => res.writeHead(status, { "content-type": type }).end(body));
+        server.listen(0, "127.0.0.1", () => done(server));
+      });
+    const urlOf = (server: Server) => `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const page = await stub(200, "text/html", "<!doctype html><title>Not AOP</title>");
+    const badJson = await stub(200, "application/json", "{not json");
+    const oddError = await stub(500, "application/json", JSON.stringify({ error: "a string, not the API's shape" }));
+    try {
+      for (const [server, args] of [[page, ["context", "x"]], [page, ["ps"]], [page, ["node", "create", "--title", "x", "--project", "p"]], [badJson, ["ps"]]] as const) {
+        const res = await aop([...args], { env: { AOP_URL: urlOf(server) } });
+        expect(res.code, args.join(" ")).toBe(1);
+        expect(res.stderr).toContain("isn't the AOP server's API");
+        expect(res.stderr).not.toContain("    at ");
+      }
+      const odd = await aop(["ps"], { env: { AOP_URL: urlOf(oddError) } });
+      expect(odd.code).toBe(1);
+      expect(odd.stderr).toBe("The server answered 500\n");
+    } finally {
+      for (const server of [page, badJson, oddError]) server.close();
+    }
   });
 
   it("init says it isn't here yet", TIMEOUT, async () => {
