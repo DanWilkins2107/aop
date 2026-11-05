@@ -39,11 +39,6 @@ export function isInvalidated(node: NodeView): boolean {
   return node.stage === "invalidated" || node.invalidated_by_parent;
 }
 
-/** What the graph's "Hide finished" toggle hides. */
-export function isFinished(node: NodeView): boolean {
-  return FINISHED_STAGES.includes(node.stage);
-}
-
 /**
  * `inactive` is what isn't for picking up right now: blocked, held or done. `broken_down` and
  * `invalidated` recede further, because nothing more will happen on those cards.

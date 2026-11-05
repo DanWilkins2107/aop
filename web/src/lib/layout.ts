@@ -40,17 +40,37 @@ function connectedGroups(nodeIds: string[], edges: LayoutEdge[]): string[][] {
   return [...groups.values()];
 }
 
+/**
+ * Edges by their source's place in `nodeIds`, then their target's, so dagre always gets the same
+ * input for the same graph however the edges arrived. Its starting order follows edges in this
+ * order, so siblings sit oldest first.
+ */
+function stableEdges(nodeIds: string[], edges: LayoutEdge[]): LayoutEdge[] {
+  const place = new Map(nodeIds.map((id, i) => [id, i]));
+  const at = (id: string) => place.get(id) ?? Number.MAX_SAFE_INTEGER;
+  return [...edges].sort(
+    (a, b) =>
+      at(a.source_id) - at(b.source_id) ||
+      at(a.target_id) - at(b.target_id) ||
+      (a.kind === b.kind ? 0 : a.kind === "subtask" ? -1 : 1) ||
+      (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+  );
+}
+
 function layoutGroup(nodeIds: string[], edges: LayoutEdge[]): Group {
   const graph = new Graph({ multigraph: true });
   graph.setGraph({ rankdir: "TB", nodesep: 44, ranksep: 72, acyclicer: "greedy" });
   graph.setDefaultEdgeLabel(() => ({}));
 
   for (const id of nodeIds) graph.setNode(id, { width: CARD_WIDTH, height: CARD_HEIGHT });
-  for (const edge of edges) {
+  for (const edge of stableEdges(nodeIds, edges)) {
     // Parent and child should sit closer than a blocker and what it holds.
     graph.setEdge(edge.source_id, edge.target_id, { weight: edge.kind === "subtask" ? 3 : 1 }, edge.id);
   }
-  layout(graph);
+  // Dagre's crossing reduction re-sorts each row from scratch, so one new child can swap cards that
+  // were already there. Without it, each row keeps the order from oldest-first input: a new child
+  // goes after its older siblings. A graph with blocks edges can get the odd extra crossing.
+  layout(graph, { disableOptimalOrderHeuristic: true });
 
   const positions = new Map<string, Point>();
   const routes = new Map<string, Point[]>();
@@ -70,7 +90,8 @@ function layoutGroup(nodeIds: string[], edges: LayoutEdge[]): Group {
 /**
  * Lays cards out top to bottom over both kinds of edge, so only an edge ever adds depth. Each
  * unconnected group is laid out alone, then they all sit side by side along the top in the order
- * given. Nothing but `nodeIds` and `edges` goes in, so nothing else can move a card.
+ * given. Nothing but `nodeIds` and `edges` goes in, so nothing else can move a card, and a group
+ * that grows only pushes later groups sideways.
  */
 export function layoutGraph(nodeIds: string[], edges: LayoutEdge[]): GraphLayout {
   const known = new Set(nodeIds);
@@ -98,7 +119,10 @@ export function graphView<N extends { id: string; created_at: string }, E extend
   allEdges: E[],
   hidden: (node: N) => boolean,
 ): GraphLayout & { nodes: N[]; edges: E[] } {
-  const oldestFirst = [...allNodes].sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0));
+  // Nodes made in the same millisecond fall back to their ID, so the order never depends on arrival.
+  const oldestFirst = [...allNodes].sort((a, b) =>
+    a.created_at !== b.created_at ? (a.created_at < b.created_at ? -1 : 1) : a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+  );
   const { positions, routes } = layoutGraph(oldestFirst.map((node) => node.id), allEdges);
   const nodes = oldestFirst.filter((node) => !hidden(node));
   const shown = new Set(nodes.map((node) => node.id));
@@ -114,8 +138,9 @@ export interface FitOptions {
 }
 
 /**
- * The view that shows every card, centred, down to `minZoom`. Past that the graph is too big to
- * read at once, so the view starts at its top left and leaves the rest to panning.
+ * The first view: every card, as large as fits up to `maxZoom` but no smaller than `minZoom`, with
+ * the top row at the top of the canvas. A graph narrower than the canvas is centred across it, and
+ * one too wide to fit at `minZoom` starts at its left edge and leaves the rest to panning.
  */
 export function fittedViewport(
   positions: Iterable<Point>,
@@ -130,11 +155,9 @@ export function fittedViewport(
   const height = Math.max(...points.map((p) => p.y)) + CARD_HEIGHT - top;
   const fit = Math.min((canvas.width - 2 * padding.x) / width, (canvas.height - 2 * padding.y) / height);
   const zoom = Math.min(maxZoom, Math.max(minZoom, fit));
-  const offset = (space: number, size: number, pad: number, start: number) => {
-    const free = space - size * zoom;
-    return (fit >= minZoom && free >= 2 * pad ? free / 2 : pad) - start * zoom;
-  };
-  return { x: offset(canvas.width, width, padding.x, left), y: offset(canvas.height, height, padding.y, top), zoom };
+  const free = canvas.width - width * zoom;
+  const x = (free >= 2 * padding.x ? free / 2 : padding.x) - left * zoom;
+  return { x, y: padding.y - top * zoom, zoom };
 }
 
 /** An SVG path through a route, rounding each corner. */
