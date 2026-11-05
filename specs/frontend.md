@@ -7,10 +7,10 @@ One graph per project, using React Flow with auto-layout. Unconnected nodes exte
 
 ## Node page
 One column at every screen size, in a few broad card sections with smaller parts inside. It must look fine on a small screen.
-1. **Header card:** a band in the current stage's colour showing the stage name and, only when the node is claimed, a green dot with the holder or run ID. Then the title, Ticket and PR links (agents attach them, so the UI can't add them) and moving-on buttons. A collapsible, colourless pipeline graph of the current type sits inside, with the current stage in a heavier outline. On a global stage, its note that global stages live outside the pipeline goes in that dropdown too.
+1. **Header card:** a band in the current stage's colour showing the stage name and, only when the node is claimed, a green dot with the holder or run ID. Then the title, Ticket and PR links (agents attach them, so the UI can't add them) and moving-on buttons. A collapsible, colourless pipeline graph of the current type sits inside, with the current stage in a heavier outline. Beside it, also collapsed: force stage, invalidate or block, and claim (open by default). On a global stage, its note that global stages live outside the pipeline goes in that dropdown too.
 2. **Description card.**
 3. **Messages card:** the send box first, then an inner card for each continuous visit to a stage, newest first, titled with that stage. Going back and forth between stages makes separate inner cards. Messages inside are newest first; agent messages have a light blue background and human messages are white. There is never a second box: on `ask_human_question`, the same box takes the answer.
-4. **Details card:** always visible, with small separate collapsibles inside, in this order: force stage, invalidate or block, claim (open by default), edges, history.
+4. **Details card:** at the bottom. Small collapsibles for edges and history, then a runs table: each agent run's stage, start, duration, how it ended and context consumed. The latest run shows the last 20 lines of its headless session log, updating live while it runs.
 
 `externally_blocked`, `ask_human_question` and `failed` default to returning to the original stage.
 

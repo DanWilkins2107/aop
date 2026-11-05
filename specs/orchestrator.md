@@ -11,7 +11,7 @@ agent_timeout_minutes: 60
 stages: ./stages.yaml                     # link to the stages config, which can be anywhere
 ```
 
-Launched agents run `agent_session_command`, and AOP adds what it needs to run without a terminal: `-p`, with the prompt on stdin. AOP doesn't ship a sandbox or check that the command is one.
+Launched agents run `agent_session_command`, and AOP adds what it needs to run without a terminal: `-p`, with the prompt on stdin. For Claude Code it also asks for streamed JSON output, so it can record context consumed per run and show a readable log. Other tools show what AOP can read. AOP doesn't ship a sandbox or check that the command is one.
 
 
 ## Running a stage
