@@ -26,6 +26,9 @@ const AGENT_COMMANDS = {
   split: ["aop split start", "aop split finish"],
 } as const;
 const HUMAN_COMMANDS = {
+  init: [
+    "aop init [--yes] [--fill-missing] [--agent-session-command <cmd>] [--out-of-sandbox-command <cmd>] [--open-from <dir>] [--create-open-from] [--agent-timeout-minutes <n>] [--stages <file>]",
+  ],
   project: ["aop project add <path>"],
   serve: ["aop serve [--port <port>]"],
   steer: ["aop steer <node> [--no-sandbox]"],
@@ -358,8 +361,11 @@ async function run(argv: string[]): Promise<void> {
       none(rest, COMMANDS.reap);
       printReaped(await send<ReapResult>("POST", "/agents/reap"));
       return;
-    case "init":
-      throw new CliFailure("aop init isn't available yet. Create config.yaml in AOP_HOME or ~/.aop by hand for now.");
+    case "init": {
+      const { runInit } = await import("./init.js");
+      process.exitCode = await runInit(rest, { usage: usageError(COMMANDS.init).message });
+      return;
+    }
     default:
       throw new UsageError(`Unknown command "${command}"\n\n${USAGE}`);
   }
