@@ -574,7 +574,9 @@ export function retry(db: Db, nodeId: string): NodeView {
   return getNode(db, nodeId);
 }
 
+/** Human-only: only a human can invalidate, from any stage. */
 export function invalidate(db: Db, nodeId: string, input: { reason: string; actor: Actor }): NodeView {
+  assertHuman(input.actor, "invalidate a node");
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
     if (node.stage === "invalidated") throw refused("The node is already invalidated");
@@ -583,7 +585,7 @@ export function invalidate(db: Db, nodeId: string, input: { reason: string; acto
       type: node.type,
       reason: input.reason,
       via: "invalidate",
-      actor: input.actor,
+      actor: "human",
       detail: { reason: input.reason },
     });
   })();

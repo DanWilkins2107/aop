@@ -463,6 +463,13 @@ describe("invalidate and restore", () => {
     expect((await h.node(node.id)).stage).toBe("write_spec");
   });
 
+  it("is human-only, so an agent can't invalidate", async () => {
+    const node = await h.create("dev");
+    expect((await h.post(node.id, "invalidate", { reason: "x", actor: "agent" })).status).toBe(409);
+    expect((await h.post(node.id, "invalidate", { reason: "x", actor: "system" })).status).toBe(409);
+    expect((await h.node(node.id)).stage).toBe("write_spec");
+  });
+
   it("restores the stage and type from events", async () => {
     const node = await h.create("triage");
     await h.post(node.id, "next", { outcome: "ready" });
