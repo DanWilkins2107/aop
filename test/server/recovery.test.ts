@@ -337,6 +337,47 @@ describe("a real server process", () => {
     }
   });
 
+  it("a second server on the same AOP_HOME refuses to start, names the first, and leaves its agents alone", TIMEOUT, async () => {
+    const { home, shim, first, url, post, project } = await setUp();
+    const pidFile = join(home, "agent.pid");
+    const node = await post<NodeView>(`/projects/${project.id}/nodes`, {
+      type: "hotfix",
+      title: "t",
+      body: directives(`pid ${pidFile}`, "hang"),
+    });
+    const pid = await until("the agent's pid", () => {
+      try {
+        return Number(readFileSync(pidFile, "utf8")) || null;
+      } catch {
+        return null;
+      }
+    });
+    try {
+      const second = realServer(home, shim);
+      await second.exited;
+      expect(second.child.exitCode).toBe(1);
+      expect(second.output()).toContain("Another AOP server is already running");
+      expect(second.output()).toContain(`process ${first.child.pid} at ${url}`);
+      expect(second.output()).not.toMatch(/AOP listening/);
+
+      expect(isAlive(pid)).toBe(true);
+      expect(isAlive(first.child.pid!)).toBe(true);
+      expect(dbNode(home, node.id)).toMatchObject({ stage: "implement", claimed_by: "agent" });
+      // The first server still works.
+      expect((await fetch(`${url}/api/projects`)).status).toBe(200);
+    } finally {
+      first.child.kill("SIGKILL");
+      await first.exited;
+      if (isAlive(pid)) await killTree(pid);
+    }
+
+    // A crash leaves no lock behind: the next server starts.
+    const third = realServer(home, shim);
+    await third.url;
+    third.child.kill("SIGKILL");
+    await third.exited;
+  });
+
   it("after a crash where the agent died too, the next start fails its node", TIMEOUT, async () => {
     const { home, shim, first, post, project } = await setUp();
     const pidFile = join(home, "agent.pid");
