@@ -173,7 +173,7 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
   // Every write comes through here, and refused ones change nothing.
   app.use(`${API_PREFIX}/*`, async (c, proceed) => {
     // A process left over from an ended run still has its CLI, and must not act on the board. Stage
-    // changes check the run against the node as well, inside their transaction: see `nodes.ts`.
+    // changes check the run against the node as well, inside their transaction: see `stageMachine.ts`.
     const runId = runIdOf(c);
     if (runId !== undefined && !["GET", "HEAD"].includes(c.req.method) && getRun(db, runId)?.status !== "running") {
       throw refused(`Agent run ${runId} has ended, so it can't change anything. It should exit`);
