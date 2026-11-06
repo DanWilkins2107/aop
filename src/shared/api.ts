@@ -35,6 +35,7 @@ export type ApiErrorCode =
   | "constraint_violation"
   | "forbidden_host"
   | "forbidden_origin"
+  | "payload_too_large"
   | "internal_error";
 
 /** The body of every error response. `config_invalid` carries the problems, as strings, in `details`. */
