@@ -1,46 +1,13 @@
 // Live data. One event stream per page, and `useLiveData` refetches whenever the server says something changed.
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ApiFailure, urls } from "./api.js";
-
-type Status = "connecting" | "live" | "offline";
+import { ApiFailure } from "./api.js";
+import { liveStatus, subscribeChanges, subscribeLiveStatus, type Status } from "./liveStream.js";
 
 const REFETCH_DELAY_MS = 80;
 
-const changeListeners = new Set<() => void>();
-const statusListeners = new Set<() => void>();
-let status: Status = "connecting";
-let source: EventSource | null = null;
-
-function setStatus(next: Status): void {
-  status = next;
-  for (const listener of statusListeners) listener();
-}
-
-/** One stream for the whole page. EventSource reconnects by itself after a server restart. */
-function ensureConnected(): void {
-  if (source) return;
-  source = new EventSource(urls.events);
-  const fire = () => {
-    for (const listener of changeListeners) listener();
-  };
-  source.addEventListener("ready", () => {
-    setStatus("live");
-    fire();
-  });
-  source.addEventListener("change", fire);
-  source.onerror = () => setStatus("offline");
-}
-
 export function useLiveStatus(): Status {
-  return useSyncExternalStore(
-    (listener) => {
-      ensureConnected();
-      statusListeners.add(listener);
-      return () => statusListeners.delete(listener);
-    },
-    () => status,
-  );
+  return useSyncExternalStore(subscribeLiveStatus, liveStatus);
 }
 
 export interface Loaded<T> {
@@ -92,12 +59,11 @@ export function useLiveData<T>(load: () => Promise<T>, key: string): Loaded<T> {
       clearTimeout(timer);
       timer = setTimeout(() => void reload(), REFETCH_DELAY_MS);
     };
-    ensureConnected();
-    changeListeners.add(soon);
+    const unsubscribe = subscribeChanges(soon);
     window.addEventListener("focus", soon);
     return () => {
       clearTimeout(timer);
-      changeListeners.delete(soon);
+      unsubscribe();
       window.removeEventListener("focus", soon);
     };
   }, [reload]);

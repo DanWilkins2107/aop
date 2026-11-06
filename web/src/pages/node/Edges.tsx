@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { FormError, useFormError } from "../../components/FormError.js";
 import type { EdgeRow, NodeView } from "../../../../src/shared/api.js";
 import { api, ApiFailure, failureText } from "../../lib/api.js";
 import { humanize } from "../../lib/format.js";
@@ -37,6 +38,7 @@ export function Edges({
   const [relation, setRelation] = useState<(typeof RELATIONS)[number]["value"]>("parent");
   const [other, setOther] = useState("");
   const { busy, error, run } = useAction(reload, describeFailure);
+  const { errorId, describedBy } = useFormError(error);
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const candidates = nodes.filter((n) => n.id !== node.id);
 
@@ -86,14 +88,14 @@ export function Edges({
           add();
         }}
       >
-        <select value={relation} onChange={(e) => setRelation(e.target.value as typeof relation)} aria-label="Edge relation">
+        <select value={relation} onChange={(e) => setRelation(e.target.value as typeof relation)} aria-label="Edge relation" aria-describedby={describedBy}>
           {RELATIONS.map((r) => (
             <option key={r.value} value={r.value}>
               {r.label}
             </option>
           ))}
         </select>
-        <select value={other} onChange={(e) => setOther(e.target.value)} aria-label="Other node">
+        <select value={other} onChange={(e) => setOther(e.target.value)} aria-label="Other node" aria-describedby={describedBy}>
           <option value="">Choose a node…</option>
           {candidates.map((candidate) => (
             <option key={candidate.id} value={candidate.id}>
@@ -105,7 +107,7 @@ export function Edges({
           Add
         </button>
       </form>
-      {error ? <div className="form-error">{error}</div> : null}
+      <FormError error={error} id={errorId} />
     </>
   );
 }

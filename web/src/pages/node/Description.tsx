@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { NodeView } from "../../../../src/shared/api.js";
+import { FormError, useFormError } from "../../components/FormError.js";
 import { api } from "../../lib/api.js";
 import { useAction } from "../../lib/useAction.js";
 
@@ -7,6 +8,7 @@ export function Description({ node, reload }: { node: NodeView; reload: () => Pr
   // Null while reading, so that live updates show through unless there's a draft to protect.
   const [draft, setDraft] = useState<string | null>(null);
   const { busy, error, run } = useAction(reload);
+  const { errorId, describedBy } = useFormError(error);
 
   async function save() {
     if (draft === null) return;
@@ -37,6 +39,7 @@ export function Description({ node, reload }: { node: NodeView; reload: () => Pr
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             aria-label="Description"
+            aria-describedby={describedBy}
           />
           <div className="action-row">
             <button type="button" disabled={busy || draft === node.body} onClick={() => void save()}>
@@ -48,7 +51,7 @@ export function Description({ node, reload }: { node: NodeView; reload: () => Pr
           </div>
         </>
       )}
-      {error ? <div className="form-error">{error}</div> : null}
+      <FormError error={error} id={errorId} />
     </section>
   );
 }
