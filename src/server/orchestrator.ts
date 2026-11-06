@@ -66,6 +66,8 @@ type StopReason = "human" | "timeout" | "held" | "moved_on" | "shutdown" | "proj
 interface ActiveRun {
   id: string;
   nodeId: string;
+  /** Kept here because the node can be deleted, with its project, before its process exits. */
+  projectId: string;
   pid: number | undefined;
   /** Null until read. See `readProcessStarts`. */
   processStart: string | null;
@@ -231,7 +233,7 @@ export class Orchestrator {
       this.failBeforeLaunch(run, (error as Error).message);
       return;
     }
-    this.track(run, child, command, prompt, config.agent_timeout_minutes);
+    this.track(run, node.project_id, child, command, prompt, config.agent_timeout_minutes);
     this.changes.notify();
   }
 
@@ -244,7 +246,14 @@ export class Orchestrator {
     this.changes.notify();
   }
 
-  private track(run: RunRow, child: ChildProcessWithoutNullStreams, command: string, prompt: string, timeoutMinutes: number): void {
+  private track(
+    run: RunRow,
+    projectId: string,
+    child: ChildProcessWithoutNullStreams,
+    command: string,
+    prompt: string,
+    timeoutMinutes: number,
+  ): void {
     const log = openLog(run.log_path);
     log.on("error", logFailure);
     child.stdout.pipe(log, { end: false });
@@ -255,6 +264,7 @@ export class Orchestrator {
     const active: ActiveRun = {
       id: run.id,
       nodeId: run.node_id,
+      projectId,
       pid: child.pid,
       processStart: null,
       children: [],
@@ -401,7 +411,8 @@ export class Orchestrator {
    */
   async stopProjectAgents(projectId: string): Promise<() => void> {
     this.closingProjects.add(projectId);
-    const inProject = [...this.active.values()].filter((run) => getNodeRow(this.db, run.nodeId).project_id === projectId);
+    // Not from the node: one whose project was deleted while it outlived the wait has none.
+    const inProject = [...this.active.values()].filter((run) => run.projectId === projectId);
     await Promise.all(inProject.map((run) => this.stop(run, "project_deleted")));
     return () => {
       this.closingProjects.delete(projectId);
