@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { LinkRow } from "../../../src/shared/api.js";
 import { ClaimMark } from "../components/ClaimMark.js";
+import { CopyId } from "../components/CopyId.js";
 import { ErrorNotice } from "../components/ErrorNotice.js";
 import { PipelineGraph } from "../components/PipelineGraph.js";
 import { ancestorsOf } from "../lib/ancestry.js";
@@ -94,7 +95,10 @@ export function NodePage() {
             <span>{humanize(node.stage)}</span>
             <ClaimMark node={node} />
           </p>
-          <h1 className={node.stage === "invalidated" || byParent ? "title-dead" : undefined}>{node.title}</h1>
+          <div className="node-title-row">
+            <h1 className={node.stage === "invalidated" || byParent ? "title-dead" : undefined}>{node.title}</h1>
+            <CopyId id={node.id} />
+          </div>
           {!node.stage_exists ? (
             <p className="meta-note meta-note-alert" role="alert">
               This node's stage is gone. <code>{node.stage}</code> is no longer in type <code>{node.type}</code> in

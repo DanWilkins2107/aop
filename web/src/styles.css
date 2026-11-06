@@ -614,6 +614,21 @@ label {
 .detail-body {
   padding: 8px 0 4px;
 }
+/* The title, with its quiet "Copy ID" beside it, wrapping under it on narrow screens. */
+.node-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+.copy-id {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
 .title-dead {
   color: var(--muted);
   text-decoration: line-through;
