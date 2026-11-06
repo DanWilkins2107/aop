@@ -1,0 +1,63 @@
+/* ---- runs ---- */
+
+.runs {
+  border-top: 1px solid var(--hairline);
+  padding-top: 10px;
+}
+.runs-note {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+}
+.runs-scroll {
+  overflow-x: auto;
+}
+/* A plain list with columns: no fills, no fixed widths, so it fits a small window. */
+.runs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.runs-table th {
+  text-align: left;
+  font-weight: 400;
+  color: var(--muted);
+}
+.runs-table th,
+.runs-table td {
+  padding: 3px 10px 3px 0;
+  border-bottom: 1px solid var(--hairline);
+  vertical-align: baseline;
+  overflow-wrap: anywhere;
+}
+.runs-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.runs-table .num {
+  text-align: right;
+  padding-right: 0;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.log-tail-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0 12px;
+  margin-top: 14px;
+}
+.log-tail-head a {
+  font-size: 12px;
+}
+.log-tail {
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--hairline);
+  border-radius: 4px;
+  color: var(--muted);
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

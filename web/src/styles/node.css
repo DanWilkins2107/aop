@@ -1,0 +1,111 @@
+/* ---- node page: one column of broad cards, with smaller parts inside ---- */
+
+.node-canvas {
+  flex: 1 0 auto;
+  background: var(--canvas);
+}
+.node-page {
+  max-width: 860px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.panel > h2 {
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+.panel-part {
+  border-top: 1px solid var(--hairline);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+.detail-part > summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+  user-select: none;
+}
+/* The Header card's collapsibles: pipeline, force stage, invalidate or block, and claim. */
+.header-parts {
+  padding-top: 0;
+}
+.header-parts > .detail-part:first-child {
+  border-top: 0;
+}
+.pipeline-note {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+.detail-part {
+  border-top: 1px solid var(--hairline);
+  padding: 8px 0;
+}
+.detail-part:last-child {
+  padding-bottom: 0;
+}
+.detail-status {
+  margin-left: 8px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.detail-body {
+  padding: 8px 0 4px;
+}
+.title-dead {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.stage-band {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
+  margin: -14px -16px 12px;
+  padding: 6px 16px;
+  border-radius: 7px 7px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+/* Bigger, with a thicker ring, so it stands out on any stage colour, green ones included. */
+.stage-band .claim-dot {
+  width: 10px;
+  height: 10px;
+  border-width: 2px;
+}
+.meta-note {
+  margin: 6px 0 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.meta-note-alert {
+  color: var(--danger);
+}
+.meta-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  margin: 6px 0 0;
+  font-size: 13px;
+}
+.section {
+  border-top: 1px solid var(--border);
+  padding: 12px 0;
+}
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.section-text {
+  margin: 0;
+}

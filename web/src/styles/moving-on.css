@@ -1,0 +1,21 @@
+/* ---- moving on ---- */
+
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.moving-on > div > .action-row:first-child {
+  margin-top: 0;
+}
+.panel-part.moving-on .action-text:last-child {
+  margin-bottom: 0;
+}
+.action-text {
+  margin: 0 0 8px;
+}
+p.action-text:last-child {
+  margin-bottom: 0;
+}

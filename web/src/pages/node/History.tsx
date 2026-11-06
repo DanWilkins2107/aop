@@ -1,5 +1,6 @@
 import type { EventView } from "../../../../src/shared/api.js";
-import { describeEvent, timeAgo } from "../../lib/format.js";
+import { describeEvent } from "../../lib/eventText.js";
+import { timeAgo } from "../../lib/format.js";
 
 export function History({ events, titleOf }: { events: EventView[]; titleOf: (id: string) => string }) {
   return (

@@ -5,9 +5,9 @@ import type { EventView, NodeView, TypeView } from "../../src/shared/api.js";
 import { contrast, parseHex, readableText, visibleOn } from "../../web/src/lib/color.js";
 import { CARD_HEIGHT, CARD_WIDTH, fittedViewport, graphView, layoutGraph, smoothPath } from "../../web/src/lib/layout.js";
 import { originalStage, stageDrawing } from "../../web/src/lib/stageGraph.js";
+import { describeEvent } from "../../web/src/lib/eventText.js";
 import {
   claimLabel,
-  describeEvent,
   formatDuration,
   formatStart,
   formatTokens,

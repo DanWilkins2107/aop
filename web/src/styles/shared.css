@@ -1,0 +1,39 @@
+/* ---- shared bits ---- */
+
+.banner {
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  font-size: 13.5px;
+}
+.banner-danger {
+  border: 1px solid #f1a9a9;
+}
+.problem-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  overflow-wrap: anywhere;
+}
+.inline-link + .inline-link::before {
+  content: ", ";
+  color: var(--text);
+}
+.empty {
+  padding: 24px 0;
+  border-top: 1px solid var(--border);
+  margin-top: 14px;
+}
+.empty p {
+  margin: 4px 0 0;
+}
+.breadcrumb {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.breadcrumb a {
+  color: var(--muted);
+}
+.crumb-sep {
+  margin: 0 6px;
+  color: var(--muted);
+}
