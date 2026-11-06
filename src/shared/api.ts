@@ -1,4 +1,4 @@
-/** The shapes the HTTP API accepts and returns. Types only, so that the browser can import this file. */
+/** The shapes the HTTP API accepts and returns. Types and plain constants only, so that the browser can import this file. */
 import type { z } from "zod";
 import type * as requests from "./requests.js";
 
@@ -41,6 +41,12 @@ export type ApiErrorCode =
 export interface ApiErrorBody {
   error: { code: ApiErrorCode; message: string; details?: unknown };
 }
+
+/**
+ * The header a launched agent's CLI sends with its run's ID, from `AOP_RUN_ID`. The server refuses a
+ * write from a run that has ended, and a stage change from any run but the one on that node.
+ */
+export const RUN_ID_HEADER = "x-aop-run-id";
 
 export type Actor = "human" | "agent" | "system";
 export type Turn = "agent" | "human";

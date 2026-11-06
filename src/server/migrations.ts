@@ -250,4 +250,13 @@ ALTER TABLE runs ADD COLUMN timed_out INTEGER NOT NULL DEFAULT 0
   CONSTRAINT runs_timed_out_failed CHECK (timed_out = 0 OR end_reason = 'failed');
 `,
   },
+  {
+    version: 8,
+    // Lookups made for every node on every read of a project, and on every scheduler pass, which
+    // otherwise scan the whole table: a node's latest run, and a scheduled node's latest child.
+    sql: `
+CREATE INDEX runs_node ON runs(node_id);
+CREATE INDEX nodes_spawned_by ON nodes(spawned_by) WHERE spawned_by IS NOT NULL;
+`,
+  },
 ];

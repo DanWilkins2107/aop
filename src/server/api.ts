@@ -10,7 +10,7 @@ import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { z } from "zod";
-import type { ApiErrorBody, ApiErrorCode, LogTail } from "../shared/api.js";
+import { RUN_ID_HEADER, type ApiErrorBody, type ApiErrorCode, type LogTail } from "../shared/api.js";
 import {
   actorBody,
   addProjectBody,
@@ -79,6 +79,12 @@ async function readBody<S extends z.ZodType>(c: Context, schema: S, emptyAllowed
   return parsed.data;
 }
 
+/** The agent run a request says it comes from. See `RUN_ID_HEADER`. */
+function runIdOf(c: Context): string | undefined {
+  const value = c.req.header(RUN_ID_HEADER)?.trim();
+  return value === undefined || value === "" ? undefined : value;
+}
+
 function errorResponse(c: Context, status: ContentfulStatusCode, code: ApiErrorCode, message: string, details?: unknown) {
   const body: ApiErrorBody = { error: { code, message, ...(details !== undefined ? { details } : {}) } };
   return c.json(body, status);
@@ -134,6 +140,12 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
 
   // Every write comes through here, and refused ones change nothing.
   app.use(`${API_PREFIX}/*`, async (c, proceed) => {
+    // A process left over from an ended run still has its CLI, and must not act on the board. Stage
+    // changes check the run against the node as well, inside their transaction: see `nodes.ts`.
+    const runId = runIdOf(c);
+    if (runId !== undefined && !["GET", "HEAD"].includes(c.req.method) && getRun(db, runId)?.status !== "running") {
+      throw refused(`Agent run ${runId} has ended, so it can't change anything. It should exit`);
+    }
     await proceed();
     if (!["GET", "HEAD"].includes(c.req.method) && c.res.status < 400) changes.notify();
   });
@@ -230,19 +242,19 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
 
   // Stage changes
   app.post(routes.nodeAction("next"), async (c) =>
-    c.json(nodes.next(db, c.req.param("id"), await readBody(c, nextBody))),
+    c.json(nodes.next(db, c.req.param("id"), { ...(await readBody(c, nextBody)), runId: runIdOf(c) })),
   );
   app.post(routes.nodeAction("move"), async (c) =>
     c.json(nodes.move(db, c.req.param("id"), await readBody(c, moveBody))),
   );
   app.post(routes.nodeAction("ask"), async (c) =>
-    c.json(nodes.ask(db, c.req.param("id"), await readBody(c, askBody))),
+    c.json(nodes.ask(db, c.req.param("id"), { ...(await readBody(c, askBody)), runId: runIdOf(c) })),
   );
   app.post(routes.nodeAction("answer"), async (c) =>
     c.json(nodes.answer(db, c.req.param("id"), await readBody(c, answerBody))),
   );
   app.post(routes.nodeAction("fail"), async (c) =>
-    c.json(nodes.fail(db, c.req.param("id"), await readBody(c, failBody, true))),
+    c.json(nodes.fail(db, c.req.param("id"), { ...(await readBody(c, failBody, true)), runId: runIdOf(c) })),
   );
   app.post(routes.nodeAction("retry"), (c) => c.json(nodes.retry(db, c.req.param("id"))));
   app.post(routes.nodeAction("invalidate"), async (c) =>
@@ -256,8 +268,8 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
   app.post(routes.nodeAction("unblock"), async (c) =>
     c.json(nodes.unblock(db, c.req.param("id"), await readBody(c, unblockBody, true))),
   );
-  app.post(routes.nodeAction("split/start"), (c) => c.json(nodes.splitStart(db, c.req.param("id"))));
-  app.post(routes.nodeAction("split/finish"), (c) => c.json(nodes.splitFinish(db, c.req.param("id"))));
+  app.post(routes.nodeAction("split/start"), (c) => c.json(nodes.splitStart(db, c.req.param("id"), { runId: runIdOf(c) })));
+  app.post(routes.nodeAction("split/finish"), (c) => c.json(nodes.splitFinish(db, c.req.param("id"), { runId: runIdOf(c) })));
 
   // Claims
   app.post(routes.nodeAction("claim"), async (c) =>
