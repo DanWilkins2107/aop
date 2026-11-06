@@ -1,9 +1,9 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { HEADLESS_AGENT_FLAGS } from "../../src/server/orchestrator.js";
+import { HEADLESS_AGENT_FLAGS } from "../../src/server/agentOutput.js";
 import { isAlive, waitGone } from "../../src/server/processes.js";
-import type { EventView, MessageRow, NodeView } from "../../src/shared/api.js";
+import type { EventView, MessageRow, NodeView, RunView } from "../../src/shared/api.js";
 import { directives, until, world, type World } from "./agents.helpers.js";
 import { makeRepo, STAGES_YAML } from "./helpers.js";
 
@@ -30,7 +30,7 @@ describe("starting", () => {
     await w.atStage(node.id, "done");
     const seen = recorded("r.json");
 
-    expect(seen.argv).toEqual([HEADLESS_AGENT_FLAGS]);
+    expect(seen.argv).toEqual([HEADLESS_AGENT_FLAGS.other]);
     expect(seen.argv).toEqual(["-p"]);
     expect(seen.cwd.toLowerCase()).toBe(w.repo.toLowerCase());
     expect(seen.env["AOP_NODE_ID"]).toBe(node.id);
@@ -228,6 +228,9 @@ describe("how a run ends", () => {
     expect(await waitGone(child, 10_000)).toBe(true);
     const failure = (await events(node.id)).find((event) => (event.data as { via?: string }).via === "fail");
     expect(JSON.stringify(failure?.data)).toContain("agent_timeout_minutes");
+    // The runs table tells a timeout from any other failure.
+    const runs = (await w.call<RunView[]>("GET", `/nodes/${node.id}/runs`)).body;
+    expect(runs.map((run) => run.ending)).toEqual(["timed_out"]);
   });
 });
 

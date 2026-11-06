@@ -1,3 +1,5 @@
+import type { RunView } from "../shared/api.js";
+import type { OutputFormat, Usage } from "./agentOutput.js";
 import type { Db } from "./db.js";
 import type { NodeRow } from "./nodes.js";
 import type { Identity } from "./processes.js";
@@ -20,6 +22,12 @@ export interface RunRow {
   left_actor: Actor | null;
   left_at: string | null;
   end_reason: EndReason | null;
+  output_format: OutputFormat;
+  /** See `Usage`. Null when the tool's output says nothing AOP can read. */
+  context_tokens: number | null;
+  output_tokens: number | null;
+  /** 1 for a `failed` run that ran past agent_timeout_minutes. */
+  timed_out: 0 | 1;
 }
 
 /** A process AOP started. Stays until AOP knows the process is gone, whatever happens to its run. */
@@ -57,24 +65,25 @@ export function agentReported(run: RunRow): boolean {
 }
 
 /** Takes the node's claim and opens its run, together, so that nothing else can start on it. */
-export function beginRun(db: Db, node: NodeRow, id: string, logPath: string): RunRow {
+export function beginRun(db: Db, node: NodeRow, id: string, logPath: string, format: OutputFormat = "text"): RunRow {
   db.transaction(() => {
     db.prepare("UPDATE nodes SET claimed_by = 'agent' WHERE id = ?").run(node.id);
     appendEvent(db, node.id, "system", "claim_taken", { holder: "agent", run_id: id });
     db.prepare(
-      "INSERT INTO runs (id, created_at, node_id, stage, status, log_path) VALUES (?, ?, ?, ?, 'running', ?)",
-    ).run(id, now(), node.id, node.stage, logPath);
+      "INSERT INTO runs (id, created_at, node_id, stage, status, log_path, output_format) VALUES (?, ?, ?, ?, 'running', ?, ?)",
+    ).run(id, now(), node.id, node.stage, logPath, format);
     appendEvent(db, node.id, "system", "run_started", { run_id: id, stage: node.stage });
   })();
   return getRun(db, id) as RunRow;
 }
 
 /** Call inside the transaction that decides what the run's end means for its node. */
-export function closeRun(db: Db, run: RunRow, reason: EndReason, exitCode: number | null): void {
-  db.prepare("UPDATE runs SET status = 'exited', exit_code = ?, ended_at = ?, end_reason = ? WHERE id = ?").run(
+export function closeRun(db: Db, run: RunRow, reason: EndReason, exitCode: number | null, timedOut = false): void {
+  db.prepare("UPDATE runs SET status = 'exited', exit_code = ?, ended_at = ?, end_reason = ?, timed_out = ? WHERE id = ?").run(
     exitCode,
     now(),
     reason,
+    reason === "failed" && timedOut ? 1 : 0,
     run.id,
   );
   appendEvent(db, run.node_id, "system", "run_ended", { run_id: run.id, reason, exit_code: exitCode });
@@ -121,4 +130,39 @@ export function projectLogPaths(db: Db, projectId: string): string[] {
 
 export function forgetProcess(db: Db, id: string): void {
   db.prepare("DELETE FROM agent_processes WHERE id = ?").run(id);
+}
+
+/** Keeps a run's token usage up to date as its output arrives. */
+export function recordUsage(db: Db, runId: string, usage: Usage): void {
+  db.prepare("UPDATE runs SET context_tokens = ?, output_tokens = ? WHERE id = ?").run(usage.context, usage.output, runId);
+}
+
+/** How a run ended, in the words the node page uses. */
+function endingOf(run: RunRow): RunView["ending"] {
+  if (run.status === "running") return "running";
+  switch (run.end_reason) {
+    case "failed":
+      return run.timed_out === 1 ? "timed_out" : "failed";
+    case "stopped":
+    case "held":
+    case "shutdown":
+      return "stopped";
+    default:
+      // Reported an outcome and left, or an older run from before AOP recorded how runs ended.
+      return "exited";
+  }
+}
+
+/** Every run on a node, newest first. */
+export function listRuns(db: Db, nodeId: string): RunView[] {
+  const rows = db.prepare("SELECT * FROM runs WHERE node_id = ? ORDER BY rowid DESC").all(nodeId) as RunRow[];
+  return rows.map((run) => ({
+    id: run.id,
+    stage: run.stage,
+    started_at: run.created_at,
+    ended_at: run.ended_at,
+    ending: endingOf(run),
+    context_tokens: run.context_tokens,
+    output_tokens: run.output_tokens,
+  }));
 }

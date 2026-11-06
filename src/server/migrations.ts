@@ -233,4 +233,21 @@ CREATE TRIGGER messages_fts_delete AFTER DELETE ON messages
 BEGIN DELETE FROM messages_fts WHERE rowid = OLD.rowid; END;
 `,
   },
+  {
+    version: 7,
+    // What each run used, for the node page's runs table. Added columns keep every existing run, which
+    // reads as plain text with no usage. A timeout stays a `failed` end, so it gets a flag of its own
+    // rather than a rebuild of the end_reason CHECK.
+    sql: `
+ALTER TABLE runs ADD COLUMN output_format TEXT NOT NULL DEFAULT 'text'
+  CONSTRAINT runs_output_format_known CHECK (output_format IN ('text', 'stream-json'));
+ALTER TABLE runs ADD COLUMN context_tokens INTEGER
+  CONSTRAINT runs_context_tokens_counted CHECK (context_tokens IS NULL OR context_tokens >= 0);
+ALTER TABLE runs ADD COLUMN output_tokens INTEGER
+  CONSTRAINT runs_output_tokens_counted CHECK (output_tokens IS NULL OR output_tokens >= 0);
+ALTER TABLE runs ADD COLUMN timed_out INTEGER NOT NULL DEFAULT 0
+  CONSTRAINT runs_timed_out_flag CHECK (timed_out IN (0, 1))
+  CONSTRAINT runs_timed_out_failed CHECK (timed_out = 0 OR end_reason = 'failed');
+`,
+  },
 ];

@@ -95,6 +95,25 @@ export interface EventView {
   data: unknown;
 }
 
+/** One agent run on a node, for the node page's runs table. */
+export interface RunView {
+  id: string;
+  stage: string;
+  started_at: string;
+  ended_at: string | null;
+  ending: "running" | "exited" | "failed" | "stopped" | "timed_out";
+  /** The context size of the run's latest turn. Null when the tool's output doesn't say. */
+  context_tokens: number | null;
+  output_tokens: number | null;
+}
+
+/** The end of a run's log, made readable where AOP understands the tool's output. */
+export interface LogTail {
+  run_id: string;
+  running: boolean;
+  lines: string[];
+}
+
 /** One agent process AOP started and hasn't yet seen the end of, for `aop ps`. */
 export interface AgentProcessView {
   run_id: string;

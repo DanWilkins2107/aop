@@ -2,6 +2,7 @@ import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import type { WriteStream } from "node:fs";
 import { setTimeout as delay } from "node:timers/promises";
 import type { AgentProcessView, ReapResult } from "../shared/api.js";
+import { headlessCommand, StreamJsonUsage, type OutputFormat } from "./agentOutput.js";
 import type { ChangeFeed } from "./changes.js";
 import { type AopConfig, loadConfig } from "./config.js";
 import { buildPrompt } from "./context.js";
@@ -33,18 +34,13 @@ import {
   identitiesOf,
   listProcesses,
   recordProcess,
+  recordUsage,
   releaseAgentClaim,
   runningRuns,
   type ProcessRow,
   type RunRow,
 } from "./runs.js";
 import { isFolder } from "./steer.js";
-
-/**
- * What AOP adds to `agent_session_command` so that an agent runs without a terminal, with its prompt
- * on stdin. It's one value because other agent tools may need different flags later.
- */
-export const HEADLESS_AGENT_FLAGS = "-p";
 
 /** How long an agent that reported `next`, `ask` or `split finish` gets to exit before it's stopped. */
 const DEFAULT_GRACE_MS = 15_000;
@@ -203,9 +199,9 @@ export class Orchestrator {
   private launch(node: NodeRow, config: AopConfig): void {
     const id = newId();
     const logPath = logPathFor(id);
-    const run = beginRun(this.db, node, id, logPath);
+    const { command, format } = headlessCommand(config.agent_session_command);
+    const run = beginRun(this.db, node, id, logPath, format);
     const cwd = agentStartPath(getProject(this.db, node.project_id), config);
-    const command = `${config.agent_session_command} ${HEADLESS_AGENT_FLAGS}`;
     appendToLog(logPath, `[aop] run ${id} on node ${node.id}, stage ${node.stage}, at ${run.created_at}\n[aop] ${command}\n[aop] in ${cwd}\n`);
 
     let prompt: string;
@@ -231,7 +227,7 @@ export class Orchestrator {
       this.failBeforeLaunch(run, (error as Error).message);
       return;
     }
-    this.track(run, child, command, prompt, config.agent_timeout_minutes);
+    this.track(run, child, command, prompt, config.agent_timeout_minutes, format);
     this.changes.notify();
   }
 
@@ -244,11 +240,20 @@ export class Orchestrator {
     this.changes.notify();
   }
 
-  private track(run: RunRow, child: ChildProcessWithoutNullStreams, command: string, prompt: string, timeoutMinutes: number): void {
+  private track(
+    run: RunRow,
+    child: ChildProcessWithoutNullStreams,
+    command: string,
+    prompt: string,
+    timeoutMinutes: number,
+    format: OutputFormat,
+  ): void {
     const log = openLog(run.log_path);
     log.on("error", logFailure);
+    // The log keeps the raw output. Reading the tail turns it into lines a person can follow.
     child.stdout.pipe(log, { end: false });
     child.stderr.pipe(log, { end: false });
+    if (format === "stream-json") this.readUsage(run.id, child);
 
     let finished = false;
     let markExited = () => {};
@@ -297,6 +302,28 @@ export class Orchestrator {
     if (child.pid === undefined) return;
     recordProcess(this.db, run, child.pid, command);
     this.inBackground(this.recordIdentity(active, child.pid));
+  }
+
+  /**
+   * Records context consumed as Claude Code reports it, so a running run shows it too. It doesn't
+   * notify the change feed: the node page polls a running run, and the run's end notifies anyway.
+   */
+  private readUsage(runId: string, child: ChildProcessWithoutNullStreams): void {
+    const usage = new StreamJsonUsage();
+    const save = () => {
+      try {
+        if (this.db.open) recordUsage(this.db, runId, usage.usage);
+      } catch (error) {
+        logFailure(error);
+      }
+    };
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => {
+      if (usage.write(chunk)) save();
+    });
+    child.stdout.once("end", () => {
+      if (usage.end()) save();
+    });
   }
 
   /**
@@ -368,7 +395,7 @@ export class Orchestrator {
         case "timeout":
         case null: {
           const reason = failureReason(active, exitCode, signal, launchError);
-          closeRun(this.db, run, "failed", exitCode);
+          closeRun(this.db, run, "failed", exitCode, active.stopReason === "timeout");
           markFailed(this.db, getNodeRow(this.db, run.node_id), { reason, runId: run.id });
         }
       }

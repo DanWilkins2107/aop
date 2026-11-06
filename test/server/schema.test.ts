@@ -513,3 +513,36 @@ describe("upgrading a database with projects that must have a path", () => {
     }
   });
 });
+
+describe("upgrading runs to record usage", () => {
+  it("keeps every run, reading as plain text with no usage, and enforces the new checks", () => {
+    const path = join(mkdtempSync(join(aopHome(), "upgrade-")), "aop.db");
+    const old = new Database(path);
+    old.function("aop_project_being_deleted", { deterministic: false }, () => null);
+    for (const migration of migrations.filter((m) => m.version <= 6)) old.exec(migration.sql);
+    old.pragma("user_version = 6");
+    old.prepare("INSERT INTO projects (id, created_at, name, repo_path) VALUES ('p', ?, 'p', '/p')").run(T);
+    old.prepare("INSERT INTO nodes (id, created_at, project_id, title, type, stage) VALUES ('n', ?, 'p', 't', 'dev', 'implement')").run(T);
+    old
+      .prepare(
+        "INSERT INTO runs (id, created_at, node_id, stage, status, log_path, end_reason) VALUES ('r', ?, 'n', 'implement', 'exited', '/log', 'failed')",
+      )
+      .run(T);
+    old.close();
+
+    const upgraded = openDb(path);
+    try {
+      expect(upgraded.prepare("SELECT id, end_reason, output_format, context_tokens, output_tokens, timed_out FROM runs").all()).toEqual([
+        { id: "r", end_reason: "failed", output_format: "text", context_tokens: null, output_tokens: null, timed_out: 0 },
+      ]);
+      expect(() => upgraded.prepare("UPDATE runs SET output_format = 'xml'").run()).toThrow(/CHECK/);
+      expect(() => upgraded.prepare("UPDATE runs SET context_tokens = -1").run()).toThrow(/CHECK/);
+      expect(() => upgraded.prepare("UPDATE runs SET output_tokens = -1").run()).toThrow(/CHECK/);
+      expect(() => upgraded.prepare("UPDATE runs SET timed_out = 2").run()).toThrow(/CHECK/);
+      expect(() => upgraded.prepare("UPDATE runs SET timed_out = 1, end_reason = 'stopped'").run()).toThrow(/CHECK/);
+      upgraded.prepare("UPDATE runs SET timed_out = 1, context_tokens = 5, output_tokens = 6, output_format = 'stream-json'").run();
+    } finally {
+      upgraded.close();
+    }
+  });
+});
