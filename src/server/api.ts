@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { serveStatic } from "@hono/node-server/serve-static";
 import Database from "better-sqlite3";
 import { type Context, Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { streamSSE } from "hono/streaming";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { z } from "zod";
@@ -53,6 +54,8 @@ const STREAM_KEEP_ALIVE_MS = 25_000;
 /** How much of a run's log the node page shows. */
 const TAIL_LINES = 20;
 const MAX_TAIL_LINES = 200;
+/** Far above any real body (long descriptions and messages included), but caps what one request can hold in memory. */
+export const MAX_BODY_BYTES = 16 * 1024 * 1024;
 
 const LOCAL_HOST = /^(localhost|127\.0\.0\.1)(:\d+)?$/i;
 
@@ -137,6 +140,23 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
     await proceed();
     return;
   });
+
+  // Some routes serve what agents and people wrote as text/plain (a node's context, a run's log).
+  // Browsers must take the type as given, so none of it can ever run as a page on this origin.
+  app.use("/api/*", async (c, proceed) => {
+    await proceed();
+    c.res.headers.set("X-Content-Type-Options", "nosniff");
+  });
+
+  // Bodies are read whole, so they are capped before any route reads one.
+  app.use(
+    "/api/*",
+    bodyLimit({
+      maxSize: MAX_BODY_BYTES,
+      onError: (c) =>
+        errorResponse(c, 413, "payload_too_large", `The request body must be at most ${MAX_BODY_BYTES / (1024 * 1024)} MB`),
+    }),
+  );
 
   // Every write comes through here, and refused ones change nothing.
   app.use(`${API_PREFIX}/*`, async (c, proceed) => {
@@ -326,8 +346,6 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
     if (!run) throw notFound(`No run ${c.req.param("id")}`);
     const log = readRunLog(run.log_path);
     if (log === null) throw notFound(`The log for run ${run.id} is gone`);
-    // Text, and marked as such: what an agent printed must never run as a page on this origin.
-    c.header("X-Content-Type-Options", "nosniff");
     return c.text(log);
   });
   app.get(routes.run("tail"), (c) => {

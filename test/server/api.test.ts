@@ -764,4 +764,40 @@ describe("routing", () => {
     });
     expect(res.status).toBe(400);
   });
+
+  it("refuses an oversized body with a JSON 413, before changing anything", async () => {
+    const { MAX_BODY_BYTES } = await import("../../src/server/api.js");
+    const res = await h.call("POST", `/api/projects/${h.projectId}/nodes`, {
+      type: "dev",
+      title: "Too big",
+      body: "a".repeat(MAX_BODY_BYTES),
+    });
+    expect(res.status).toBe(413);
+    expect(errorOf(res).code).toBe("payload_too_large");
+    expect((await h.call<NodeView[]>("GET", `/api/projects/${h.projectId}/nodes`)).body).toEqual([]);
+  });
+
+  it("still takes a long description", async () => {
+    const body = "A long description, around 4 MB in all.\n".repeat(100_000);
+    const node = await h.create("dev", { body });
+    expect(node.body).toBe(body);
+  });
+
+  it("marks text written by agents and people as nosniff", async () => {
+    const { createApp } = await import("../../src/server/api.js");
+    const { beginRun } = await import("../../src/server/runs.js");
+    const { appendToLog, logPathFor } = await import("../../src/server/runLog.js");
+    const { getNodeRow } = await import("../../src/server/nodes.js");
+    const node = await h.create("dev", { body: "<html><script>alert(1)</script></html>" });
+    const run = beginRun(h.db, getNodeRow(h.db, node.id), "run-nosniff", logPathFor("run-nosniff"));
+    appendToLog(run.log_path, "<html><script>alert(1)</script></html>\n");
+    const app = createApp(h.db);
+    for (const path of [`/api/nodes/${node.id}/context`, `/api/runs/${run.id}/log`]) {
+      const res = await app.request(path, { headers: { host: "localhost" } });
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toMatch(/^text\/plain/);
+      expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+      expect(await res.text()).toContain("<script>");
+    }
+  });
 });
