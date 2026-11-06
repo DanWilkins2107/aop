@@ -1,7 +1,9 @@
+import { Fragment, useLayoutEffect, useRef, useState, type FocusEvent } from "react";
 import type { EventView, NodeView, StagesView } from "../../../../src/shared/api.js";
 import { FINISHED_STAGES } from "../../../../src/shared/builtInStages.js";
 import { api, urls } from "../../lib/api.js";
 import { humanize, toTarget } from "../../lib/format.js";
+import { focusIsLost, stageChangeNotice, stillHoldsFocus } from "../../lib/panelFocus.js";
 import { useAction } from "../../lib/useAction.js";
 import { MoveForm } from "./MoveForm.js";
 
@@ -140,11 +142,51 @@ function Content({
   return <p className="action-text muted">This stage has no outcomes. It moves on by itself, or through Force stage.</p>;
 }
 
-/** What the current stage offers. */
+/**
+ * What the current stage offers. Its contents are rebuilt when the stage changes, so a focused
+ * outcome button can vanish. The panel then takes focus itself rather than letting it drop to the
+ * top of the page, and a polite status region says which stage the node is now in.
+ */
 export function MovingOn(props: { node: NodeView; stages: StagesView; events: EventView[]; reload: Reload }) {
+  const stage = props.node.stage;
+  const panel = useRef<HTMLDivElement>(null);
+  const holdsFocus = useRef(false);
+  const shownStage = useRef(stage);
+  const [notice, setNotice] = useState("");
+
+  useLayoutEffect(() => {
+    if (shownStage.current === stage) return;
+    shownStage.current = stage;
+    setNotice(stageChangeNotice(humanize(stage)));
+    if (holdsFocus.current && focusIsLost(document.activeElement, document.body)) {
+      panel.current?.focus({ preventScroll: true });
+    }
+  }, [stage]);
+
+  const onBlur = (event: FocusEvent<HTMLDivElement>) => {
+    const to = event.relatedTarget;
+    const move = to === null ? "nowhere" : event.currentTarget.contains(to) ? "inside" : "outside";
+    holdsFocus.current = stillHoldsFocus(move, event.target as HTMLElement & { disabled?: boolean });
+  };
+
   return (
-    <div className="panel-part moving-on" aria-label="Moving on" role="group" key={props.node.stage}>
-      <Content {...props} />
+    <div
+      className="panel-part moving-on"
+      aria-label="Moving on"
+      role="group"
+      tabIndex={-1}
+      ref={panel}
+      onFocus={() => {
+        holdsFocus.current = true;
+      }}
+      onBlur={onBlur}
+    >
+      <span className="visually-hidden" role="status">
+        {notice}
+      </span>
+      <Fragment key={stage}>
+        <Content {...props} />
+      </Fragment>
     </div>
   );
 }
