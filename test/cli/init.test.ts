@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, relative, sep } from "node:path";
 import { Readable, Writable } from "node:stream";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { findOnPath, runInit, type InitIo } from "../../src/cli/init.js";
@@ -197,6 +197,19 @@ describe("existing config", () => {
     );
   });
 
+  // Needs the sandbox under the user's home to write a `~` path to it. It only reads from there.
+  const underHome = !relative(homedir(), aopHome()).startsWith("..") && !isAbsolute(relative(homedir(), aopHome()));
+  it.runIf(underHome)("reads a `~` stages path in an existing config, as the loader does", async () => {
+    const box = sandbox();
+    mkdirSync(box.home);
+    const fromHome = relative(homedir(), join(box.home, "stages.yaml")).split(sep).join("/");
+    writeFileSync(join(box.home, "config.yaml"), `agent_session_command: c\nopen_from: ${box.code}\nstages: ~/${fromHome}\n`);
+    const result = await init(box, ["--fill-missing"]);
+    expect(result.err).toBe("");
+    expect(result.code).toBe(0);
+    expect(result.out).toContain(`Wrote ${join(box.home, "stages.yaml")}`);
+  });
+
   it("reports an invalid existing config with --fill-missing", async () => {
     const box = sandbox();
     mkdirSync(box.home);
@@ -241,6 +254,17 @@ describe("open_from", () => {
     expect(result.code).toBe(0);
     expect(statSync(join(box.root, "new", "code")).isDirectory()).toBe(true);
     expect(loadConfig(box.home).open_from).toBe(join(box.root, "new", "code"));
+  });
+
+  it("isn't created when a later setting stops setup", async () => {
+    const box = sandbox();
+    const flagged = await init(box, ["--yes", "--agent-session-command", "c", "--open-from", "new", "--create-open-from", "--stages", "nope.yaml"]);
+    expect(flagged.code).toBe(1);
+    expect(existsSync(join(box.root, "new"))).toBe(false);
+
+    const asked = await init(box, ["--agent-session-command", "c", "--out-of-sandbox-command", ""], ["asked", "y"]);
+    expect(asked.err).toContain("Nothing was written");
+    expect(existsSync(join(box.root, "asked"))).toBe(false);
   });
 });
 
