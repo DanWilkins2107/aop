@@ -4,10 +4,22 @@ import type { ApplyResult } from "../shared/api.js";
 import { type AopConfig, loadConfig } from "./config.js";
 import type { Db } from "./db.js";
 import { badRequest, refused } from "./errors.js";
-import { allowedTarget, canonicalPath, proposalRows } from "./improvements.js";
+import { allowedTarget, assertNotAopState, canonicalPath, notAllowed, proposalRows } from "./improvements.js";
 import { getNodeRow, RAISE_PR_STAGE } from "./nodes.js";
 import { isWithin } from "./paths.js";
 import { appendEvent, type Actor } from "./records.js";
+
+/**
+ * Checks a file in the other checkout. That checkout is the agent's to set up, so a symlink or
+ * junction in it could point anywhere: the path is resolved, and must stay inside it.
+ */
+function exportTarget(config: AopConfig, into: string, target: string): string {
+  const resolved = canonicalPath(target);
+  if (!isWithin(resolved, into)) throw notAllowed(`${target} leads outside ${into}, through a link`);
+  assertNotAopState(config, resolved);
+  if (existsSync(resolved) && !statSync(resolved).isFile()) throw notAllowed(`${resolved} isn't a file`);
+  return resolved;
+}
 
 /** The one stage where proposals are written to the real files. */
 export const SAVE_LOCALLY_STAGE = "save_locally";
@@ -55,7 +67,7 @@ export function applyProposals(
         skipped.push(real);
         continue;
       }
-      plan.push({ target: join(into, relative(repo, real)), content: proposal.content });
+      plan.push({ target: exportTarget(config, into, join(into, relative(repo, real))), content: proposal.content });
     }
   }
 

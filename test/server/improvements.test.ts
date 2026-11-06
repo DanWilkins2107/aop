@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../../src/server/config.js";
@@ -348,5 +348,21 @@ describe("applying", () => {
     expect(readFileSync(skill(), "utf8")).toBe("Old skill.\n");
     // The real files are only for save_locally.
     expect((await apply(node.id)).status).toBe(409);
+  });
+
+  it("refuses to follow a link in the other checkout out of it, writing nothing", async () => {
+    mkdirSync(join(skills(), ".git"));
+    const worktree = mkdtempSync(join(aopHome(), "worktree-"));
+    mkdirSync(join(worktree, ".git"));
+    const outside = mkdtempSync(join(aopHome(), "outside-"));
+    // A junction needs no special rights on Windows, and is a plain symlink elsewhere.
+    symlinkSync(outside, join(worktree, "write-tests"), "junction");
+    const { node } = await capture({ body: "x" });
+    await propose(node.id, skill(), "New.\n");
+    await reviewAndChoose(node.id, "raise_pr");
+
+    const res = await apply(node.id, worktree);
+    expect(res.status, JSON.stringify(res.body)).toBe(400);
+    expect(existsSync(join(outside, "SKILL.md"))).toBe(false);
   });
 });

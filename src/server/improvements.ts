@@ -181,7 +181,18 @@ export function canonicalPath(path: string): string {
   }
 }
 
-const notAllowed = (message: string) => new ApiError(400, "path_not_allowed", message);
+export const notAllowed = (message: string) => new ApiError(400, "path_not_allowed", message);
+
+/** Refuses AOP's own config, process files, database and logs, wherever they are. `target` must be canonical. */
+export function assertNotAopState(config: AopConfig, target: string): void {
+  const home = aopHome();
+  const forbidden = [configPath(home), config.stagesPath, config.improvementStagesPath, dbPath(), `${dbPath()}-wal`, `${dbPath()}-shm`]
+    .filter((file): file is string => file !== null)
+    .map(canonicalPath);
+  if (forbidden.some((file) => isWithin(target, file)) || isWithin(target, canonicalPath(join(home, "logs")))) {
+    throw notAllowed(`Improvements can never change ${target}: it's AOP's own config or state`);
+  }
+}
 
 /**
  * Checks a file an improvement may change, returning it with symlinks resolved. Allowed: files inside
@@ -191,13 +202,7 @@ const notAllowed = (message: string) => new ApiError(400, "path_not_allowed", me
 export function allowedTarget(config: AopConfig, path: string): string {
   if (!isAbsolute(path)) throw notAllowed(`The path must be a full path: ${path}`);
   const target = canonicalPath(path);
-  const home = aopHome();
-  const forbidden = [configPath(home), config.stagesPath, config.improvementStagesPath, dbPath(), `${dbPath()}-wal`, `${dbPath()}-shm`]
-    .filter((file): file is string => file !== null)
-    .map(canonicalPath);
-  if (forbidden.some((file) => isWithin(target, file)) || isWithin(target, canonicalPath(join(home, "logs")))) {
-    throw notAllowed(`Improvements can never change ${target}: it's AOP's own config or state`);
-  }
+  assertNotAopState(config, target);
   if (existsSync(target) && !statSync(target).isFile()) throw notAllowed(`${target} isn't a file`);
 
   const prompts = [...promptFiles(config.graph), ...(config.improvementGraph ? promptFiles(config.improvementGraph) : [])].map(
