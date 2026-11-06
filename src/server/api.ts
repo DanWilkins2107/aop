@@ -1,7 +1,7 @@
 // Every HTTP route. Validates bodies, calls the module that owns the data, and renders errors.
 // After any successful write it notifies the change feed, which is what wakes pages and the orchestrator.
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { serveStatic } from "@hono/node-server/serve-static";
@@ -10,6 +10,8 @@ import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { z } from "zod";
+import type { LogTail } from "../shared/api.js";
+import { readableLines } from "./agentOutput.js";
 import { ChangeFeed } from "./changes.js";
 import type { Db } from "./db.js";
 import { nodeContext } from "./context.js";
@@ -19,14 +21,17 @@ import { describeConfig, loadConfig } from "./config.js";
 import type { Orchestrator } from "./orchestrator.js";
 import { describeProcess } from "./process.js";
 import { addProject, deleteProject, getProject, listProjects, updateProject } from "./projects.js";
-import { deleteLogs } from "./runLog.js";
-import { getRun, projectLogPaths } from "./runs.js";
+import { deleteLogs, readLogEnd, readRunLog } from "./runLog.js";
+import { getRun, listRuns, projectLogPaths } from "./runs.js";
 import { search } from "./search.js";
 import { describeStages } from "./stages.js";
 import { prepareSteer } from "./steer.js";
 
 const BUILT_WEB_DIR = fileURLToPath(new URL("../../dist/web", import.meta.url));
 const STREAM_KEEP_ALIVE_MS = 25_000;
+/** How much of a run's log the node page shows. */
+const TAIL_LINES = 20;
+const MAX_TAIL_LINES = 200;
 
 const LOCAL_HOST = /^(localhost|127\.0\.0\.1)(:\d+)?$/i;
 
@@ -323,13 +328,30 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
   app.get("/api/agents", async (c) => c.json(await orchestrator().listAgents()));
   app.post("/api/agents/reap", async (c) => c.json(await orchestrator().reap()));
   app.post("/api/runs/:id/stop", async (c) => c.json(await orchestrator().stopRun(c.req.param("id"))));
+  app.get("/api/nodes/:id/runs", (c) => {
+    const node = nodes.getNodeRow(db, c.req.param("id"));
+    return c.json(listRuns(db, node.id));
+  });
   app.get("/api/runs/:id/log", (c) => {
     const run = getRun(db, c.req.param("id"));
     if (!run) throw notFound(`No run ${c.req.param("id")}`);
-    if (!existsSync(run.log_path)) throw notFound(`The log for run ${run.id} is gone`);
+    const log = readRunLog(run.log_path);
+    if (log === null) throw notFound(`The log for run ${run.id} is gone`);
     // Text, and marked as such: what an agent printed must never run as a page on this origin.
     c.header("X-Content-Type-Options", "nosniff");
-    return c.text(readFileSync(run.log_path, "utf8"));
+    return c.text(log);
+  });
+  app.get("/api/runs/:id/tail", (c) => {
+    const run = getRun(db, c.req.param("id"));
+    if (!run) throw notFound(`No run ${c.req.param("id")}`);
+    const count = c.req.query("lines") === undefined ? TAIL_LINES : Number(c.req.query("lines"));
+    if (!Number.isInteger(count) || count < 1 || count > MAX_TAIL_LINES) {
+      throw badRequest(`lines must be a whole number from 1 to ${MAX_TAIL_LINES}`);
+    }
+    const raw = readLogEnd(run.log_path);
+    if (raw === null) throw notFound(`The log for run ${run.id} is gone`);
+    const tail: LogTail = { run_id: run.id, running: run.status === "running", lines: readableLines(raw, run.output_format).slice(-count) };
+    return c.json(tail);
   });
 
   if (existsSync(webDir)) serveWeb(app, webDir);

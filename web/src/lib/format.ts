@@ -1,4 +1,4 @@
-import type { EventView, NodeView, StagesView } from "../../../src/shared/api.js";
+import type { EventView, NodeView, RunView, StagesView } from "../../../src/shared/api.js";
 
 const ABBREVIATIONS = /\b(api|ci|db|id|pr|qa|sql|ui|url|ux)\b/gi;
 
@@ -122,6 +122,41 @@ export function claimLabel(node: Pick<NodeView, "claimed_by" | "run_id">): { tex
   const runId = node.claimed_by === "agent" ? node.run_id : null;
   if (runId) return { text: shortRunId(runId), title: `Claimed by agent run ${runId}` };
   return { text: node.claimed_by, title: `Claimed by ${node.claimed_by}` };
+}
+
+/** How long something took: "45s", "12m 5s", "3h 20m". */
+export function formatDuration(ms: number): string {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
+
+/** A token count, short: "850", "12.3k", "1.2M". A dash when the tool's output didn't say. */
+export function formatTokens(count: number | null): string {
+  if (count === null) return "—";
+  if (count < 1000) return String(count);
+  if (count < 1_000_000) return `${(count / 1000).toFixed(count < 10_000 ? 1 : 0)}k`;
+  return `${(count / 1_000_000).toFixed(1)}M`;
+}
+
+const RUN_VIEW_ENDINGS: Record<RunView["ending"], string> = {
+  running: "Still running",
+  exited: "Exited",
+  failed: "Failed",
+  stopped: "Stopped",
+  timed_out: "Timed out",
+};
+
+export const runEnding = (ending: RunView["ending"]) => RUN_VIEW_ENDINGS[ending];
+
+/** When a run started: the time today, or the date and time before that. */
+export function formatStart(iso: string, now = new Date()): string {
+  const date = new Date(iso);
+  const time = date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  if (date.toDateString() === now.toDateString()) return time;
+  return `${date.toLocaleDateString(undefined, { day: "numeric", month: "short" })} ${time}`;
 }
 
 const SKIP_REASONS: Record<string, string> = {

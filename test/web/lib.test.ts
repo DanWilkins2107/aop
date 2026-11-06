@@ -5,7 +5,16 @@ import type { EventView, NodeView, TypeView } from "../../src/shared/api.js";
 import { contrast, parseHex, readableText, visibleOn } from "../../web/src/lib/color.js";
 import { CARD_HEIGHT, CARD_WIDTH, fittedViewport, graphView, layoutGraph, smoothPath } from "../../web/src/lib/layout.js";
 import { originalStage, stageDrawing } from "../../web/src/lib/stageGraph.js";
-import { claimLabel, describeEvent, humanize, stageOptionGroups } from "../../web/src/lib/format.js";
+import {
+  claimLabel,
+  describeEvent,
+  formatDuration,
+  formatStart,
+  formatTokens,
+  humanize,
+  runEnding,
+  stageOptionGroups,
+} from "../../web/src/lib/format.js";
 import { cardKind, cardLook, cardType, isInvalidated, lookOf, stageColor, stageLabel } from "../../web/src/lib/stageStyle.js";
 
 const COLORS = ["#ffc107", "#cddc39", "#000000", "#ffffff", "#123", "#4263eb", "#e91e63", "#808080", "#12b886aa"];
@@ -598,5 +607,33 @@ describe("waiting and hidden cards", () => {
     expect(isInvalidated(nodeAt("beta", { invalidated_by_parent: true }))).toBe(true);
     expect(isInvalidated(nodeAt("beta"))).toBe(false);
     expect(isInvalidated(nodeAt("done"))).toBe(false);
+  });
+});
+
+describe("the runs table", () => {
+  it("shows durations, token counts and endings briefly", () => {
+    expect(formatDuration(4_200)).toBe("4s");
+    expect(formatDuration(725_000)).toBe("12m 5s");
+    expect(formatDuration(12_000_000)).toBe("3h 20m");
+    expect(formatTokens(null)).toBe("—");
+    expect(formatTokens(850)).toBe("850");
+    expect(formatTokens(1_250)).toBe("1.3k");
+    expect(formatTokens(30_507)).toBe("31k");
+    expect(formatTokens(1_200_000)).toBe("1.2M");
+    expect((["running", "exited", "failed", "stopped", "timed_out"] as const).map(runEnding)).toEqual([
+      "Still running",
+      "Exited",
+      "Failed",
+      "Stopped",
+      "Timed out",
+    ]);
+  });
+
+  it("shows only the time for a run that started today, and the date before that", () => {
+    const now = new Date(2026, 10, 5, 15, 0);
+    const today = formatStart(new Date(2026, 10, 5, 9, 30).toISOString(), now);
+    const earlier = formatStart(new Date(2026, 10, 3, 9, 30).toISOString(), now);
+    expect(earlier.endsWith(today)).toBe(true);
+    expect(earlier.length).toBeGreaterThan(today.length);
   });
 });

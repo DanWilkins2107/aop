@@ -15,6 +15,8 @@ import { makeHome, makeRepo } from "./helpers.js";
 
 export const ROOT = resolve(import.meta.dirname, "../..");
 export const FAKE_AGENT = join(ROOT, "test", "fixtures", "fake-agent.mjs");
+/** The same fake, under a name AOP reads as Claude Code, so it gets the stream-json flags and writes events. */
+export const FAKE_CLAUDE = join(ROOT, "test", "fixtures", "fake-claude.mjs");
 const TSX_LOADER = pathToFileURL(join(ROOT, "node_modules", "tsx", "dist", "loader.mjs")).href;
 
 /** Runs the real source through tsx, on any platform, as the `aop` command does after `npm link`. */
@@ -32,9 +34,10 @@ export function aopShim(): string {
 }
 
 export const fakeCommand = `"${process.execPath}" "${FAKE_AGENT}"`;
+export const fakeClaudeCommand = `"${process.execPath}" "${FAKE_CLAUDE}"`;
 
-export function fakeConfig(extra = ""): string {
-  return `agent_session_command: ${JSON.stringify(fakeCommand)}\nagent_timeout_minutes: 5\nstages: ./stages.yaml\n${extra}`;
+export function fakeConfig(extra = "", command = fakeCommand): string {
+  return `agent_session_command: ${JSON.stringify(command)}\nagent_timeout_minutes: 5\nstages: ./stages.yaml\n${extra}`;
 }
 
 export const directives = (...lines: string[]) => lines.map((line) => `@@${line}`).join("\n");
@@ -95,14 +98,18 @@ const CLOSE_TIMEOUT_MS = 60_000;
 
 /**
  * A real server and orchestrator on a free port, in a throwaway AOP_HOME, launching fake agents that
- * use the real CLI. Only ever launches `fakeCommand`. Call it inside a test or `beforeEach`: it closes
- * itself when the test finishes, pass or fail, and puts the environment back even if it fails to start.
+ * use the real CLI. Only ever launches `fakeCommand`, or `fakeClaudeCommand` with `claude`. Call it inside
+ * a test or `beforeEach`: it closes itself when the test finishes, pass or fail, and puts the environment
+ * back even if it fails to start.
  */
-export async function world(options: { config?: string; graceMs?: number; home?: Record<string, string> } = {}): Promise<World> {
+export async function world(
+  options: { config?: string; graceMs?: number; home?: Record<string, string>; claude?: boolean } = {},
+): Promise<World> {
   const outer = { home: process.env["AOP_HOME"], path: process.env["PATH"], url: process.env["AOP_URL"] };
   const shim = aopShim();
-  const home = makeHome({ "config.yaml": fakeConfig(options.config), ...options.home });
-  expect(readFileSync(join(home, "config.yaml"), "utf8")).toContain(FAKE_AGENT.replaceAll("\\", "\\\\"));
+  const fake = options.claude ? FAKE_CLAUDE : FAKE_AGENT;
+  const home = makeHome({ "config.yaml": fakeConfig(options.config, options.claude ? fakeClaudeCommand : fakeCommand), ...options.home });
+  expect(readFileSync(join(home, "config.yaml"), "utf8")).toContain(fake.replaceAll("\\", "\\\\"));
 
   // What to undo, filled in as each part starts so that a failed start is undone too. Run in reverse,
   // every step even if one throws, and only once.
