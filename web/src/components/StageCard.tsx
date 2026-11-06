@@ -2,7 +2,7 @@ import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { Link } from "react-router-dom";
 import type { NodeView, StagesView } from "../../../src/shared/api.js";
 import { CARD_HEIGHT, CARD_WIDTH } from "../lib/layout.js";
-import { cardKind, cardLook, cardType, stageLabel } from "../lib/stageStyle.js";
+import { cardKind, cardLook, cardName, cardType, stageLabel } from "../lib/stageStyle.js";
 import { ClaimMark } from "./ClaimMark.js";
 
 export type StageCardNode = Node<{ node: NodeView; stages: StagesView | null }, "stage">;
@@ -34,7 +34,7 @@ export function StageCard({ data }: NodeProps<StageCardNode>) {
         </div>
       </div>
       {/* A real link, so that keyboard focus and open-in-new-tab work. */}
-      <Link to={`/n/${node.id}`} className="card-link" draggable={false} aria-label={node.title} />
+      <Link to={`/n/${node.id}`} className="card-link" draggable={false} aria-label={cardName(node)} />
       <Handle type="source" position={Position.Bottom} className="card-handle" isConnectable={false} />
     </div>
   );

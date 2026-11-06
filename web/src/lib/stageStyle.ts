@@ -1,6 +1,6 @@
 import type { NodeView, StagesView, TypeView } from "../../../src/shared/api.js";
 import { mix, parseHex, readableText, visibleOn } from "./color.js";
-import { humanize } from "./format.js";
+import { claimLabel, humanize } from "./format.js";
 
 /** The built-in stages that finish a node. */
 export const FINISHED_STAGES: readonly string[] = ["done", "broken_down"];
@@ -126,4 +126,20 @@ export function stageLabel(node: NodeView): string {
 /** The type shown on a card. Global stages don't show one. */
 export function cardType(node: NodeView): string | null {
   return GLOBAL_STAGES.includes(node.stage) ? null : node.type;
+}
+
+/**
+ * What a graph card's link reads out. The canvas is an application region, so a screen reader hears
+ * only this, and it has to carry what sighted users get from the card's fill: that a human needs to
+ * act. Blocked and held cards are greyed for reasons the card doesn't spell out either.
+ */
+export function cardName(node: NodeView): string {
+  const type = cardType(node);
+  const parts = [node.title, type ? `${stageLabel(node)}, ${humanize(type)}` : stageLabel(node)];
+  if (cardKind(node) === "human") parts.push("Needs a human");
+  if (!isInvalidated(node) && node.blocked_by.length > 0) parts.push("Blocked");
+  if (!isInvalidated(node) && node.held) parts.push("Held until a split finishes");
+  const claim = claimLabel(node);
+  if (claim) parts.push(claim.title);
+  return parts.join(". ");
 }
