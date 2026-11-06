@@ -1,15 +1,16 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import { parseArgs, type ParseArgsConfig } from "node:util";
-import type {
-  AgentProcessView,
-  EdgeRow,
-  MessageRow,
-  NodeView,
-  ProjectRow,
-  ReapResult,
-  SearchResult,
-  SteerSession,
+import {
+  RUN_ID_HEADER,
+  type AgentProcessView,
+  type EdgeRow,
+  type MessageRow,
+  type NodeView,
+  type ProjectRow,
+  type ReapResult,
+  type SearchResult,
+  type SteerSession,
 } from "../shared/api.js";
 
 /** Each command's usage, for both the help and its own usage errors, so the two can't drift apart. */
@@ -83,9 +84,13 @@ function apiError(text: string): { message: string; details?: unknown } | undefi
 
 /** Calls the API. A failure becomes the API's own message, or else its status. */
 async function call(method: string, path: string, body?: unknown): Promise<{ type: string; text: string }> {
-  const init: RequestInit = { method };
+  const headers: Record<string, string> = {};
+  const init: RequestInit = { method, headers };
+  // Set only in a session AOP launched, so the server can tell this run from one that has ended.
+  const runId = process.env["AOP_RUN_ID"];
+  if (runId) headers[RUN_ID_HEADER] = runId;
   if (body !== undefined) {
-    init.headers = { "content-type": "application/json" };
+    headers["content-type"] = "application/json";
     init.body = JSON.stringify(body);
   }
   let response: Response;
@@ -255,11 +260,13 @@ async function steerCommand(argv: string[]): Promise<void> {
   const session = await send<SteerSession>("POST", `${nodePath(id)}/steer`, { no_sandbox: values["no-sandbox"] === true });
   console.log(`Claimed ${id}. Opening a session in ${session.cwd}. Release the claim in the UI when you're done.`);
   // The command is the user's own config string, which may need a shell. No node text goes in it.
+  // A steered session is the human's, not an agent run, even when steered from inside one.
+  const { AOP_RUN_ID: _run, ...env } = process.env;
   const child = spawn(session.command, {
     shell: true,
     cwd: session.cwd,
     stdio: "inherit",
-    env: { ...process.env, AOP_NODE_ID: id, AOP_URL: serverUrl() },
+    env: { ...env, AOP_NODE_ID: id, AOP_URL: serverUrl() },
   });
   await new Promise<void>((done, fail) => {
     child.once("error", (error) => fail(new CliFailure(`Couldn't open the session: ${error.message}`)));

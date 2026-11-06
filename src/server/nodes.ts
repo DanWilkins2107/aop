@@ -118,7 +118,17 @@ function toView(db: Db, graph: StageGraph, node: NodeRow): NodeView {
 }
 
 export function getNode(db: Db, id: string): NodeView {
-  return toView(db, currentGraph(), getNodeRow(db, id));
+  return viewOf(db, currentGraph(), id);
+}
+
+/**
+ * What a write answers with. Every write that answers with a node reads `stages.yaml` before it
+ * changes anything and renders with that same graph. So an invalid file refuses the write outright,
+ * rather than committing it and then failing to answer: a refused request must change nothing,
+ * because the change feed only fires on success.
+ */
+function viewOf(db: Db, graph: StageGraph, id: string): NodeView {
+  return toView(db, graph, getNodeRow(db, id));
 }
 
 export function listNodes(db: Db, projectId: string): NodeView[] {
@@ -199,7 +209,7 @@ export function createNode(
       addEdge(db, input.parent_id, { target_id: id, kind: "subtask", actor: input.actor });
     }
   })();
-  return getNode(db, id);
+  return viewOf(db, graph, id);
 }
 
 /** Edits the title or description. Each event keeps the old text, because nothing else does. */
@@ -208,6 +218,7 @@ export function editNode(
   nodeId: string,
   input: { title?: string | undefined; body?: string | undefined; actor: Actor },
 ): NodeView {
+  const graph = currentGraph();
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
     if (input.title !== undefined && input.title !== node.title) {
@@ -219,7 +230,7 @@ export function editNode(
       appendEvent(db, nodeId, input.actor, "description_edited", { previous: node.body });
     }
   })();
-  return getNode(db, nodeId);
+  return viewOf(db, graph, nodeId);
 }
 
 interface StageChange {
@@ -276,13 +287,20 @@ function applyStageChange(db: Db, node: NodeRow, change: StageChange): void {
 
 /**
  * An agent gets one outcome. Without this, one that reported and is still exiting could move the
- * node on again from its next stage. A new run can't start until the old one has ended, so an agent
- * call arriving in this window can only be the old run's.
+ * node on again from its next stage.
+ *
+ * `runId` is the run the caller says it belongs to (the CLI sends its `AOP_RUN_ID`). When given, it
+ * must be the run on this node now. That is what stops a process left over from an earlier run, which
+ * can outlive its run while the clear-up after exit is still finding it, from moving the next run's
+ * stage. A caller with no run ID, such as a steered session, gets only the check above.
  */
-function assertRunStillOnNode(db: Db, nodeId: string): void {
-  const run = db.prepare("SELECT left_via FROM runs WHERE node_id = ? AND status = 'running'").get(nodeId) as
-    | { left_via: string | null }
+function assertRunStillOnNode(db: Db, nodeId: string, runId?: string): void {
+  const run = db.prepare("SELECT id, left_via FROM runs WHERE node_id = ? AND status = 'running'").get(nodeId) as
+    | { id: string; left_via: string | null }
     | undefined;
+  if (runId !== undefined && run?.id !== runId) {
+    throw refused(`Agent run ${runId} isn't the run on node ${nodeId}, so it can't move it`);
+  }
   if (run?.left_via != null) {
     throw refused("This agent run has already moved the node on, and is expected to exit");
   }
@@ -401,12 +419,16 @@ function returnPlacement(
   return { stage, returnStage: origin };
 }
 
-export function next(db: Db, nodeId: string, input: { outcome: string; actor: Actor }): NodeView {
+export function next(
+  db: Db,
+  nodeId: string,
+  input: { outcome: string; actor: Actor; runId?: string | undefined },
+): NodeView {
   const graph = currentGraph();
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
-    if (input.actor === "agent") assertRunStillOnNode(db, nodeId);
+    if (input.actor === "agent" || input.runId !== undefined) assertRunStillOnNode(db, nodeId, input.runId);
     if (node.stage === "scheduled") {
       throw refused("Can't call next on a scheduled node: it stays there and creates children when it fires");
     }
@@ -439,7 +461,7 @@ export function next(db: Db, nodeId: string, input: { outcome: string; actor: Ac
       detail: { outcome: input.outcome },
     });
   })();
-  return getNode(db, nodeId);
+  return viewOf(db, graph, nodeId);
 }
 
 /**
@@ -491,7 +513,7 @@ export function move(
       actor: "human",
     });
   })();
-  return getNode(db, nodeId);
+  return viewOf(db, graph, nodeId);
 }
 
 function postMessage(db: Db, nodeId: string, stage: string, author: Actor, body: string): MessageRow {
@@ -503,12 +525,12 @@ function postMessage(db: Db, nodeId: string, stage: string, author: Actor, body:
   return message;
 }
 
-export function ask(db: Db, nodeId: string, input: { question: string }): NodeView {
+export function ask(db: Db, nodeId: string, input: { question: string; runId?: string | undefined }): NodeView {
   const graph = currentGraph();
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
-    assertRunStillOnNode(db, nodeId);
+    assertRunStillOnNode(db, nodeId, input.runId);
     assertAgentStage(graph, node, "ask");
     applyStageChange(db, node, {
       stage: "ask_human_question",
@@ -519,7 +541,7 @@ export function ask(db: Db, nodeId: string, input: { question: string }): NodeVi
     });
     postMessage(db, node.id, "ask_human_question", "agent", input.question);
   })();
-  return getNode(db, nodeId);
+  return viewOf(db, graph, nodeId);
 }
 
 export function answer(db: Db, nodeId: string, input: { answer: string }): NodeView {
@@ -534,13 +556,13 @@ export function answer(db: Db, nodeId: string, input: { answer: string }): NodeV
     postMessage(db, node.id, "ask_human_question", "human", input.answer);
     applyStageChange(db, node, { ...placement, type: node.type, via: "answer", actor: "human" });
   })();
-  return getNode(db, nodeId);
+  return viewOf(db, graph, nodeId);
 }
 
 export function fail(
   db: Db,
   nodeId: string,
-  input: { actor: Actor; reason?: string | undefined },
+  input: { actor: Actor; reason?: string | undefined; runId?: string | undefined },
 ): NodeView {
   // `failed` is AOP's record of a run that ended without finishing. A human stops the run instead.
   if (input.actor === "human") {
@@ -550,7 +572,7 @@ export function fail(
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
-    if (input.actor === "agent") assertRunStillOnNode(db, nodeId);
+    if (input.actor === "agent" || input.runId !== undefined) assertRunStillOnNode(db, nodeId, input.runId);
     assertAgentStage(graph, node, "fail");
     applyStageChange(db, node, {
       stage: "failed",
@@ -561,7 +583,7 @@ export function fail(
       ...(input.reason !== undefined ? { detail: { reason: input.reason } } : {}),
     });
   })();
-  return getNode(db, nodeId);
+  return viewOf(db, graph, nodeId);
 }
 
 export function retry(db: Db, nodeId: string): NodeView {
@@ -575,12 +597,13 @@ export function retry(db: Db, nodeId: string): NodeView {
     const placement = returnPlacement(db, graph, node, node.return_stage);
     applyStageChange(db, node, { ...placement, type: node.type, via: "retry", actor: "human" });
   })();
-  return getNode(db, nodeId);
+  return viewOf(db, graph, nodeId);
 }
 
 /** Human-only: only a human can invalidate, from any stage. */
 export function invalidate(db: Db, nodeId: string, input: { reason: string; actor: Actor }): NodeView {
   assertHuman(input.actor, "invalidate a node");
+  const graph = currentGraph();
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
     if (node.stage === "invalidated") throw refused("The node is already invalidated");
@@ -593,7 +616,7 @@ export function invalidate(db: Db, nodeId: string, input: { reason: string; acto
       detail: { reason: input.reason },
     });
   })();
-  return getNode(db, nodeId);
+  return viewOf(db, graph, nodeId);
 }
 
 /** Returns an invalidated node to where it was, read from the event that invalidated it. */
@@ -618,7 +641,7 @@ export function restore(db: Db, nodeId: string): NodeView {
       actor: "human",
     });
   })();
-  return getNode(db, nodeId);
+  return viewOf(db, graph, nodeId);
 }
 
 function assertHuman(actor: Actor, action: string): void {
@@ -628,6 +651,7 @@ function assertHuman(actor: Actor, action: string): void {
 /** Waits on something outside AOP. Human-only, and the reason is posted to the node. */
 export function block(db: Db, nodeId: string, input: { reason: string; actor: Actor }): NodeView {
   assertHuman(input.actor, "mark a node externally blocked");
+  const graph = currentGraph();
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
     if (["done", "broken_down", "invalidated", "externally_blocked"].includes(node.stage)) {
@@ -643,7 +667,7 @@ export function block(db: Db, nodeId: string, input: { reason: string; actor: Ac
     });
     postMessage(db, node.id, "externally_blocked", "human", input.reason);
   })();
-  return getNode(db, nodeId);
+  return viewOf(db, graph, nodeId);
 }
 
 /** Returns a blocked node to where it was, including that stage's own `return_stage`. */
@@ -666,16 +690,16 @@ export function unblock(db: Db, nodeId: string, input: { actor: Actor }): NodeVi
       actor: "human",
     });
   })();
-  return getNode(db, nodeId);
+  return viewOf(db, graph, nodeId);
 }
 
 /** Lets an agent create children and edges without any of them starting early. */
-export function splitStart(db: Db, nodeId: string): NodeView {
+export function splitStart(db: Db, nodeId: string, input: { runId?: string | undefined } = {}): NodeView {
   const graph = currentGraph();
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
-    assertRunStillOnNode(db, nodeId);
+    assertRunStillOnNode(db, nodeId, input.runId);
     if (node.stage === "splitting") throw refused("The node is already splitting");
     assertAgentStage(graph, node, "start a split");
     applyStageChange(db, node, {
@@ -688,13 +712,14 @@ export function splitStart(db: Db, nodeId: string): NodeView {
       keepsAgentClaim: true,
     });
   })();
-  return getNode(db, nodeId);
+  return viewOf(db, graph, nodeId);
 }
 
-export function splitFinish(db: Db, nodeId: string): NodeView {
+export function splitFinish(db: Db, nodeId: string, input: { runId?: string | undefined } = {}): NodeView {
+  const graph = currentGraph();
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
-    assertRunStillOnNode(db, nodeId);
+    assertRunStillOnNode(db, nodeId, input.runId);
     if (node.stage !== "splitting") {
       throw refused(`Can't finish a split: the node is at "${node.stage}", not splitting`);
     }
@@ -702,7 +727,7 @@ export function splitFinish(db: Db, nodeId: string): NodeView {
     assertBlocksMoved(db, node);
     applyStageChange(db, node, { stage: "broken_down", type: node.type, via: "split_finish", actor: "agent" });
   })();
-  return getNode(db, nodeId);
+  return viewOf(db, graph, nodeId);
 }
 
 const holderName = (holder: "human" | "agent") => (holder === "agent" ? "an agent run" : "a human");
@@ -712,6 +737,7 @@ const holderName = (holder: "human" | "agent") => (holder === "agent" ? "an agen
  * neither side can take a claim the other holds, and only one agent run can hold it.
  */
 export function claim(db: Db, nodeId: string, input: { actor: "human" | "agent" }): NodeView {
+  const graph = currentGraph();
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
     if (node.claimed_by === "human" && input.actor === "human") return;
@@ -719,11 +745,12 @@ export function claim(db: Db, nodeId: string, input: { actor: "human" | "agent" 
     db.prepare("UPDATE nodes SET claimed_by = ? WHERE id = ?").run(input.actor, nodeId);
     appendEvent(db, nodeId, input.actor, "claim_taken", { holder: input.actor });
   })();
-  return getNode(db, nodeId);
+  return viewOf(db, graph, nodeId);
 }
 
 /** Each side releases its own claim. A human ends an agent's by stopping its run, not here. */
 export function releaseClaim(db: Db, nodeId: string, input: { actor: "human" | "agent" }): NodeView {
+  const graph = currentGraph();
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
     if (node.claimed_by === null) throw refused("Can't release: the node isn't claimed");
@@ -733,7 +760,7 @@ export function releaseClaim(db: Db, nodeId: string, input: { actor: "human" | "
     db.prepare("UPDATE nodes SET claimed_by = NULL WHERE id = ?").run(nodeId);
     appendEvent(db, nodeId, input.actor, "claim_released", { holder: input.actor });
   })();
-  return getNode(db, nodeId);
+  return viewOf(db, graph, nodeId);
 }
 
 export function addMessage(db: Db, nodeId: string, input: { author: Actor; body: string }): MessageRow {
