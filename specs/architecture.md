@@ -6,13 +6,13 @@ Where each part of the specs lives in the code, and how one request moves throug
 | Folder | What's there |
 |---|---|
 | `src/server/` | The one server process: HTTP API, state machine, agents, scheduler, SQLite |
-| `src/shared/` | Code the browser imports too, so nothing that needs Node. `api.ts` has the types for everything the API returns and plain constants such as `RUN_ID_HEADER`, `builtInStages.ts` the built-in stage names and sets |
+| `src/shared/` | What the server and clients share, so nothing that needs Node. `api.ts`: types for everything the API returns and accepts, and plain constants such as `RUN_ID_HEADER`. `requests.ts`: the zod schemas for request bodies, which the browser only imports types from. `paths.ts`: every API path, for the router and the clients. `builtInStages.ts`: the built-in stage names and sets |
 | `src/cli/` | `aop`: `main.ts` turns commands into HTTP calls, `init.ts` is `aop init` |
-| `web/src/` | The React app. `pages/` per route, `components/` shared UI, `lib/` data and maths |
+| `web/src/` | The React app. `pages/` per route, `components/` shared UI, `lib/` data and maths, `styles/` one stylesheet per part of the UI |
 | `plugin/` | The skills agents load. See [plugin.md](plugin.md) |
 | `defaults/` | The `config.yaml`, `stages.yaml` and prompts `aop init` copies into `~/.aop` |
 | `demo/` | A throwaway server with seeded data and no agents |
-| `test/` | Vitest. `test/server/` covers the server, `test/cli/` the `aop` command, `test/shared/` `src/shared/`, `test/web/` the browser's `lib/` |
+| `test/` | Vitest. `test/server/` covers the server, `test/cli/` the `aop` command, `test/shared/` `src/shared/`, `test/defaults/` the shipped defaults, `test/web/` the browser's `lib/` |
 
 ## Server modules
 `src/server/` is flat. Grouped by job:
@@ -20,7 +20,7 @@ Where each part of the specs lives in the code, and how one request moves throug
 | Job | Files |
 |---|---|
 | Startup | `main.ts` (`npm start`) and `aop serve` both call `serve.ts`, which wires everything below. `server.ts` binds the port. `serverLock.ts` stops a second server |
-| HTTP | `api.ts`: every route, body validation, error rendering, and the change notice after each write |
+| HTTP | `api.ts`: every route, body validation against `src/shared/requests.ts`, error rendering, and the change notice after each write |
 | Nodes and stages | `nodes.ts`: every stage change, claims, messages, links, edges and events |
 | Process definition | `stages.ts` parses and validates `stages.yaml`. `config.ts` loads `config.yaml` and the stages it links to. `processView.ts` is the process page's view of both |
 | Agent text | `context.ts`: `aop context` output and every agent's prompt |
@@ -33,7 +33,7 @@ Where each part of the specs lives in the code, and how one request moves throug
 ## One request
 A human clicks an outcome on the node page:
 1. `web/src/pages/node/MovingOn.tsx` calls `api.next` in `web/src/lib/api.ts`, which posts `/api/nodes/:id/next`.
-2. `api.ts` validates the body with zod. No `actor` means `human`.
+2. `api.ts` validates the body with its zod schema from `src/shared/requests.ts`. No `actor` means `human`.
 3. `nodes.next` reads `stages.yaml` fresh, checks the outcome, and calls `applyStageChange` in one transaction. That's the only place a stage changes: it updates `nodes`, appends a `stage_changed` event, drops an agent's claim, and marks any running run with `left_via`.
 4. The route returns the new `NodeView`. `toView` derives everything not stored: turn, outcomes, holders, invalidated by a parent.
 5. The write middleware in `api.ts` calls `ChangeFeed.notify()` (`changes.ts`).

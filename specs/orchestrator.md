@@ -27,17 +27,18 @@ Launched agents run `agent_session_command`, and AOP adds what it needs to run w
 
 ## Claims
 - A node has at most one claim, by an agent run or a human. No agent starts on a claimed node.
-- An agent run claims its node when it starts and releases it when it ends.
-- `aop steer` claims the node for the human, and errors if an agent run holds it. Steering a node you already hold is fine, so a session can be reopened.
-- A human claim survives the session ending and any stage change. The human releases it in the UI.
+- An agent run claims its node when it starts and releases it when it ends, unless a human stops it.
+- A human claims a node in the UI or with `aop steer`, and either errors if an agent run holds it. Claiming a node you already hold is fine, so a session can be reopened.
+- A human claim survives the session ending and any stage change. The human releases it in the UI or with `aop release`. Each side releases only its own claim.
 
 ## Tracking agents
-- `aop ps` lists every agent process and the node it belongs to. `aop reap` kills any that shouldn't exist: its node was deleted or moved on, or it has no `running` row.
+- `aop ps` lists every agent process and the node it belongs to. `aop reap` kills any that shouldn't exist: its node was deleted, moved on or is invalidated by a parent, or it has no `running` row.
 - The server does the same check on startup and on a timer.
 - Before killing, AOP confirms the process is the one it started, so a reused process ID can't kill something unrelated. Kills include child processes.
 
 ## Stopping agents
-- The UI can stop an agent run and change a node's stage at any time.
+- A human can stop an agent run, in the UI or with `aop stop`, and change a node's stage at any time.
+- Stopping a run leaves the node on its stage and hands its claim to the human, so the stage doesn't start again until they release it.
 - Invalidating a node stops agents on every descendant, without moving them. Restoring it lets them carry on.
 - Any stage change stops the agent running on that node. The one exception is `aop split start`, because that agent carries on working. An agent that reports `aop next`, `aop ask` or `aop fail` is expected to exit, and is stopped if it doesn't.
 - A run stopped by a human doesn't count as `failed`.
