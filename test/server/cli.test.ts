@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { EdgeRow, EventView, LinkRow, MessageRow } from "../../src/shared/api.js";
-import { directives, fakeCommand, nodeArgs, settle, world, type World } from "./agents.helpers.js";
+import { directives, fakeCommand, nodeArgs, settle, until, world, type World } from "./agents.helpers.js";
 import { makeRepo } from "./helpers.js";
 
 const TIMEOUT = { timeout: 90_000 };
@@ -257,6 +257,81 @@ describe("the human commands", () => {
     for (const text of [run.id, node.id, "Listed", "running", String(run.pid)]) expect(listed.stdout).toContain(text);
     expect((await aop(["reap"])).stdout).toContain("Nothing to reap");
     expect(w.runs(node.id)[0]?.status).toBe("running");
+  });
+
+  it("stop leaves the node on its stage, claimed by the human, and release lets the agent start again", TIMEOUT, async () => {
+    const node = await w.create(directives("hang"));
+    const run = await w.runStarted(node.id);
+    // The human commands name their node, and never act on the session's.
+    const fromEnv = await aop(["stop"], { node: node.id });
+    expect(fromEnv.code).toBe(2);
+    expect(w.runs(node.id)[0]?.status).toBe("running");
+
+    const stopped = await aop(["stop", node.id]);
+    expect(stopped.code).toBe(0);
+    expect(stopped.stdout).toContain(run.id);
+    expect(w.node(node.id)).toMatchObject({ stage: "implement", claimed_by: "human" });
+    expect(w.runs(node.id)[0]).toMatchObject({ end_reason: "stopped", status: "exited" });
+
+    const again = await aop(["stop", node.id]);
+    expect(again.code).toBe(1);
+    expect(again.stderr).toContain("No agent is running");
+
+    await settle();
+    expect(w.runs(node.id)).toHaveLength(1);
+    const released = await aop(["release", node.id]);
+    expect(released.code).toBe(0);
+    expect(released.stdout).toContain(`Released ${node.id}`);
+    await w.runStarted(node.id, 2);
+  });
+
+  it("release only releases a human claim, and says why not", TIMEOUT, async () => {
+    const unclaimed = await parked();
+    const res = await aop(["release", unclaimed.id]);
+    expect(res.code).toBe(1);
+    expect(res.stderr).toContain("isn't claimed");
+
+    const node = await w.create(directives("hang"));
+    await w.runStarted(node.id);
+    const held = await aop(["release", node.id]);
+    expect(held.code).toBe(1);
+    expect(held.stderr).toContain("belongs to");
+    expect(w.node(node.id).claimed_by).toBe("agent");
+    expect((await aop(["release"], { node: node.id })).code).toBe(2);
+  });
+
+  it("logs prints the end of the latest run's log", TIMEOUT, async () => {
+    const fresh = await parked();
+    const none = await aop(["logs", fresh.id]);
+    expect(none.code).toBe(1);
+    expect(none.stderr).toContain("no runs yet");
+
+    const node = await w.create(directives(...Array.from({ length: 60 }, (_, i) => `say line ${i + 1}`), "hang"));
+    await w.runStarted(node.id);
+    await until("the log is written", () => (readFileSync(w.runs(node.id)[0]!.log_path, "utf8").includes("line 60") ? true : null));
+
+    const defaults = await aop(["logs", node.id]);
+    expect(defaults.code).toBe(0);
+    expect(defaults.stdout).toContain("line 60");
+    expect(defaults.stdout).toContain("line 11\n");
+    expect(defaults.stdout).not.toContain("line 10\n");
+
+    const three = await aop(["logs", node.id, "--lines", "3"]);
+    expect(three.stdout.trimEnd().split(/\r?\n/)).toEqual(["line 58", "line 59", "line 60"]);
+
+    for (const bad of ["0", "-2", "x", "1.5"]) {
+      const res = await aop(["logs", node.id, "--lines", bad]);
+      expect(res.code).toBe(2);
+      expect(res.stderr).toContain("--lines");
+    }
+    expect((await aop(["logs"], { node: node.id })).code).toBe(2);
+  });
+
+  it("the plugin's skills never tell agents about the human commands", () => {
+    for (const skill of ["aop-context", "aop-rulebook", "aop-brevity"]) {
+      const text = readFileSync(join("plugin", "skills", skill, "SKILL.md"), "utf8");
+      for (const command of ["aop stop", "aop release", "aop logs"]) expect(text).not.toContain(command);
+    }
   });
 
   describe("steer", () => {

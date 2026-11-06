@@ -1,4 +1,5 @@
-import { accessSync, constants, copyFileSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { accessSync, constants, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -141,15 +142,60 @@ function usesHomeStages(home: string): boolean {
 
 const quoted = (path: string) => (/\s/.test(path) ? `"${path}"` : path);
 
+/** The plugin's name in its marketplace, which is how Claude Code keys an install: `aop@<marketplace>`. */
+const PLUGIN_NAME = "aop";
+
+export type PluginCheck =
+  | { state: "installed"; file: string; id: string }
+  | { state: "missing"; file: string }
+  | { state: "unknown"; file: string; why: string };
+
+/**
+ * Whether Claude Code has the AOP plugin installed, from its own install records. It never runs
+ * `claude`. The records are `installed_plugins.json` in Claude Code's plugins root, which is
+ * CLAUDE_CODE_PLUGIN_CACHE_DIR, or else `plugins` in CLAUDE_CONFIG_DIR, or else `~/.claude/plugins`.
+ */
+export function checkClaudePlugin(env: NodeJS.ProcessEnv, cwd: string, home = homedir()): PluginCheck {
+  const configDir = envValue(env, "CLAUDE_CONFIG_DIR") || join(home, ".claude");
+  const root = envValue(env, "CLAUDE_CODE_PLUGIN_CACHE_DIR") || join(configDir, "plugins");
+  const file = resolve(cwd, root, "installed_plugins.json");
+  if (!existsSync(file)) return { state: "missing", file };
+  let records: unknown;
+  try {
+    records = JSON.parse(readFileSync(file, "utf8"));
+  } catch (error) {
+    return { state: "unknown", file, why: `couldn't read it: ${(error as Error).message}` };
+  }
+  if (typeof records !== "object" || records === null) return { state: "unknown", file, why: "it isn't in a form AOP knows" };
+  // Version 2 keeps installs under `plugins`, keyed `name@marketplace`, each a list of installs by scope.
+  const plugins = (records as { plugins?: unknown }).plugins ?? records;
+  if (typeof plugins !== "object" || plugins === null) return { state: "unknown", file, why: "it isn't in a form AOP knows" };
+  const id = Object.entries(plugins).find(
+    ([key, installs]) => key.startsWith(`${PLUGIN_NAME}@`) && installs !== null && (!Array.isArray(installs) || installs.length > 0),
+  )?.[0];
+  return id === undefined ? { state: "missing", file } : { state: "installed", file, id };
+}
+
+function claudePluginSection(io: InitIo, plugin: string): string {
+  const steps = `Inside a claude session:\n  /plugin marketplace add ${plugin}\n  /plugin install aop@aop\nOr for one session: claude --plugin-dir ${quoted(plugin)}`;
+  const check = checkClaudePlugin(io.env, io.cwd);
+  if (check.state === "installed") return `Claude Code: the AOP plugin is installed (${check.id}, in ${check.file}).`;
+  if (check.state === "missing") return `Claude Code: the AOP plugin is not installed yet.\n${steps}`;
+  return `Claude Code: couldn't tell whether the AOP plugin is installed, from ${check.file}: ${check.why}.\n${steps}`;
+}
+
 function pluginSteps(io: InitIo, found: Map<Tool, string>): string {
   const plugin = join(io.packageRoot, "plugin");
-  const steps: Record<Tool, string> = {
-    claude: `Claude Code, inside a claude session:\n  /plugin marketplace add ${plugin}\n  /plugin install aop@aop\nOr for one session: claude --plugin-dir ${quoted(plugin)}`,
-    copilot: `GitHub Copilot CLI (untested):\n  copilot plugin install ${quoted(plugin)}`,
+  const sections: Record<Tool, () => string> = {
+    claude: () => claudePluginSection(io, plugin),
+    copilot: () => `GitHub Copilot CLI (untested, and AOP can't check whether it's installed):\n  copilot plugin install ${quoted(plugin)}`,
   };
   const tools = found.size > 0 ? [...found.keys()] : [...TOOLS];
-  const intro = found.size > 0 ? "Install the AOP plugin, which teaches agents how to work on AOP stages:" : "Didn't find claude or copilot on PATH. To install the AOP plugin later:";
-  return [intro, ...tools.map((tool) => steps[tool])].join("\n\n");
+  const intro =
+    found.size > 0
+      ? "The AOP plugin teaches agents how to work on AOP stages."
+      : "Didn't find claude or copilot on PATH. The AOP plugin teaches agents how to work on AOP stages. To install it later:";
+  return [intro, ...tools.map((tool) => sections[tool]())].join("\n\n");
 }
 
 async function init(argv: string[], io: InitIo): Promise<void> {
