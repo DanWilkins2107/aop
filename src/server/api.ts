@@ -1,3 +1,6 @@
+// Every HTTP route. Validates bodies, calls the module that owns the data, and renders errors.
+// After any successful write it notifies the change feed, which is what wakes pages and the orchestrator.
+
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";

@@ -1,3 +1,6 @@
+// The process page's view of `stages.yaml`, which still answers while the config is invalid. Not to be
+// confused with `processes.ts`, which is about operating system processes.
+
 import { existsSync } from "node:fs";
 import type { ProcessView } from "../shared/api.js";
 import { loadConfig } from "./config.js";

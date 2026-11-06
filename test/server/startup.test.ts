@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../../src/server/config.js";
 import { aopHome } from "../../src/server/paths.js";
-import type { ProjectRow, StagesView } from "../../src/shared/api.js";
+import type { NodeView, ProjectRow, StagesView } from "../../src/shared/api.js";
 import { makeHome } from "./helpers.js";
 
 const ROOT = resolve(import.meta.dirname, "../..");
@@ -95,8 +95,10 @@ describe("the demo", () => {
 
     const projects = (await (await fetch(`${url}/api/projects`)).json()) as ProjectRow[];
     expect(projects.map((p) => p.name)).toEqual(["Demo project"]);
-    const nodes = (await (await fetch(`${url}/api/projects/${projects[0]?.id}/nodes`)).json()) as unknown[];
+    const nodes = (await (await fetch(`${url}/api/projects/${projects[0]?.id}/nodes`)).json()) as NodeView[];
     expect(nodes.length).toBeGreaterThan(0);
+    const report = nodes.find((n) => n.title === "Weekly status report");
+    expect(report).toMatchObject({ type: "reports", stage: "scheduled", cron: "0 7 * * 1" });
     expect(((await (await fetch(`${url}/api/stages`)).json()) as StagesView).types.length).toBeGreaterThan(0);
 
     expect(existsSync(join(home, ".aop"))).toBe(false);

@@ -13,6 +13,7 @@ stages:                       # pool of every stage
   implement:      { turn: agent, color: "#12b886", prompt: ./prompts/implement.md }
   pr_review:      { turn: human, color: "#9775fa" }
   second_human_review: { turn: human, color: "#e91e63" }
+  generate_report: { turn: agent, color: "#4c8fc4", prompt: ./prompts/generate_report.md }
 
 types:                        # a mini graph for each part of the workflow
   triage:
@@ -28,6 +29,11 @@ types:                        # a mini graph for each part of the workflow
       implement:           { next: { pr_raised: pr_review } }
       pr_review:           { next: { approve: second_human_review, changes: implement } }
       second_human_review: { next: { merged: done, changes: implement } }
+  reports:                    # stands alone: a scheduled node makes a report child each time it fires
+    start: scheduled
+    stages:
+      scheduled:       { next: { fire: generate_report } }
+      generate_report: { next: { done: done } }
 ```
 
 ## New nodes

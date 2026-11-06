@@ -5,7 +5,7 @@ import { ErrorNotice } from "../components/ErrorNotice.js";
 import { NewNodeDialog } from "../components/NewNodeDialog.js";
 import { RoutedEdge, type RoutedEdgeType } from "../components/RoutedEdge.js";
 import { StageCard, type StageCardNode } from "../components/StageCard.js";
-import { api } from "../lib/api.js";
+import { loadProjectGraph } from "../lib/api.js";
 import { CARD_HEIGHT, CARD_WIDTH, fittedViewport, graphView, type FitOptions } from "../lib/layout.js";
 import { useLiveData } from "../lib/live.js";
 import { isInvalidated } from "../lib/stageStyle.js";
@@ -90,15 +90,7 @@ export function GraphPage() {
   const [readyFor, setReadyFor] = useState<string | null>(null);
   const narrow = size !== null && size.width < NARROW_WIDTH;
 
-  const { data, error } = useLiveData(async () => {
-    const [nodes, edges, stages, projects] = await Promise.all([
-      api.nodes(projectId),
-      api.projectEdges(projectId),
-      api.stages(),
-      api.projects(),
-    ]);
-    return { nodes, edges, stages, project: projects.find((p) => p.id === projectId) ?? null };
-  }, projectId);
+  const { data, error } = useLiveData(() => loadProjectGraph(projectId), projectId);
 
   const { flowNodes, flowEdges, viewport } = useMemo(() => {
     const none: Viewport = { x: 0, y: 0, zoom: 1 };

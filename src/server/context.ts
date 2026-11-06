@@ -1,3 +1,5 @@
+// The text agents read: `aop context` for a node, and the prompt each launched agent gets on stdin.
+
 import { readFileSync } from "node:fs";
 import type { AopConfig } from "./config.js";
 import type { Db } from "./db.js";
@@ -69,7 +71,12 @@ export function nodeContext(db: Db, nodeId: string): string {
   } else {
     moves.push(`This node is at ${node.stage}, where no agent command moves it.`);
   }
-  if (node.turn === "agent") moves.push('- `aop ask "..."` asks a human, and this stage starts again with the answer');
+  if (node.turn === "agent") {
+    moves.push(
+      '- `aop ask "..."` asks a human, and this stage starts again with the answer',
+      '- `aop fail "<reason>"` marks this node failed, only when the work can\'t be done and asking won\'t help',
+    );
+  }
 
   const messages = listMessages(db, nodeId).map((m) => `[${m.author}, ${m.stage}, ${m.created_at}]\n${m.body}`);
 

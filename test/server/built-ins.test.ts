@@ -445,6 +445,20 @@ describe("a split's blocks move to its children", () => {
     expect((await h.post(node.id, "move", { stage: "broken_down" })).body.stage).toBe("broken_down");
   });
 
+  it("skips the blocks check on a force move whichever way the edges point, keeping them", async () => {
+    const { node } = await splitWithChild();
+    const before = await h.create("dev");
+    const after = await h.create("dev");
+    await edge(before.id, node.id);
+    await edge(node.id, after.id);
+    expect((await h.post(node.id, "split/finish")).status).toBe(409);
+    expect((await h.post(node.id, "move", { stage: "broken_down" })).body).toMatchObject({
+      stage: "broken_down",
+      blocked_by: [before.id],
+    });
+    expect((await h.node(after.id)).blocked_by).toEqual([node.id]);
+  });
+
   it("keeps a broken_down blocker holding, because only done counts as finished", async () => {
     const { node } = await splitWithChild();
     const held = await h.create("dev");

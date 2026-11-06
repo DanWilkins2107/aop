@@ -1,3 +1,5 @@
+// The browser's client for the HTTP API: one function per route the UI uses.
+
 import type {
   ConfigView,
   EdgeRow,
@@ -87,6 +89,17 @@ export const api = {
   stopRun: (runId: string) => send<NodeView>("POST", `/runs/${encodeURIComponent(runId)}/stop`),
   removeEdge: (edgeId: string) => send<EdgeRow>("DELETE", `/edges/${encodeURIComponent(edgeId)}`),
 };
+
+/** A project's whole graph, with the stages and the project itself. The graph page and the node page both need it. */
+export async function loadProjectGraph(projectId: string) {
+  const [nodes, edges, stages, projects] = await Promise.all([
+    api.nodes(projectId),
+    api.projectEdges(projectId),
+    api.stages(),
+    api.projects(),
+  ]);
+  return { nodes, edges, stages, project: projects.find((p) => p.id === projectId) ?? null };
+}
 
 /** The message to show for a failed action. */
 export function failureText(error: unknown): string {

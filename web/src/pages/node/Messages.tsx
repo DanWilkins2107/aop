@@ -4,7 +4,7 @@ import { api } from "../../lib/api.js";
 import { messageVisits } from "../../lib/messageVisits.js";
 import { humanize, timeAgo, toTarget } from "../../lib/format.js";
 import { accentOf, stageColor } from "../../lib/stageStyle.js";
-import { useAction } from "./useAction.js";
+import { useAction } from "../../lib/useAction.js";
 
 /** The page's one message box. While the agent is waiting on a question, what's written here is the answer. */
 function MessageBox({ node, asking, reload }: { node: NodeView; asking: boolean; reload: () => Promise<void> }) {

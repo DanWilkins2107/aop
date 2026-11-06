@@ -18,7 +18,7 @@ Launched agents run `agent_session_command`, and AOP adds what it needs to run w
 1. A node entering an agent stage is queued.
 2. It starts once it's unclaimed, no `blocks` edge holds it and it isn't invalidated by a parent. There is no limit on how many agents run at once.
 3. Each stage is a fresh process, started in the project's path, or `open_from` if it has none. Its prompt goes in on stdin, built from a short instruction to load the plugin's `aop-context` and `aop-rulebook` skills, the output of `aop context` for the node, and the stage's prompt file. AOP generates that output itself, so an agent always knows where it is in the tree.
-4. The agent finishes with `aop next <outcome>`, `aop ask "..."` or by exiting. Only outcomes in that stage's `next` are accepted.
+4. The agent finishes with `aop next <outcome>`, `aop ask "..."`, `aop fail "<reason>"` or by exiting. Only outcomes in that stage's `next` are accepted.
 5. Exiting without either, or running past `agent_timeout_minutes`, moves the node to `failed`. Nothing retries automatically.
 
 ## Server lifecycle
@@ -39,7 +39,7 @@ Launched agents run `agent_session_command`, and AOP adds what it needs to run w
 ## Stopping agents
 - The UI can stop an agent run and change a node's stage at any time.
 - Invalidating a node stops agents on every descendant, without moving them. Restoring it lets them carry on.
-- Any stage change stops the agent running on that node. The one exception is `aop split start`, because that agent carries on working. An agent that reports `aop next` or `aop ask` is expected to exit, and is stopped if it doesn't.
+- Any stage change stops the agent running on that node. The one exception is `aop split start`, because that agent carries on working. An agent that reports `aop next`, `aop ask` or `aop fail` is expected to exit, and is stopped if it doesn't.
 - A run stopped by a human doesn't count as `failed`.
 
 ## Workspaces

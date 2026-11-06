@@ -1,3 +1,6 @@
+// Decides which agents run and what each run's end means for its node. OS-level process handling is
+// in `processes.ts`, and the `runs` and `agent_processes` rows in `runs.ts`.
+
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import type { WriteStream } from "node:fs";
 import { setTimeout as delay } from "node:timers/promises";
