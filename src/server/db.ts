@@ -1,3 +1,4 @@
+// better-sqlite3 rather than node:sqlite, which has no full-text search.
 import Database from "better-sqlite3";
 import { migrations } from "./migrations.js";
 import { dbPath } from "./paths.js";

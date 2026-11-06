@@ -1,7 +1,7 @@
 /**
  * The built-in stages and the facts about them that both the server and the browser need. No imports,
  * so the browser can load it too. What each built-in does is in `src/server/stageMachine.ts`, and `scheduled`
- * in `src/server/scheduler.ts`. `specs/built-in-stages.md` is the source, and a test checks these agree.
+ * in `src/server/scheduler.ts`.
  */
 
 export const BUILT_IN_STAGES = [

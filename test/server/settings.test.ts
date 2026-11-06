@@ -2,7 +2,6 @@ import { readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
-import { parse } from "yaml";
 import { createApp } from "../../src/server/api.js";
 import { loadConfig } from "../../src/server/config.js";
 import { aopHome, configPath, resolveConfigPath } from "../../src/server/paths.js";
@@ -55,23 +54,6 @@ describe("where a project's agents start", () => {
 });
 
 describe("the demo's process", () => {
-  type Stages = { stages: Record<string, { color?: string }> } & Record<string, unknown>;
-
-  /** The file's meaning, leaving out colours, which the demo chooses for itself. */
-  const withoutColours = (stages: Stages) => ({
-    ...stages,
-    stages: Object.fromEntries(
-      Object.entries(stages.stages).map(([name, { color: _color, ...stage }]) => [name, stage]),
-    ),
-  });
-
-  it("matches the example in specs/stages.md", () => {
-    const spec = readFileSync(join(ROOT, "specs", "stages.md"), "utf8");
-    const example = /```yaml\n([\s\S]*?)```/.exec(spec.replaceAll("\r\n", "\n"))?.[1] ?? "";
-    const demo = readFileSync(join(ROOT, "demo", "config", "stages.yaml"), "utf8");
-    expect(withoutColours(parse(demo) as Stages)).toEqual(withoutColours(parse(example) as Stages));
-  });
-
   it("starts new nodes on the renamed stage, with its prompt file", () => {
     const graph = loadConfig(join(ROOT, "demo", "config")).graph;
     expect(graph.types.get("triage")?.start).toBe("awaiting_agent_breakdown");

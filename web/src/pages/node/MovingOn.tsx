@@ -46,6 +46,7 @@ function SingleAction({
   );
 }
 
+/** Every outcome looks the same, with none styled as the default: the UI shouldn't nudge work down the pipeline. */
 function Outcomes({ node, reload }: { node: NodeView; reload: Reload }) {
   const { busy, error, run } = useAction(reload);
   return (

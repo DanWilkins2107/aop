@@ -1,4 +1,4 @@
-# The example from specs/stages.md with the demo's own colours, copied into a throwaway AOP_HOME by demo/start.ts.
+# A sample process with its own colours, copied into a throwaway AOP_HOME by demo/start.ts.
 start: triage                 # the type new nodes start in
 
 stages:                       # pool of every stage

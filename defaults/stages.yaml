@@ -1,5 +1,16 @@
 # The whole process, shared by all projects. config.yaml links here.
 # Edit freely: AOP validates this file on start and shows problems in the UI.
+#
+# - A stage has `turn: agent` or `turn: human` and an optional `color`. Agent stages need a
+#   `prompt`, a file inside this file's folder.
+# - A type is a small graph: its `start` stage, and each stage's `next`, mapping an outcome (an
+#   agent's `aop next <outcome>`, or a human's button) to a stage in the type, another type
+#   (entering at its start), `done` or `broken_down`. `next` lives on the type, so one stage can
+#   be used in several types.
+# - Built-in names are reserved: done, broken_down, invalidated, ask_human_question, failed,
+#   externally_blocked, splitting and scheduled. A stage and a type can't share a name.
+# - A type can start at `scheduled`: its node stays there and, on the cron set when it's created,
+#   makes a child at its `next` target. See `reports` below.
 
 start: triage                 # the type new nodes start in
 

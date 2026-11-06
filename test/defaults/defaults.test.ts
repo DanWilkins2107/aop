@@ -1,7 +1,6 @@
 import { cpSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { parse } from "yaml";
 import { loadConfig } from "../../src/server/config.js";
 import { aopHome } from "../../src/server/paths.js";
 import { ROOT } from "../server/agents.helpers.js";
@@ -36,17 +35,7 @@ function commandKeys(tokens: string[]): string[] {
 const tokensOf = (text: string) => text.replaceAll("\\|", "|").trim().split(/\s+/).slice(1);
 
 describe("the default improvement pipeline", () => {
-  type Stages = { stages: Record<string, { color?: string }> } & Record<string, unknown>;
-  const withoutColours = (file: Stages) => ({
-    ...file,
-    stages: Object.fromEntries(Object.entries(file.stages).map(([name, { color: _color, ...stage }]) => [name, stage])),
-  });
-
-  it("matches specs/improvements.md, and the demo's copy matches it", () => {
-    const spec = readFileSync(join(ROOT, "specs", "improvements.md"), "utf8").replaceAll("\r\n", "\n");
-    const example = [...spec.matchAll(/```yaml\n([\s\S]*?)```/g)].map((m) => m[1]!).find((text) => text.includes("types:"));
-    const shipped = parse(readFileSync(join(DEFAULTS, "improvement_stages.yaml"), "utf8")) as Stages;
-    expect(withoutColours(shipped)).toEqual(withoutColours(parse(example ?? "") as Stages));
+  it("is the one the demo uses", () => {
     expect(readFileSync(join(ROOT, "demo", "config", "improvement_stages.yaml"), "utf8")).toBe(
       readFileSync(join(DEFAULTS, "improvement_stages.yaml"), "utf8"),
     );
