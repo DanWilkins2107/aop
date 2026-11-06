@@ -1,3 +1,5 @@
+// IDs, timestamps and the append-only `events` log, shared by every module that writes rows.
+
 import { randomUUID } from "node:crypto";
 import type { Actor } from "../shared/api.js";
 import type { Db } from "./db.js";

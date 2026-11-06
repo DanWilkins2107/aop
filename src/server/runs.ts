@@ -1,3 +1,5 @@
+// Reads and writes the `runs` and `agent_processes` tables. The orchestrator decides when.
+
 import type { Db } from "./db.js";
 import type { NodeRow } from "./nodes.js";
 import type { Identity } from "./processes.js";

@@ -1,3 +1,5 @@
+// Live data. One event stream per page, and `useLiveData` refetches whenever the server says something changed.
+
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ApiFailure } from "./api.js";
 

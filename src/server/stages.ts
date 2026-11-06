@@ -1,3 +1,6 @@
+// Parses and validates `stages.yaml` into a `StageGraph`, and names the built-in stages.
+// What each built-in does is in `nodes.ts`, and `scheduled` in `scheduler.ts`.
+
 import { existsSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { z } from "zod";

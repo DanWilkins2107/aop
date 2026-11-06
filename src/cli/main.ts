@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// `aop`. Every command is an HTTP call to the server, except `init` (in `init.ts`) and `serve`, which runs the server in this process.
+
 import { spawn } from "node:child_process";
 import { parseArgs, type ParseArgsConfig } from "node:util";
 import type {
