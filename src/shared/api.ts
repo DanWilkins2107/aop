@@ -371,6 +371,11 @@ export interface ProposalView {
   proposed: string;
   /** Null when the file doesn't exist yet. */
   current: string | null;
+  /**
+   * The real file has changed since this was last saved, so applying is refused until it's saved
+   * again. False when that's unknown, for proposals saved before AOP recorded it.
+   */
+  stale: boolean;
   updated_at: string;
   updated_by: "human" | "agent";
 }

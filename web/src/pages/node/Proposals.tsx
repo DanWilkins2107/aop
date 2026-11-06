@@ -34,6 +34,18 @@ function Diff({ proposal }: { proposal: ProposalView }) {
   );
 }
 
+/** A file that changed after its proposal was drafted: applying would undo that change, so it's refused. */
+function StaleNote({ node, editable }: { node: NodeView; editable: boolean }) {
+  const canRedraft = node.available_outcomes.some((o) => o.outcome === "redraft");
+  const ways = [canRedraft ? "Redraft to draft it again" : null, editable ? "Edit and save to keep it as it is" : null].filter(Boolean);
+  return (
+    <p className="section-text proposal-stale">
+      This file has changed since the proposal was drafted, so nothing can be applied until it's updated. The diff is against
+      the file as it is now.{ways.length > 0 ? ` ${ways.join(", or ")}.` : ""}
+    </p>
+  );
+}
+
 function Proposal({ node, proposal, editable, reload }: { node: NodeView; proposal: ProposalView; editable: boolean; reload: () => Promise<void> }) {
   // Null while reading, so live updates show through unless there's a draft to protect.
   const [draft, setDraft] = useState<string | null>(null);
@@ -52,6 +64,7 @@ function Proposal({ node, proposal, editable, reload }: { node: NodeView; propos
           {proposal.display_path}
         </h3>
         <span className="proposal-stats muted">
+          {proposal.stale ? <span className="proposal-stale-mark">Changed since drafted</span> : null}
           {proposal.current === null ? "New file" : `+${added} −${removed}`}
           {editable && draft === null ? (
             <button type="button" className="btn-quiet proposal-edit" onClick={() => setDraft(proposal.proposed)}>
@@ -60,6 +73,7 @@ function Proposal({ node, proposal, editable, reload }: { node: NodeView; propos
           ) : null}
         </span>
       </div>
+      {proposal.stale && draft === null ? <StaleNote node={node} editable={editable} /> : null}
       {draft === null ? (
         <Diff proposal={proposal} />
       ) : (
