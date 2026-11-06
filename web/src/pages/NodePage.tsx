@@ -1,9 +1,10 @@
 import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
-import type { EdgeRow, LinkRow, NodeView } from "../../../src/shared/api.js";
+import type { LinkRow } from "../../../src/shared/api.js";
 import { ClaimMark } from "../components/ClaimMark.js";
 import { ErrorNotice } from "../components/ErrorNotice.js";
 import { PipelineGraph } from "../components/PipelineGraph.js";
+import { ancestorsOf } from "../lib/ancestry.js";
 import { api } from "../lib/api.js";
 import { humanize } from "../lib/format.js";
 import { useLiveData } from "../lib/live.js";
@@ -28,22 +29,6 @@ async function loadNode(nodeId: string) {
   ]);
   const project = projects.find((p) => p.id === node.project_id) ?? null;
   return { node, messages, events, edges, links, stages, projectNodes, projectEdges, project };
-}
-
-/** Oldest first, following each node's first `subtask` parent. */
-function ancestorsOf(node: NodeView, nodes: NodeView[], edges: EdgeRow[]): NodeView[] {
-  const byId = new Map(nodes.map((n) => [n.id, n]));
-  const chain: NodeView[] = [];
-  const seen = new Set([node.id]);
-  let current = node.id;
-  for (;;) {
-    const parentEdge = edges.find((e) => e.kind === "subtask" && e.target_id === current);
-    const parent = parentEdge ? byId.get(parentEdge.source_id) : undefined;
-    if (!parent || seen.has(parent.id)) return chain;
-    seen.add(parent.id);
-    chain.unshift(parent);
-    current = parent.id;
-  }
 }
 
 const LINK_LABELS: Record<LinkRow["kind"], string> = { pr: "PR", ticket: "Ticket" };
