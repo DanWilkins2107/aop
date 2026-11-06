@@ -8,9 +8,24 @@ import { ProjectSettingsPage } from "./pages/ProjectSettingsPage.js";
 import { ProjectsPage } from "./pages/ProjectsPage.js";
 import { RoadmapPage } from "./pages/RoadmapPage.js";
 
-/** Says nothing while the connection is healthy. */
+/**
+ * Says nothing while the connection is healthy. The visible text is hidden from screen readers,
+ * which hear it once from a polite status region that stays mounted so the change is announced.
+ */
 function ConnectionNotice() {
-  return useLiveStatus() === "offline" ? <span className="connection-notice">Reconnecting</span> : null;
+  const offline = useLiveStatus() === "offline";
+  return (
+    <>
+      {offline ? (
+        <span className="connection-notice" aria-hidden="true">
+          Reconnecting
+        </span>
+      ) : null}
+      <span className="visually-hidden" role="status">
+        {offline ? "Reconnecting" : ""}
+      </span>
+    </>
+  );
 }
 
 export function App() {
