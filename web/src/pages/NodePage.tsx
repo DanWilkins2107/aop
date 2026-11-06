@@ -9,10 +9,12 @@ import { humanize } from "../lib/format.js";
 import { useLiveData } from "../lib/live.js";
 import { originalStage } from "../lib/stageGraph.js";
 import { GLOBAL_STAGES, findType, stageBand } from "../lib/stageStyle.js";
+import { NodeControls } from "./node/Controls.js";
 import { Description } from "./node/Description.js";
 import { Details } from "./node/Details.js";
 import { Messages } from "./node/Messages.js";
 import { MovingOn } from "./node/MovingOn.js";
+import { Part } from "./node/Part.js";
 
 async function loadNode(nodeId: string) {
   const node = await api.node(nodeId);
@@ -140,20 +142,24 @@ export function NodePage() {
           ) : null}
           <Links links={data.links} />
           <MovingOn node={node} stages={stages} events={events} reload={reload} />
-          <details className="panel-part pipeline-part">
-            <summary>Pipeline</summary>
-            {onGlobalStage ? <p className="pipeline-note muted">{humanize(node.stage)} is a global stage. Global stages live outside the pipeline.</p> : null}
-            <PipelineGraph
-              node={node}
-              type={findType(stages, node.type)}
-              returnTo={onGlobalStage ? originalStage(node, events) : null}
-            />
-          </details>
+          <div className="panel-part header-parts">
+            <Part title="Pipeline">
+              {onGlobalStage ? (
+                <p className="pipeline-note muted">{humanize(node.stage)} is a global stage. Global stages live outside the pipeline.</p>
+              ) : null}
+              <PipelineGraph
+                node={node}
+                type={findType(stages, node.type)}
+                returnTo={onGlobalStage ? originalStage(node, events) : null}
+              />
+            </Part>
+            <NodeControls node={node} stages={stages} reload={reload} />
+          </div>
         </header>
 
         <Description node={node} reload={reload} />
         <Messages node={node} messages={messages} stages={stages} reload={reload} />
-        <Details node={node} edges={data.edges} nodes={projectNodes} events={events} stages={stages} titleOf={titleOf} reload={reload} />
+        <Details node={node} edges={data.edges} nodes={projectNodes} events={events} titleOf={titleOf} reload={reload} />
       </div>
     </div>
   );

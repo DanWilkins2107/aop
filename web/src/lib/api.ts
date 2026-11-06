@@ -3,10 +3,12 @@ import type {
   EdgeRow,
   EventView,
   LinkRow,
+  LogTail,
   MessageRow,
   NodeView,
   ProjectRow,
   ProcessView,
+  RunView,
   StagesView,
 } from "../../../src/shared/api.js";
 
@@ -84,6 +86,8 @@ export const api = {
   addMessage: (id: string, body: string) => send<MessageRow>("POST", `${nodePath(id)}/messages`, { body }),
   addEdge: (sourceId: string, targetId: string, kind: EdgeRow["kind"]) =>
     send<EdgeRow>("POST", `${nodePath(sourceId)}/edges`, { target_id: targetId, kind }),
+  runs: (id: string) => send<RunView[]>("GET", `${nodePath(id)}/runs`),
+  logTail: (runId: string) => send<LogTail>("GET", `/runs/${encodeURIComponent(runId)}/tail`),
   stopRun: (runId: string) => send<NodeView>("POST", `/runs/${encodeURIComponent(runId)}/stop`),
   removeEdge: (edgeId: string) => send<EdgeRow>("DELETE", `/edges/${encodeURIComponent(edgeId)}`),
 };
