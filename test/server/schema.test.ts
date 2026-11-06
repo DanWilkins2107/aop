@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync } from "node:fs";
 import { dirname, join } from "node:path";
 import Database from "better-sqlite3";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { allowProjectDeletion, openDb, type Db } from "../../src/server/db.js";
 import { migrations } from "../../src/server/migrations.js";
 import { aopHome } from "../../src/server/paths.js";
@@ -510,6 +510,56 @@ describe("upgrading a database with projects that must have a path", () => {
       expect(() => after.prepare("INSERT INTO projects (id, created_at, name, repo_path) VALUES ('x', ?, 'x', NULL)").run(T)).toThrow(/NOT NULL/);
     } finally {
       after.close();
+    }
+  });
+});
+
+describe("upgrading from every earlier version", () => {
+  /** Every table, index and trigger, as SQLite stores them, for comparing two databases. */
+  const schemaOf = (database: Database.Database) =>
+    database.prepare("SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name").all();
+
+  const latest = { version: 0, schema: [] as unknown[] };
+  beforeAll(() => {
+    const fresh = openDb(join(mkdtempSync(join(aopHome(), "fresh-")), "aop.db"));
+    latest.version = fresh.pragma("user_version", { simple: true }) as number;
+    latest.schema = schemaOf(fresh);
+    fresh.close();
+  });
+
+  it("numbers the migrations by their place in the list", () => {
+    expect(migrations.map((m) => m.version)).toEqual(migrations.map((_, index) => index + 1));
+    expect(latest.version).toBe(migrations.length);
+  });
+
+  it.each(migrations.map((m) => m.version - 1))("from version %i, keeping its rows and ending with a fresh database's schema", (version) => {
+    const path = join(mkdtempSync(join(aopHome(), "upgrade-")), "aop.db");
+    const old = new Database(path);
+    old.function("aop_project_being_deleted", { deterministic: false }, () => null);
+    old.pragma("foreign_keys = OFF");
+    for (const migration of migrations.slice(0, version)) old.exec(migration.sql);
+    old.pragma(`user_version = ${version}`);
+    old.pragma("foreign_keys = ON");
+    if (version > 0) {
+      // Columns every version has, and values every version accepts.
+      old.prepare("INSERT INTO projects (id, created_at, name, repo_path) VALUES ('p', ?, 'P', '/repo/p')").run(T);
+      old.prepare("INSERT INTO nodes (id, created_at, project_id, title, type, stage) VALUES ('n', ?, 'p', 'Old wombat', 'dev', 'implement')").run(T);
+      old.prepare("INSERT INTO messages (id, created_at, node_id, stage, author, body) VALUES ('m', ?, 'n', 'implement', 'human', 'Old quokka')").run(T);
+    }
+    old.close();
+
+    const upgraded = openDb(path);
+    try {
+      expect(upgraded.pragma("user_version", { simple: true })).toBe(latest.version);
+      expect(schemaOf(upgraded)).toEqual(latest.schema);
+      expect(upgraded.pragma("foreign_key_check")).toEqual([]);
+      if (version > 0) {
+        expect(upgraded.prepare("SELECT id, name, repo_path FROM projects").all()).toEqual([{ id: "p", name: "P", repo_path: "/repo/p" }]);
+        expect(upgraded.prepare("SELECT id, title, stage FROM nodes").all()).toEqual([{ id: "n", title: "Old wombat", stage: "implement" }]);
+        expect(upgraded.prepare("SELECT id, body FROM messages").all()).toEqual([{ id: "m", body: "Old quokka" }]);
+      }
+    } finally {
+      upgraded.close();
     }
   });
 });

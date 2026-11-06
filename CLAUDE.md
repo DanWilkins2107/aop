@@ -5,6 +5,7 @@
 ## Layout
 - `src/server/`: one Node process. `api.ts` has every route and its zod request body. `nodes.ts` has the node and stage rules. `orchestrator.ts` launches agents, `scheduler.ts` fires cron nodes, `processes.ts` finds and kills process trees. `config.ts` and `stages.ts` load and validate `config.yaml` and `stages.yaml`. `context.ts` builds `aop context` and the agent prompt. `migrations.ts` holds the schema.
 - `src/shared/api.ts`: the response types shared by the server, the CLI and the web app. Types only, because the browser imports it.
+- `src/shared/port.ts`: `DEFAULT_PORT`, the one place 4317 is written.
 - `src/cli/`: the `aop` command. `cli.ts` has the commands, which only talk HTTP, and `runCli`, which takes its argv, env, output and exit as arguments. `main.ts` is the entry point that runs it on the real process. `init.ts` is `aop init`.
 - `web/src/`: the React UI. `lib/` holds the pure helpers, tested in `test/web/`. `styles.css` only imports `styles/*.css`, one file per part of the UI, and their order is the cascade order.
 - `defaults/`: what `aop init` installs. `demo/`: the demo's config and seed data. `plugin/`: the agent skills.
@@ -25,7 +26,7 @@
 - Never launch real agent tools (`claude`, `copilot`) in tests. Agents are `test/fixtures/fake-agent.mjs`, driven by `@@` lines in the node body or prompt (listed at the top of that file).
 - AOP stays invisible in user repos: it never writes to a project's path, and tests check the folder is unchanged. The plugin tells agents never to mention AOP in anything committed or published.
 - Agents can reach the API, so no route may change commands or `config.yaml`. `actor` is self-reported.
-- Migrations are append-only: add a new version, never edit an old one. If two branches add the same version, renumber one at merge.
+- Migrations are append-only: add a step to the end of the list in `migrations.ts`, and never edit, remove or reorder one. A step's version is its place in the list, so there are no numbers to collide at merge. `schema.test.ts` upgrades a database from every earlier version.
 - The dev machine is Windows. Keep scripts and paths cross-platform, and expect process lookups to be slow there.
 
 ## Tests that tie files together

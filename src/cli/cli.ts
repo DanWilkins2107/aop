@@ -13,6 +13,7 @@ import type {
   SearchResult,
   SteerSession,
 } from "../shared/api.js";
+import { DEFAULT_PORT } from "../shared/port.js";
 
 /** What a run of the CLI reads and writes, instead of the process's own. */
 export interface CliIo {
@@ -72,13 +73,12 @@ ${listed(AGENT_COMMANDS)}
 For humans:
 ${listed(HUMAN_COMMANDS)}
 
-Finds the server through AOP_URL, or AOP_PORT on localhost, or else port 4317.`;
+Finds the server through AOP_URL, or AOP_PORT on localhost, or else port ${DEFAULT_PORT}.`;
 
 /** A usage error that shows how the command is used, after what was wrong with it if there's more to say. */
 const usageError = (usage: Usage, problem?: string) =>
   new UsageError(`${problem === undefined ? "" : `${problem}\n`}Usage: ${usage.join("\n       ")}`);
 
-const DEFAULT_PORT = "4317";
 /** The commands agents use all say so. `actor` is self-reported, and these are the agent's commands. */
 const ACTOR = "agent";
 

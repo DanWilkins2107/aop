@@ -58,4 +58,4 @@ An agent's `aop next` is the same request from `src/cli/cli.ts`, with `actor: ag
 - Stage colours and emphasis are in `lib/stageStyle.ts`, and the colour maths in `lib/color.ts`.
 
 ## Data
-`migrations.ts` is the schema, as numbered SQL. [server.md](server.md) has the tables. Constraints and triggers enforce the rules there, so the database refuses a bad row whichever code writes it.
+`migrations.ts` is the schema, as a list of SQL steps whose versions are their places in it. [server.md](server.md) has the tables. Constraints and triggers enforce the rules there, so the database refuses a bad row whichever code writes it.
