@@ -50,6 +50,23 @@ export function ProcessPage() {
           ))}
         </ul>
       ) : null}
+      {data?.improvement_process ? (
+        <section className="process-improvements" aria-label="Improvement pipeline">
+          <h2 className="settings-title">Improvement pipeline</h2>
+          <p className="settings-note">
+            How improvements to your skills and stage prompts move. Edit <code>{data.improvement_stages_path}</code> to change it.
+          </p>
+          <ul className="process-list">
+            {data.improvement_process.types.map((type) => (
+              <li key={type.name} className="process-type">
+                <h2>{humanize(type.name)}</h2>
+                <p className="setting-about">Starts at {humanize(type.start)}.</p>
+                <PipelineGraph type={type} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </div>
   );
 }

@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { join } from "node:path";
 import type { Hono } from "hono";
 import type { Db } from "../src/server/db.js";
+import { aopHome } from "../src/server/paths.js";
 import type { NodeRow } from "../src/server/nodes.js";
 import { logPathFor } from "../src/server/runLog.js";
 import { beginRun } from "../src/server/runs.js";
@@ -100,11 +102,47 @@ export async function seed(app: Hono, db: Db, projectId: string): Promise<void> 
   );
   await outcome(receipts, "changes");
   await say(receipts, "Reproduced the timeout case. The key is now recorded before the send and released only on a hard failure.");
-  await say(receipts, "Also add a test that drops the connection mid-send.", "human");
+  const dropTest = (await say(receipts, "Also add a test that drops the connection mid-send.", "human")) as { id: string };
   await say(receipts, "Added. It fakes a dropped connection after the provider accepts the email.");
   await outcome(receipts, "pr_raised");
   await say(receipts, "Updated the PR with both fixes. All receipt tests pass.");
   await say(receipts, "Looks right now. I'll give it a final read this afternoon.", "human");
+
+  // Improvements, captured from a message: one waiting on review with a proposed skill change, one
+  // being drafted, and one with no source.
+  const improve = (body: string, source?: string) =>
+    call<{ node: NodeView }>("POST", "/improvements", { body, ...(source ? { source_message_id: source } : {}) });
+  const skill = join(aopHome(), "skills", "write-tests", "SKILL.md");
+  const testing = await improve(
+    "Agents should test failure paths, not only the happy path.\nThe receipts PR only got a dropped-connection test after review.",
+    dropTest.id,
+  );
+  await call("PUT", `/improvements/${testing.node.id}/proposals`, {
+    path: skill,
+    actor: "agent",
+    content: [
+      "---",
+      "name: write-tests",
+      "description: How to write tests in this codebase.",
+      "---",
+      "",
+      "# Writing tests",
+      "",
+      "- Test behaviour through the public API, not private helpers.",
+      "- One behaviour per test, named for what it shows.",
+      "- Cover the failure paths too: timeouts, dropped connections and retries.",
+      "- Use a throwaway folder for anything that touches files.",
+      "",
+    ].join("\n"),
+  });
+  await call("POST", `/nodes/${testing.node.id}/messages`, {
+    body: "Added one line to the write-tests skill asking for failure-path tests.",
+    author: "agent",
+  });
+  await call("POST", `/nodes/${testing.node.id}/next`, { outcome: "drafted", actor: "agent" });
+  const finance = (await say(billing, "Split looks right, but check with finance first next time.", "human")) as { id: string };
+  await improve("Breakdown prompt: ask before splitting work that touches billing.", finance.id);
+  await improve("Add a skill for writing database migrations.");
 
   // An invalidated node with a child it invalidates.
   const reporting = await create("triage", "Rewrite the reporting pipeline", "Move reporting onto the warehouse.");

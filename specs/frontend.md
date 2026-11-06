@@ -35,7 +35,7 @@ A legend, phone-specific features, a "needs me" list, a canvas and progress on `
 Shows `docs/roadmap.md`, bundled at build time, from a quiet link in the top bar. The human edits the file, and a rebuild updates the page.
 
 ## Projects page
-A list of projects with a low-emphasis "Add project". Adding needs only a name; the path is optional.
+Two tabs at the top, Projects and Improvements. Projects is a list of projects with a low-emphasis "Add project". Adding needs only a name; the path is optional. The Improvements tab, and the + beside each message, are in [improvements.md](improvements.md).
 
 ## Project settings
 Each project has a settings page for its name, optional path and delete, instead of buttons on the list. Delete is permanent, requires typing the project's name, stops its agents first, and never touches the repo.
@@ -47,3 +47,5 @@ A read-only view of `config.yaml`, with a note to edit `~/.aop/config.yaml` to c
 - **Open from:** Where sessions start for projects with no path.
 - **Agent timeout:** How long an agent can run before it's stopped and its node goes to `failed`.
 - **Stages:** The file that defines your process.
+- **Improvement stages:** The pipeline that drafts, reviews and applies improvements to your skills and stage prompts.
+- **Improvements path:** The folder improvements may change, along with your stage prompts. Raise PR needs it inside a git repo.

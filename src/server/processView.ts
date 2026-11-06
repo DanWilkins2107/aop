@@ -24,7 +24,13 @@ function stagesPathFrom(home: string): string | null {
 export function describeProcess(home: string = aopHome()): ProcessView {
   try {
     const config = loadConfig(home);
-    return { stages_path: config.stagesPath, problems: [], process: describeStages(config.graph) };
+    return {
+      stages_path: config.stagesPath,
+      problems: [],
+      process: describeStages(config.graph),
+      improvement_stages_path: config.improvementStagesPath,
+      improvement_process: config.improvementGraph === null ? null : describeStages(config.improvementGraph),
+    };
   } catch (error) {
     if (!(error instanceof ConfigError)) throw error;
     const stagesPath = stagesPathFrom(home);
@@ -33,6 +39,8 @@ export function describeProcess(home: string = aopHome()): ProcessView {
       stages_path: stagesPath,
       problems: error.problems,
       process: graph !== null && graph.types.size > 0 ? describeStages(graph) : null,
+      improvement_stages_path: null,
+      improvement_process: null,
     };
   }
 }

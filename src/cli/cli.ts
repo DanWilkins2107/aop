@@ -2,6 +2,8 @@
 // `main.ts` runs it on the real process. Tests run it in-process through `runCli`, with their own environment and output.
 
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { parseArgs, type ParseArgsConfig } from "node:util";
 import {
   RUN_ID_HEADER,
@@ -9,6 +11,8 @@ import {
   type AddProjectRequest,
   type AgentProcessView,
   type ApiErrorBody,
+  type ApplyRequest,
+  type ApplyResult,
   type AskRequest,
   type CreateNodeRequest,
   type EdgeRequest,
@@ -22,10 +26,13 @@ import {
   type NextRequest,
   type NodeView,
   type ProjectRow,
+  type ProposalRequest,
+  type ProposalView,
   type ReapResult,
   type SearchResult,
   type SteerRequest,
   type SteerSession,
+  type WithdrawRequest,
 } from "../shared/api.js";
 import { API_PREFIX, apiPaths } from "../shared/paths.js";
 import { DEFAULT_PORT } from "../shared/port.js";
@@ -38,6 +45,10 @@ export interface CliIo {
   stderr: NodeJS.WritableStream;
   /** Called once, with the exit code, when the command has finished. */
   exit: (code: number) => void;
+  /** What `aop propose` reads when it has no `--from`. None means there's nothing to read. */
+  stdin?: NodeJS.ReadableStream;
+  /** Where relative paths start. The process's own working directory if left out. */
+  cwd?: string;
 }
 
 /** One run: its environment, and where it prints. */
@@ -60,10 +71,13 @@ export const AGENT_COMMANDS = {
   "node edit": ["aop node edit [<id>] [--title ...] [--body ...]"],
   edge: ["aop edge add blocks <from> <to>", "aop edge remove blocks <from> <to>"],
   split: ["aop split start", "aop split finish"],
+  propose: ["aop propose <path> [--from <file>]", "aop propose <path> --withdraw"],
+  proposals: ["aop proposals [--show <path>]"],
+  apply: ["aop apply [--into <checkout>]"],
 } as const;
 export const HUMAN_COMMANDS = {
   init: [
-    "aop init [--yes] [--fill-missing] [--agent-session-command <cmd>] [--out-of-sandbox-command <cmd>] [--open-from <dir>] [--create-open-from] [--agent-timeout-minutes <n>] [--stages <file>]",
+    "aop init [--yes] [--fill-missing] [--agent-session-command <cmd>] [--out-of-sandbox-command <cmd>] [--open-from <dir>] [--create-open-from] [--agent-timeout-minutes <n>] [--stages <file>] [--improvements-path <dir>]",
   ],
   project: ["aop project add <path>"],
   serve: ["aop serve [--port <port>]"],
@@ -284,7 +298,11 @@ async function searchCommand(c: Ctx, argv: string[]): Promise<void> {
   const query = new URLSearchParams({ q: positionals.join(" ") });
   const own = c.env["AOP_NODE_ID"];
   // With no node there's no current project to narrow to.
-  if (values.all !== true && own) query.set("project", (await send<NodeView>(c, "GET", apiPaths.node(own))).project_id);
+  if (values.all !== true && own) {
+    const node = await send<NodeView>(c, "GET", apiPaths.node(own));
+    // An improvement belongs to no project, so it searches them all.
+    if (node.kind !== "improvement") query.set("project", node.project_id);
+  }
   const results = await send<SearchResult[]>(c, "GET", `${apiPaths.search}?${query}`);
   if (results.length === 0) c.log("No matches.");
   for (const result of results) {
@@ -346,6 +364,69 @@ async function logsCommand(c: Ctx, argv: string[]): Promise<void> {
     return;
   }
   c.log(tail.lines.join("\n"));
+}
+
+/** A path as the user typed it, made absolute from where the command runs. */
+const absolute = (c: Ctx, path: string) => resolve(c.io.cwd ?? process.cwd(), path);
+
+async function readStdin(c: Ctx): Promise<string> {
+  const stdin = c.io.stdin;
+  if (stdin === undefined || (stdin as { isTTY?: boolean }).isTTY) throw new CliFailure("Pass --from <file>, or pipe the contents in.");
+  const chunks: Buffer[] = [];
+  for await (const chunk of stdin) chunks.push(Buffer.from(chunk as Buffer));
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+/** Stores a file's proposed contents on this improvement. The real file isn't touched. */
+async function proposeCommand(c: Ctx, argv: string[]): Promise<void> {
+  const usage = COMMANDS.propose;
+  const { values, positionals } = args(argv, usage, { from: { type: "string" }, withdraw: { type: "boolean" } });
+  const target = absolute(c, only(positionals, usage));
+  const proposals = apiPaths.improvementAction(ownNode(c), "proposals");
+  if (values.withdraw === true) {
+    if (values.from !== undefined) throw usageError(usage);
+    await send(c, "DELETE", proposals, { path: target, actor: ACTOR } satisfies WithdrawRequest);
+    c.log(`Withdrew the proposal for ${target}`);
+    return;
+  }
+  let content: string;
+  if (values.from === undefined) {
+    content = await readStdin(c);
+  } else {
+    try {
+      content = readFileSync(absolute(c, values.from), "utf8");
+    } catch (error) {
+      throw new CliFailure(`Can't read ${values.from}: ${(error as Error).message}`);
+    }
+  }
+  const proposal = await send<ProposalView>(c, "PUT", proposals, { path: target, content, actor: ACTOR } satisfies ProposalRequest);
+  c.log(`Proposed ${proposal.path}${proposal.current === null ? " (new file)" : ""}. The real file is unchanged.`);
+}
+
+async function proposalsCommand(c: Ctx, argv: string[]): Promise<void> {
+  const { values, positionals } = args(argv, COMMANDS.proposals, { show: { type: "string" } });
+  if (positionals.length > 0) throw usageError(COMMANDS.proposals);
+  const proposals = await send<ProposalView[]>(c, "GET", apiPaths.improvementAction(ownNode(c), "proposals"));
+  if (values.show !== undefined) {
+    const wanted = absolute(c, values.show).toLowerCase();
+    const proposal = proposals.find((p) => p.path.toLowerCase() === wanted || p.display_path === values.show);
+    if (!proposal) throw new CliFailure(`No proposal for ${values.show}`);
+    c.io.stdout.write(proposal.proposed);
+    return;
+  }
+  if (proposals.length === 0) c.log("No proposals.");
+  for (const p of proposals) c.log(`${p.path}  (${p.current === null ? "new file" : "changes the file"}, last by ${p.updated_by})`);
+}
+
+async function applyCommand(c: Ctx, argv: string[]): Promise<void> {
+  const { values, positionals } = args(argv, COMMANDS.apply, { into: { type: "string" } });
+  if (positionals.length > 0) throw usageError(COMMANDS.apply);
+  const result = await send<ApplyResult>(c, "POST", apiPaths.improvementAction(ownNode(c), "apply"), {
+    actor: ACTOR,
+    ...(values.into !== undefined ? { into: absolute(c, values.into) } : {}),
+  } satisfies ApplyRequest);
+  for (const path of result.written) c.log(`Wrote ${path}`);
+  for (const path of result.skipped) c.log(`Skipped ${path}: it's outside the repo`);
 }
 
 function printAgents(c: Ctx, agents: AgentProcessView[]): void {
@@ -423,6 +504,12 @@ async function run(c: Ctx, argv: string[]): Promise<number | void> {
       movedTo(c, await send(c, "POST", apiPaths.nodeAction(ownNode(c), `split/${action}`)));
       return;
     }
+    case "propose":
+      return proposeCommand(c, rest);
+    case "proposals":
+      return proposalsCommand(c, rest);
+    case "apply":
+      return applyCommand(c, rest);
     case "project": {
       const [action, path, ...extra] = args(rest, COMMANDS.project, {}).positionals;
       if (action !== "add" || path === undefined || extra.length > 0) throw usageError(COMMANDS.project);

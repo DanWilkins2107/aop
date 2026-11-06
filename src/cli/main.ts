@@ -8,6 +8,8 @@ await runCli({
   env: process.env,
   stdout: process.stdout,
   stderr: process.stderr,
+  stdin: process.stdin,
+  cwd: process.cwd(),
   exit: (code) => {
     // Not `process.exit`: `serve` keeps running after its command returns.
     process.exitCode = code;

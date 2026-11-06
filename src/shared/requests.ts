@@ -52,3 +52,15 @@ export const edgeBody = z.strictObject({
   kind: z.enum(["subtask", "blocks"]),
   actor: actor.default("human"),
 });
+export const improvementBody = z.strictObject({
+  body: nonBlank,
+  source_message_id: nonBlank.optional(),
+  actor: actor.default("human"),
+});
+export const proposalBody = z.strictObject({
+  path: nonBlank,
+  content: z.string().max(1_000_000, "must be at most 1,000,000 characters"),
+  actor: actor.default("human"),
+});
+export const withdrawBody = z.strictObject({ path: nonBlank, actor: actor.default("human") });
+export const applyBody = z.strictObject({ into: nonBlank.optional(), actor: actor.default("agent") });

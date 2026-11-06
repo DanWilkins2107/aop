@@ -32,6 +32,9 @@ export type NodeAction =
 /** The routes under a project, as `/api/projects/:id/<action>`. */
 export type ProjectAction = "nodes" | "edges";
 
+/** The routes under an improvement, as `/api/improvements/:id/<action>`. */
+export type ImprovementAction = "proposals" | "apply";
+
 /** The routes under a run, as `/api/runs/:id/<action>`. */
 export type RunAction = "stop" | "log" | "tail";
 
@@ -55,6 +58,10 @@ export const apiPaths = {
   stages: "/stages",
   config: "/config",
   process: "/process",
+  improvementStages: "/improvement-stages",
+  improvements: "/improvements",
+  improvement: (id: string) => one("improvements", id),
+  improvementAction: (id: string, action: ImprovementAction) => `${one("improvements", id)}/${action}`,
 } as const;
 
 /**
@@ -68,4 +75,6 @@ export const routes = {
   nodeAction: <A extends NodeAction>(action: A) => `${API_PREFIX}/nodes/:id/${action}` as const,
   edge: `${API_PREFIX}/edges/:id`,
   run: <A extends RunAction>(action: A) => `${API_PREFIX}/runs/:id/${action}` as const,
+  improvement: `${API_PREFIX}/improvements/:id`,
+  improvementAction: <A extends ImprovementAction>(action: A) => `${API_PREFIX}/improvements/:id/${action}` as const,
 } as const;

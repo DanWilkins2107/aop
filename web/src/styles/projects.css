@@ -43,3 +43,22 @@
   font-size: 12.5px;
   overflow-wrap: anywhere;
 }
+
+/* ---- home tabs ---- */
+
+.home-tabs {
+  display: flex;
+  gap: 20px;
+}
+.home-tab {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.home-tab:hover {
+  color: var(--text);
+  text-decoration: none;
+}
+.home-tab-active {
+  color: var(--text);
+}

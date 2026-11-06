@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
-import type { LinkRow } from "../../../src/shared/api.js";
+import type { EdgeRow, ImprovementSource, LinkRow, NodeView } from "../../../src/shared/api.js";
 import { GLOBAL_STAGES } from "../../../src/shared/builtInStages.js";
 import { ClaimMark } from "../components/ClaimMark.js";
 import { CopyId } from "../components/CopyId.js";
@@ -18,9 +18,25 @@ import { Details } from "./node/Details.js";
 import { Messages } from "./node/Messages.js";
 import { MovingOn } from "./node/MovingOn.js";
 import { Part } from "./node/Part.js";
+import { Proposals } from "./node/Proposals.js";
 
 async function loadNode(nodeId: string) {
   const node = await api.node(nodeId);
+  if (node.kind === "improvement") {
+    // Improvements belong to no project, and follow their own pipeline.
+    const [messages, events, edges, links, stages, improvement, proposals] = await Promise.all([
+      api.messages(nodeId),
+      api.events(nodeId),
+      api.edges(nodeId),
+      api.links(nodeId),
+      api.improvementStages(),
+      api.improvement(nodeId),
+      api.proposals(nodeId),
+    ]);
+    const projectNodes: NodeView[] = [node];
+    const projectEdges: EdgeRow[] = [];
+    return { node, messages, events, edges, links, stages, projectNodes, projectEdges, project: null, improvement, proposals };
+  }
   const [messages, events, edges, links, graph] = await Promise.all([
     api.messages(nodeId),
     api.events(nodeId),
@@ -29,7 +45,27 @@ async function loadNode(nodeId: string) {
     loadProjectGraph(node.project_id),
   ]);
   const { stages, nodes: projectNodes, edges: projectEdges, project } = graph;
-  return { node, messages, events, edges, links, stages, projectNodes, projectEdges, project };
+  return { node, messages, events, edges, links, stages, projectNodes, projectEdges, project, improvement: null, proposals: [] };
+}
+
+/** "From: <message>", linking back to the message the improvement was captured from. */
+function SourceLink({ source }: { source: ImprovementSource | null }) {
+  if (source === null) return null;
+  const excerpt = source.excerpt.length > 160 ? `${source.excerpt.slice(0, 159)}…` : source.excerpt;
+  const where = `${source.project_name ?? "a deleted project"} › ${source.node_title}`;
+  return (
+    <p className="meta-note improvement-source">
+      From:{" "}
+      {source.node_id !== null ? (
+        <Link to={`/n/${source.node_id}${source.message_id ? `#m-${source.message_id}` : ""}`} className="inline-link" title={where}>
+          {excerpt}
+        </Link>
+      ) : (
+        <span title={where}>{excerpt}</span>
+      )}{" "}
+      <span className="muted">({where})</span>
+    </p>
+  );
 }
 
 const LINK_LABELS: Record<LinkRow["kind"], string> = { pr: "PR", ticket: "Ticket" };
@@ -82,7 +118,11 @@ export function NodePage() {
     <div className="node-canvas">
       <div className="page node-page" key={node.id}>
         <nav className="breadcrumb">
-          <Link to={`/p/${node.project_id}`}>{data.project?.name ?? "Graph"}</Link>
+          {data.improvement ? (
+            <Link to="/improvements">Improvements</Link>
+          ) : (
+            <Link to={`/p/${node.project_id}`}>{data.project?.name ?? "Graph"}</Link>
+          )}
           {ancestors.map((ancestor) => (
             <span key={ancestor.id}>
               <span className="crumb-sep">›</span>
@@ -102,6 +142,7 @@ export function NodePage() {
             <h1 className={node.stage === "invalidated" || byParent ? "title-dead" : undefined}>{node.title}</h1>
             <CopyId id={node.id} />
           </div>
+          {data.improvement ? <SourceLink source={data.improvement.source} /> : null}
           {!node.stage_exists ? (
             <p className="meta-note meta-note-alert" role="alert">
               This node's stage is gone. <code>{node.stage}</code> is no longer in type <code>{node.type}</code> in
@@ -145,6 +186,7 @@ export function NodePage() {
         </header>
 
         <Description node={node} reload={reload} />
+        {data.improvement ? <Proposals node={node} proposals={data.proposals} reload={reload} /> : null}
         <Messages node={node} messages={messages} events={events} stages={stages} reload={reload} />
         <Details node={node} edges={data.edges} nodes={projectNodes} events={events} titleOf={titleOf} reload={reload} />
       </div>

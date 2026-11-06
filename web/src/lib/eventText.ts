@@ -18,6 +18,11 @@ const KNOWN_KINDS: Record<EventKind, true> = {
   edge_removed: true,
   scheduled_run: true,
   scheduled_run_skipped: true,
+  improvement_captured: true,
+  improvement_sourced: true,
+  proposal_saved: true,
+  proposal_withdrawn: true,
+  proposals_applied: true,
 };
 
 /** Whether this version knows the event's kind, and so the shape of its data. */
@@ -117,6 +122,18 @@ export function describeEvent(event: EventView, titleOf: (id: string) => string)
     case "scheduled_run_skipped": {
       const reason = event.data.reason;
       return `Scheduled run skipped: ${SKIP_REASONS[reason] ?? humanize(text(reason))}`;
+    }
+    case "improvement_captured":
+      return "Improvement captured from a message";
+    case "improvement_sourced":
+      return "Captured from a message";
+    case "proposal_saved":
+      return `Proposed a change to ${text(event.data.path)}`;
+    case "proposal_withdrawn":
+      return `Withdrew the change to ${text(event.data.path)}`;
+    case "proposals_applied": {
+      const written = Array.isArray(event.data.written) ? event.data.written.length : 0;
+      return `Applied: wrote ${written} file${written === 1 ? "" : "s"}${event.data.into ? ` into ${text(event.data.into)}` : ""}`;
     }
     default:
       return unlisted(event, humanize((event as EventView).kind));

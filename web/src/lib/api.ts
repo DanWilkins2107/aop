@@ -12,10 +12,16 @@ import type {
   EdgeRow,
   EditNodeRequest,
   EventView,
+  ImprovementDetail,
+  ImprovementRequest,
+  ImprovementsList,
+  ImprovementView,
   InvalidateRequest,
   LinkRow,
   LogTail,
   MessageRequest,
+  ProposalRequest,
+  ProposalView,
   MessageRow,
   MoveRequest,
   NextRequest,
@@ -105,6 +111,18 @@ export const api = {
   logTail: (runId: string) => send<LogTail>("GET", apiPaths.run(runId, "tail")),
   stopRun: (runId: string) => send<NodeView>("POST", apiPaths.run(runId, "stop")),
   removeEdge: (edgeId: string) => send<EdgeRow>("DELETE", apiPaths.edge(edgeId)),
+
+  improvements: () => send<ImprovementsList>("GET", apiPaths.improvements),
+  improvement: (id: string) => send<ImprovementDetail>("GET", apiPaths.improvement(id)),
+  improvementStages: () => send<StagesView>("GET", apiPaths.improvementStages),
+  createImprovement: (body: string, sourceMessageId?: string) =>
+    send<ImprovementView>("POST", apiPaths.improvements, {
+      body,
+      ...(sourceMessageId !== undefined ? { source_message_id: sourceMessageId } : {}),
+    } satisfies ImprovementRequest),
+  proposals: (id: string) => send<ProposalView[]>("GET", apiPaths.improvementAction(id, "proposals")),
+  saveProposal: (id: string, path: string, content: string) =>
+    send<ProposalView>("PUT", apiPaths.improvementAction(id, "proposals"), { path, content } satisfies ProposalRequest),
 };
 
 /** A project's whole graph, with the stages and the project itself. The graph page and the node page both need it. */

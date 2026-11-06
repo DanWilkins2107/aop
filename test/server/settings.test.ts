@@ -100,6 +100,11 @@ describe("reading the config over the API", () => {
         agent_timeout_minutes: 30,
         stages: "./stages.yaml",
         stages_path: join(aopHome(), "stages.yaml"),
+        improvement_stages: null,
+        improvement_stages_path: null,
+        improvements_path: "./skills",
+        improvements_dir: join(aopHome(), "skills"),
+        improvements_repo: null,
       },
     });
   });
@@ -146,10 +151,10 @@ describe("nothing can write the config", () => {
     expect((await h.call<ConfigView>("GET", "/api/config")).body.settings?.agent_session_command).toBe("sandboxed-claude");
   });
 
-  it("has no write route outside projects, nodes, edges, agents and runs", () => {
+  it("has no write route outside projects, nodes, edges, improvements, agents and runs", () => {
     const writes = createApp(h.db).routes.filter((route) => WRITES.includes(route.method));
     expect(writes.length).toBeGreaterThan(0);
-    for (const { path } of writes) expect(path).toMatch(/^\/api\/(projects|nodes|edges|agents|runs)(\/|$)/);
+    for (const { path } of writes) expect(path).toMatch(/^\/api\/(projects|nodes|edges|improvements|agents|runs)(\/|$)/);
   });
 
   it("gives the project routes no way in to the config", async () => {
@@ -159,12 +164,13 @@ describe("nothing can write the config", () => {
     expect(readFileSync(configPath(), "utf8")).toBe(before);
   });
 
-  it("doesn't import anything that writes files anywhere in the server, except for run logs and the server lock", () => {
+  it("doesn't import anything that writes files anywhere in the server, except for run logs, the server lock and applying improvements", () => {
     const READ_ONLY = new Set(["existsSync", "readdirSync", "readFileSync", "realpathSync", "statSync"]);
     const folder = join(ROOT, "src", "server");
     for (const file of readdirSync(folder)) {
       // Each writes only under AOP_HOME: the run logs, and the lock that keeps a second server off it.
-      if (file === "runLog.ts" || file === "serverLock.ts") continue;
+      // applyProposals writes reviewed improvements, only to paths allowedTarget accepts.
+      if (file === "runLog.ts" || file === "serverLock.ts" || file === "applyProposals.ts") continue;
       const source = readFileSync(join(folder, file), "utf8");
       expect(source, file).not.toMatch(/from "(node:)?fs\/promises"/);
       for (const [, names] of source.matchAll(/import \{([^}]*)\} from "(?:node:)?fs"/g)) {

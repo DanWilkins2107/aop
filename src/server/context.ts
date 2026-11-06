@@ -1,10 +1,13 @@
 // The text agents read: `aop context` for a node, and the prompt each launched agent gets on stdin.
 
 import { readFileSync } from "node:fs";
-import type { AopConfig } from "./config.js";
+import { type AopConfig, loadConfig } from "./config.js";
 import type { Db } from "./db.js";
-import { getNode, listLinks, listMessages, type NodeRow } from "./nodes.js";
+import { ConfigError } from "./errors.js";
+import { getImprovement, listProposals } from "./improvements.js";
+import { getNode, graphFor, graphsOf, listLinks, listMessages, type NodeRow } from "./nodes.js";
 import { getProject } from "./projects.js";
+import { promptFiles } from "./stages.js";
 
 interface Neighbour {
   id: string;
@@ -56,7 +59,7 @@ function section(title: string, body: string[]): string[] {
  */
 export function nodeContext(db: Db, nodeId: string): string {
   const node = getNode(db, nodeId);
-  const project = getProject(db, node.project_id);
+  const where = node.kind === "improvement" ? "none. This is an improvement to how agents work" : getProject(db, node.project_id).name;
 
   const moves: string[] = [];
   if (node.stage === "splitting") {
@@ -84,7 +87,7 @@ export function nodeContext(db: Db, nodeId: string): string {
     `# ${node.title}`,
     "",
     `Node: ${node.id}`,
-    `Project: ${project.name}`,
+    `Project: ${where}`,
     `Type: ${node.type}`,
     `Stage: ${node.stage}`,
     ...(node.invalidation_reason !== null ? [`Invalidated because: ${node.invalidation_reason}`] : []),
@@ -99,6 +102,7 @@ export function nodeContext(db: Db, nodeId: string): string {
     ...section("Description", node.body === "" ? [] : [node.body]),
     ...section("Messages, oldest first", messages),
     ...section("Links", listLinks(db, nodeId).map((link) => `- ${link.kind}: ${link.url}`)),
+    ...(node.kind === "improvement" ? improvementSections(db, nodeId) : []),
     ...section("Moving on", moves),
   ]
     .join("\n")
@@ -113,10 +117,47 @@ function promptStage(node: NodeRow): string {
   return node.stage === "splitting" ? (node.return_stage ?? node.stage) : node.stage;
 }
 
+/** Where an improvement came from, what it may change, and what it proposes so far. */
+function improvementSections(db: Db, nodeId: string): string[] {
+  let config: AopConfig;
+  try {
+    config = loadConfig();
+  } catch (error) {
+    if (error instanceof ConfigError) return section("What can change", ["Unknown while the AOP config is invalid."]);
+    throw error;
+  }
+  const improvement = getImprovement(db, nodeId, config);
+  const source = improvement.source;
+  const prompts = [...promptFiles(config.graph), ...(config.improvementGraph ? promptFiles(config.improvementGraph) : [])];
+  return [
+    ...section(
+      "Source message",
+      source === null
+        ? []
+        : [
+            `From node ${source.node_id ?? "(deleted)"} "${source.node_title}"${source.project_name ? ` in project ${source.project_name}` : ""}:`,
+            source.excerpt,
+          ],
+    ),
+    ...section("What can change", [
+      `- Files inside ${config.improvementsDir}, where you start`,
+      ...prompts.map((path) => `- ${path}`),
+      "Never edit them directly: `aop propose <path> --from <file>` stores each change for review.",
+      config.improvementsRepo === null
+        ? "That folder isn't in a git repo, so Raise PR isn't offered."
+        : `That folder is in the git repo ${config.improvementsRepo}.`,
+    ]),
+    ...section(
+      "Proposed changes",
+      listProposals(db, nodeId, config).map((p) => `- ${p.path} (${p.current === null ? "new file" : "changes the file"}, last by ${p.updated_by})`),
+    ),
+  ];
+}
+
 /** Everything a launched agent gets on stdin. Throws if the stage's prompt can't be read. */
-export function buildPrompt(db: Db, config: Pick<AopConfig, "graph">, node: NodeRow): string {
+export function buildPrompt(db: Db, config: AopConfig, node: NodeRow): string {
   const stage = promptStage(node);
-  const promptFile = config.graph.stages.get(stage)?.prompt;
-  if (promptFile === undefined) throw new Error(`Stage "${stage}" has no prompt in stages.yaml`);
+  const promptFile = graphFor(graphsOf(config), node.kind).stages.get(stage)?.prompt;
+  if (promptFile === undefined) throw new Error(`Stage "${stage}" has no prompt in its process file`);
   return [LOAD_SKILLS, nodeContext(db, node.id), readFileSync(promptFile, "utf8").trimEnd()].join("\n\n") + "\n";
 }

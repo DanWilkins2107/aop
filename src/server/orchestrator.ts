@@ -12,7 +12,7 @@ import { buildPrompt } from "./context.js";
 import type { Db } from "./db.js";
 import { ConfigError, refused } from "./errors.js";
 import { isFolder } from "./fsUtil.js";
-import { getNodeRow, holdersOf, markFailed, startableNodes, type NodeRow, type NodeView, getNode } from "./nodes.js";
+import { getNodeRow, graphsOf, holdersOf, markFailed, startableNodes, type NodeRow, type NodeView, getNode } from "./nodes.js";
 import {
   type Identity,
   killConfirmed,
@@ -25,7 +25,7 @@ import {
   sweepRuns,
   waitGone,
 } from "./osProcesses.js";
-import { agentStartPath, getProject } from "./projects.js";
+import { nodeStartPath } from "./projects.js";
 import { newId } from "./records.js";
 import { appendToLog, logPathFor, openLog } from "./runLog.js";
 import {
@@ -206,7 +206,7 @@ export class Orchestrator {
       if (error instanceof ConfigError) return;
       throw error;
     }
-    for (const node of startableNodes(this.db, config.graph)) {
+    for (const node of startableNodes(this.db, graphsOf(config))) {
       if (!this.closingProjects.has(node.project_id)) this.launch(node, config);
     }
   }
@@ -227,7 +227,7 @@ export class Orchestrator {
     let prompt: string;
     let child: ChildProcessWithoutNullStreams;
     try {
-      const cwd = agentStartPath(getProject(this.db, node.project_id), config);
+      const cwd = nodeStartPath(this.db, node, config);
       appendToLog(run.log_path, `[aop] run ${id} on node ${node.id}, stage ${node.stage}, at ${run.created_at}\n[aop] ${command}\n[aop] in ${cwd}\n`);
       if (!isFolder(cwd)) throw new Error(`The start folder doesn't exist: ${cwd}`);
       prompt = buildPrompt(this.db, config, node);

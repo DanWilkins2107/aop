@@ -19,6 +19,10 @@ aop edge add blocks <from> <to>
 aop edge remove blocks <from> <to>
 aop split start
 aop split finish
+aop propose <path> [--from <file>]   # improvements only: see improvements.md
+aop propose <path> --withdraw
+aop proposals [--show <path>]
+aop apply [--into <checkout>]
 ```
 
 - An agent can only move its own node. `next`, `ask`, `fail` and the split commands take no ID.
@@ -27,7 +31,7 @@ aop split finish
 
 ## Humans
 ```
-aop init                        # one-time machine setup: commands, sandbox, plugin, ~/.aop
+aop init                        # one-time machine setup: commands, sandbox, plugin, ~/.aop, improvements
 aop project add <path>
 aop serve
 aop steer <node>                # runs agent_session_command

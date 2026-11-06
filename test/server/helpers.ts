@@ -104,9 +104,9 @@ export interface Harness {
  * Fresh state, with AOP_HOME pointing at it until `close`, driven through the real Hono app. Call it
  * inside a test or `beforeEach`: it closes itself when the test finishes, and if it fails to start.
  */
-export function harness(): Harness {
+export function harness(overrides: Record<string, string> = {}): Harness {
   const outerHome = process.env["AOP_HOME"];
-  const home = makeHome();
+  const home = makeHome(overrides);
   let opened: Db | undefined;
   let closed = false;
   const close = () => {
