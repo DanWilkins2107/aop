@@ -19,3 +19,11 @@ agent_timeout_minutes: 60
 
 # The process: stages, types and their prompts. Can live anywhere.
 stages: ./stages.yaml
+
+# The improvement pipeline: how changes to your skills and stage prompts are drafted, reviewed and
+# applied. Leave it out to turn improvements off.
+improvement_stages: ./improvement_stages.yaml
+
+# The folder improvements may change, along with your stage prompts. Raise PR is offered only
+# when it's inside a git repo. Never config.yaml or a stages file.
+improvements_path: ./skills

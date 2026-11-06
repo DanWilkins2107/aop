@@ -2,12 +2,15 @@
 // `main.ts` runs it on the real process. Tests run it in-process through `runCli`, with their own environment and output.
 
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { parseArgs, type ParseArgsConfig } from "node:util";
 import {
   RUN_ID_HEADER,
   type ActorRequest,
   type AddProjectRequest,
   type AgentProcessView,
+  type ApplyResult,
   type ApiErrorBody,
   type AskRequest,
   type CreateNodeRequest,
@@ -22,6 +25,7 @@ import {
   type NextRequest,
   type NodeView,
   type ProjectRow,
+  type ProposalView,
   type ReapResult,
   type SearchResult,
   type SteerRequest,
@@ -60,10 +64,13 @@ export const AGENT_COMMANDS = {
   "node edit": ["aop node edit [<id>] [--title ...] [--body ...]"],
   edge: ["aop edge add blocks <from> <to>", "aop edge remove blocks <from> <to>"],
   split: ["aop split start", "aop split finish"],
+  propose: ["aop propose <path> [--from <file>]", "aop propose <path> --withdraw"],
+  proposals: ["aop proposals [--show <path>]"],
+  apply: ["aop apply [--into <checkout>]"],
 } as const;
 export const HUMAN_COMMANDS = {
   init: [
-    "aop init [--yes] [--fill-missing] [--agent-session-command <cmd>] [--out-of-sandbox-command <cmd>] [--open-from <dir>] [--create-open-from] [--agent-timeout-minutes <n>] [--stages <file>]",
+    "aop init [--yes] [--fill-missing] [--agent-session-command <cmd>] [--out-of-sandbox-command <cmd>] [--open-from <dir>] [--create-open-from] [--agent-timeout-minutes <n>] [--stages <file>] [--improvements-path <dir>]",
   ],
   project: ["aop project add <path>"],
   serve: ["aop serve [--port <port>]"],
@@ -284,7 +291,11 @@ async function searchCommand(c: Ctx, argv: string[]): Promise<void> {
   const query = new URLSearchParams({ q: positionals.join(" ") });
   const own = c.env["AOP_NODE_ID"];
   // With no node there's no current project to narrow to.
-  if (values.all !== true && own) query.set("project", (await send<NodeView>(c, "GET", apiPaths.node(own))).project_id);
+  if (values.all !== true && own) {
+    const node = await send<NodeView>(c, "GET", apiPaths.node(own));
+    // An improvement belongs to no project, so it searches them all.
+    if (node.kind !== "improvement") query.set("project", node.project_id);
+  }
   const results = await send<SearchResult[]>(c, "GET", `${apiPaths.search}?${query}`);
   if (results.length === 0) c.log("No matches.");
   for (const result of results) {
@@ -346,6 +357,68 @@ async function logsCommand(c: Ctx, argv: string[]): Promise<void> {
     return;
   }
   c.log(tail.lines.join("\n"));
+}
+
+async function readStdin(): Promise<string> {
+  if (process.stdin.isTTY) throw new CliFailure("Pass --from <file>, or pipe the contents in.");
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk as Buffer));
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+/** Stores a file's proposed contents on this improvement. The real file isn't touched. */
+async function proposeCommand(c: Ctx, argv: string[]): Promise<void> {
+  const usage = COMMANDS.propose;
+  const { values, positionals } = args(argv, usage, { from: { type: "string" }, withdraw: { type: "boolean" } });
+  const target = resolve(only(positionals, usage));
+  if (values.withdraw === true) {
+    if (values.from !== undefined) throw usageError(usage);
+    await send(c, "DELETE", apiPaths.improvementAction(ownNode(c), "proposals"), { path: target, actor: ACTOR });
+    c.log(`Withdrew the proposal for ${target}`);
+    return;
+  }
+  let content: string;
+  if (values.from === undefined) {
+    content = await readStdin();
+  } else {
+    try {
+      content = readFileSync(resolve(values.from), "utf8");
+    } catch (error) {
+      throw new CliFailure(`Can't read ${values.from}: ${(error as Error).message}`);
+    }
+  }
+  const proposal = await send<ProposalView>(c, "PUT", apiPaths.improvementAction(ownNode(c), "proposals"), {
+    path: target,
+    content,
+    actor: ACTOR,
+  });
+  c.log(`Proposed ${proposal.path}${proposal.current === null ? " (new file)" : ""}. The real file is unchanged.`);
+}
+
+async function proposalsCommand(c: Ctx, argv: string[]): Promise<void> {
+  const { values, positionals } = args(argv, COMMANDS.proposals, { show: { type: "string" } });
+  if (positionals.length > 0) throw usageError(COMMANDS.proposals);
+  const proposals = await send<ProposalView[]>(c, "GET", apiPaths.improvementAction(ownNode(c), "proposals"));
+  if (values.show !== undefined) {
+    const wanted = resolve(values.show).toLowerCase();
+    const proposal = proposals.find((p) => p.path.toLowerCase() === wanted || p.display_path === values.show);
+    if (!proposal) throw new CliFailure(`No proposal for ${values.show}`);
+    c.io.stdout.write(proposal.proposed);
+    return;
+  }
+  if (proposals.length === 0) c.log("No proposals.");
+  for (const p of proposals) c.log(`${p.path}  (${p.current === null ? "new file" : "changes the file"}, last by ${p.updated_by})`);
+}
+
+async function applyCommand(c: Ctx, argv: string[]): Promise<void> {
+  const { values, positionals } = args(argv, COMMANDS.apply, { into: { type: "string" } });
+  if (positionals.length > 0) throw usageError(COMMANDS.apply);
+  const result = await send<ApplyResult>(c, "POST", apiPaths.improvementAction(ownNode(c), "apply"), {
+    actor: ACTOR,
+    ...(values.into !== undefined ? { into: resolve(values.into) } : {}),
+  });
+  for (const path of result.written) c.log(`Wrote ${path}`);
+  for (const path of result.skipped) c.log(`Skipped ${path}: it's outside the repo`);
 }
 
 function printAgents(c: Ctx, agents: AgentProcessView[]): void {
@@ -423,6 +496,12 @@ async function run(c: Ctx, argv: string[]): Promise<number | void> {
       movedTo(c, await send(c, "POST", apiPaths.nodeAction(ownNode(c), `split/${action}`)));
       return;
     }
+    case "propose":
+      return proposeCommand(c, rest);
+    case "proposals":
+      return proposalsCommand(c, rest);
+    case "apply":
+      return applyCommand(c, rest);
     case "project": {
       const [action, path, ...extra] = args(rest, COMMANDS.project, {}).positionals;
       if (action !== "add" || path === undefined || extra.length > 0) throw usageError(COMMANDS.project);

@@ -4,3 +4,5 @@ out_of_sandbox_command: echo
 open_from: ~/code
 agent_timeout_minutes: 60
 stages: ./stages.yaml
+improvement_stages: ./improvement_stages.yaml
+improvements_path: ./skills

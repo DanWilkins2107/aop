@@ -35,6 +35,9 @@ export type ProjectAction = "nodes" | "edges";
 /** The routes under a run, as `/api/runs/:id/<action>`. */
 export type RunAction = "stop" | "log" | "tail";
 
+/** The routes under an improvement, as `/api/improvements/:id/<action>`. */
+export type ImprovementAction = "proposals" | "apply";
+
 const one = (collection: string, id: string) => `/${collection}/${encodeURIComponent(id)}`;
 
 /** Paths below `API_PREFIX`, with IDs encoded, for the clients. */
@@ -55,6 +58,10 @@ export const apiPaths = {
   stages: "/stages",
   config: "/config",
   process: "/process",
+  improvements: "/improvements",
+  improvement: (id: string) => one("improvements", id),
+  improvementAction: (id: string, action: ImprovementAction) => `${one("improvements", id)}/${action}`,
+  improvementStages: "/improvement-stages",
 } as const;
 
 /**

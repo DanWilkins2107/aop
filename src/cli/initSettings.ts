@@ -15,6 +15,9 @@ export const ABOUT = {
   open_from: "Where sessions start for projects with no path.",
   agent_timeout_minutes: "How long an agent can run before it's stopped and its node goes to `failed`.",
   stages: "The file that defines your process.",
+  improvement_stages: "The pipeline that drafts, reviews and applies improvements to your skills and stage prompts.",
+  improvements_path:
+    "The folder improvements may change, along with your stage prompts. Raise PR is offered only when it's inside a git repo.",
 };
 
 export interface Settings {
@@ -24,6 +27,8 @@ export interface Settings {
   agent_timeout_minutes: number;
   /** As written in config.yaml. */
   stages: string;
+  /** As written in config.yaml. */
+  improvements_path: string;
 }
 
 /** The parsed `aop init` flags. */
@@ -36,6 +41,7 @@ export type Values = {
   "create-open-from"?: boolean;
   "agent-timeout-minutes"?: string;
   stages?: string;
+  "improvements-path"?: string;
 };
 
 export type Ask = (question: string) => Promise<string>;
@@ -179,6 +185,16 @@ async function stagesSetting({ values, ask, cwd, say }: Sources): Promise<string
   return path;
 }
 
+export const DEFAULT_IMPROVEMENTS_PATH = "./skills";
+
+/** Stored as typed when it starts with `~`, and absolute otherwise, like open_from. The default sits in AOP_HOME. */
+function improvementsSetting({ values, cwd }: Sources): string {
+  const flag = values["improvements-path"]?.trim();
+  if (flag === "") throw new InitFailure("--improvements-path can't be empty.");
+  if (flag === undefined) return DEFAULT_IMPROVEMENTS_PATH;
+  return isFromUserHome(flag) ? flag : expandPath(flag, cwd);
+}
+
 /**
  * Gets every setting, from flags first, then by asking, or from defaults with --yes. It only
  * reads: the open_from folder to create is returned, for the caller to make once nothing can stop it.
@@ -189,8 +205,16 @@ export async function gatherSettings(sources: Sources): Promise<{ settings: Sett
   const open_from = await openFrom(sources);
   const agent_timeout_minutes = await timeoutMinutes(sources);
   const stages = await stagesSetting(sources);
+  const improvements_path = improvementsSetting(sources);
   return {
-    settings: { agent_session_command, out_of_sandbox_command, open_from: open_from.setting, agent_timeout_minutes, stages },
+    settings: {
+      agent_session_command,
+      out_of_sandbox_command,
+      open_from: open_from.setting,
+      agent_timeout_minutes,
+      stages,
+      improvements_path,
+    },
     createOpenFrom: open_from.create,
   };
 }

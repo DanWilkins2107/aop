@@ -15,6 +15,7 @@ import { RUN_ID_HEADER, type ApiErrorBody, type ApiErrorCode, type LogTail } fro
 import {
   actorBody,
   addProjectBody,
+  applyBody,
   answerBody,
   askBody,
   blockBody,
@@ -23,14 +24,17 @@ import {
   edgeBody,
   editNodeBody,
   failBody,
+  improvementBody,
   invalidateBody,
   linkBody,
   messageBody,
   moveBody,
   nextBody,
+  proposalBody,
   steerBody,
   unblockBody,
   updateProjectBody,
+  withdrawBody,
 } from "../shared/requests.js";
 import { API_PREFIX, apiPaths, routes } from "../shared/paths.js";
 import { readableLines } from "./agentOutput.js";
@@ -46,7 +50,9 @@ import { addProject, deleteProject, getProject, listProjects, updateProject } fr
 import { deleteLogs, readLogEnd, readRunLog } from "./runLog.js";
 import { getRun, listRuns, projectLogPaths } from "./runs.js";
 import { search } from "./search.js";
-import { describeStages } from "./stages.js";
+import { describeStages, EMPTY_GRAPH } from "./stages.js";
+import { applyProposals } from "./applyProposals.js";
+import { createImprovement, getImprovement, listImprovements, listProposals, propose, withdraw } from "./improvements.js";
 import { prepareSteer } from "./steer.js";
 
 const BUILT_WEB_DIR = fileURLToPath(new URL("../../dist/web", import.meta.url));
@@ -231,6 +237,23 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
   app.get(at(apiPaths.stages), (c) => c.json(describeStages(loadConfig().graph)));
   // For the process page, which still answers when the config is invalid, listing the problems.
   app.get(at(apiPaths.process), (c) => c.json(describeProcess()));
+
+  app.get(at(apiPaths.improvementStages), (c) => c.json(describeStages(loadConfig().improvementGraph ?? EMPTY_GRAPH)));
+
+  // Improvements. Proposals are stored here; only apply writes files, and only where allowedTarget says.
+  app.get(at(apiPaths.improvements), (c) => c.json(listImprovements(db)));
+  app.post(at(apiPaths.improvements), async (c) => c.json(createImprovement(db, await readBody(c, improvementBody)), 201));
+  app.get("/api/improvements/:id", (c) => c.json(getImprovement(db, c.req.param("id"))));
+  app.get("/api/improvements/:id/proposals", (c) => c.json(listProposals(db, c.req.param("id"))));
+  app.put("/api/improvements/:id/proposals", async (c) =>
+    c.json(propose(db, c.req.param("id"), await readBody(c, proposalBody))),
+  );
+  app.delete("/api/improvements/:id/proposals", async (c) =>
+    c.json(withdraw(db, c.req.param("id"), await readBody(c, withdrawBody))),
+  );
+  app.post("/api/improvements/:id/apply", async (c) =>
+    c.json(applyProposals(db, c.req.param("id"), await readBody(c, applyBody, true))),
+  );
 
   // Read-only on purpose. Agents can reach this API, so no route may change commands.
   app.get(at(apiPaths.config), (c) => c.json(describeConfig()));

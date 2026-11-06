@@ -18,6 +18,11 @@ const KNOWN_KINDS: Record<EventKind, true> = {
   edge_removed: true,
   scheduled_run: true,
   scheduled_run_skipped: true,
+  improvement_captured: true,
+  improvement_sourced: true,
+  proposal_saved: true,
+  proposal_withdrawn: true,
+  proposals_applied: true,
 };
 
 /** Whether this version knows the event's kind, and so the shape of its data. */
@@ -112,6 +117,19 @@ export function describeEvent(event: EventView, titleOf: (id: string) => string)
       return `${event.data.kind === "blocks" ? "Now blocks" : "Subtask added:"} ${titleOf(text(event.data.target_id))}`;
     case "edge_removed":
       return `${event.data.kind === "blocks" ? "No longer blocks" : "Subtask removed:"} ${titleOf(text(event.data.target_id))}`;
+    case "improvement_captured":
+      return "Improvement captured from a message";
+    case "improvement_sourced":
+      return "Captured from a message";
+    case "proposal_saved":
+      return `Proposed a change to ${text(event.data.path)}`;
+    case "proposal_withdrawn":
+      return `Withdrew the change to ${text(event.data.path)}`;
+    case "proposals_applied": {
+      const written = Array.isArray(event.data.written) ? event.data.written.length : 0;
+      const into = event.data.into;
+      return `Applied: wrote ${written} file${written === 1 ? "" : "s"}${into ? ` into ${text(into)}` : ""}`;
+    }
     case "scheduled_run":
       return "Schedule fired: created a child";
     case "scheduled_run_skipped": {

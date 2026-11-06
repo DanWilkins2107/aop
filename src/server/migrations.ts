@@ -265,6 +265,57 @@ ALTER TABLE runs ADD COLUMN shutting_down INTEGER NOT NULL DEFAULT 0
   CONSTRAINT runs_shutting_down_flag CHECK (shutting_down IN (0, 1));
 `,
   },
+  {
+    // Improvements are nodes of their own kind. They belong to the machine rather than a project, so
+    // they sit in one reserved project, `improvements`, that the projects list never shows. That keeps
+    // every rule about nodes as it is, including edges staying inside a project. The first improvement
+    // creates the project's row. Existing nodes are all work.
+    sql: `
+ALTER TABLE nodes ADD COLUMN kind TEXT NOT NULL DEFAULT 'work'
+  CONSTRAINT nodes_kind_known CHECK (kind IN ('work', 'improvement'))
+  CONSTRAINT nodes_improvements_in_their_project CHECK ((kind = 'improvement') = (project_id = 'improvements'));
+
+CREATE TABLE improvements (
+  id                TEXT PRIMARY KEY NOT NULL,
+  created_at        TEXT NOT NULL,
+  node_id           TEXT NOT NULL UNIQUE REFERENCES nodes(id) ON DELETE RESTRICT,
+  -- Cleared when the source's project is deleted. The copies below keep the link readable.
+  source_node_id    TEXT REFERENCES nodes(id) ON DELETE RESTRICT,
+  source_message_id TEXT REFERENCES messages(id) ON DELETE RESTRICT,
+  source_excerpt    TEXT,
+  source_node_title TEXT,
+  CONSTRAINT improvements_message_needs_node CHECK (source_message_id IS NULL OR source_node_id IS NOT NULL),
+  CONSTRAINT improvements_source_copied
+    CHECK (source_node_id IS NULL OR (source_excerpt IS NOT NULL AND source_node_title IS NOT NULL))
+) STRICT;
+
+CREATE TRIGGER improvements_node_kind BEFORE INSERT ON improvements
+WHEN (SELECT kind FROM nodes WHERE id = NEW.node_id) IS NOT 'improvement'
+  OR (NEW.source_node_id IS NOT NULL AND (SELECT kind FROM nodes WHERE id = NEW.source_node_id) IS NOT 'work')
+  OR (NEW.source_message_id IS NOT NULL
+      AND (SELECT node_id FROM messages WHERE id = NEW.source_message_id) IS NOT NEW.source_node_id)
+BEGIN SELECT RAISE(ABORT, 'an improvement must be an improvement node, sourced from a message on a work node'); END;
+
+CREATE TRIGGER improvements_no_delete BEFORE DELETE ON improvements
+BEGIN SELECT RAISE(ABORT, 'improvements are never deleted'); END;
+
+-- What an improvement would write to each file. Real files are untouched until it's applied.
+CREATE TABLE proposals (
+  id         TEXT PRIMARY KEY NOT NULL,
+  created_at TEXT NOT NULL,
+  node_id    TEXT NOT NULL REFERENCES nodes(id) ON DELETE RESTRICT,
+  path       TEXT NOT NULL CHECK (length(path) BETWEEN 1 AND 4096),
+  content    TEXT NOT NULL CHECK (length(content) <= 1000000),
+  updated_at TEXT NOT NULL,
+  updated_by TEXT NOT NULL CHECK (updated_by IN ('human', 'agent')),
+  UNIQUE (node_id, path)
+) STRICT;
+
+CREATE TRIGGER proposals_on_improvements BEFORE INSERT ON proposals
+WHEN (SELECT kind FROM nodes WHERE id = NEW.node_id) IS NOT 'improvement'
+BEGIN SELECT RAISE(ABORT, 'only improvements have proposals'); END;
+`,
+  },
 ];
 
 export interface Migration extends Step {

@@ -2,6 +2,7 @@ import { Link, Route, Routes } from "react-router-dom";
 import { useLiveStatus } from "./lib/live.js";
 import { AopSettingsPage } from "./pages/AopSettingsPage.js";
 import { GraphPage } from "./pages/GraphPage.js";
+import { ImprovementsPage } from "./pages/ImprovementsPage.js";
 import { NodePage } from "./pages/NodePage.js";
 import { ProcessPage } from "./pages/ProcessPage.js";
 import { ProjectSettingsPage } from "./pages/ProjectSettingsPage.js";
@@ -56,6 +57,7 @@ export function App() {
       <main className="main">
         <Routes>
           <Route path="/" element={<ProjectsPage />} />
+          <Route path="/improvements" element={<ImprovementsPage />} />
           <Route path="/settings" element={<AopSettingsPage />} />
           <Route path="/process" element={<ProcessPage />} />
           <Route path="/roadmap" element={<RoadmapPage />} />

@@ -1,0 +1,103 @@
+.process-improvements {
+  margin-top: 24px;
+}
+
+/* ---- home tabs ---- */
+
+.home-tabs {
+  display: flex;
+  gap: 20px;
+}
+.home-tab {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.home-tab:hover {
+  color: var(--text);
+  text-decoration: none;
+}
+.home-tab-active {
+  color: var(--text);
+}
+
+/* ---- improvements ---- */
+
+/* Only rows waiting on a human get a colour, set inline. */
+.improvement-row {
+  border-left: 3px solid transparent;
+  padding-left: 10px;
+}
+.capture {
+  margin-top: 8px;
+}
+.capture textarea {
+  width: 100%;
+}
+.capture-standalone {
+  margin-top: 14px;
+}
+.message-capture {
+  margin-left: auto;
+  padding: 0 4px;
+  font-size: 15px;
+  line-height: 1;
+}
+.message-target {
+  outline: 2px solid var(--control);
+  outline-offset: 1px;
+}
+.improvement-source {
+  color: var(--text);
+}
+.proposal-path {
+  margin: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.proposal-stats {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.proposal-editor {
+  width: 100%;
+  font-size: 12.5px;
+}
+.diff {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow-x: auto;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.diff-line {
+  display: flex;
+  min-width: max-content;
+}
+.diff-mark {
+  flex: 0 0 auto;
+  width: 20px;
+  text-align: center;
+  color: var(--muted);
+  user-select: none;
+}
+.diff-text {
+  white-space: pre;
+  padding-right: 8px;
+}
+.diff-add {
+  background: #e6f4ea;
+}
+.diff-remove {
+  background: #fbe9e9;
+}
+.diff-skip {
+  padding: 2px 20px;
+  color: var(--muted);
+  background: var(--canvas);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}

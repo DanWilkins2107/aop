@@ -1,21 +1,24 @@
 import { accessSync, constants, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { stringify } from "yaml";
 import { loadConfig } from "../server/config.js";
 import { ConfigError } from "../server/errors.js";
 import { aopHome, configPath, resolveConfigPath } from "../server/paths.js";
+import { loadStagesFile, promptFiles } from "../server/stages.js";
 import { parseYamlFile } from "../server/yamlFile.js";
-import { ABOUT, gatherSettings, InitFailure, lineReader, type Settings, type Values } from "./initSettings.js";
+import { ABOUT, expandPath, gatherSettings, InitFailure, lineReader, type Settings, type Values } from "./initSettings.js";
 
 /** What `aop init --help` adds under the CLI's usage line. */
 const FLAG_HELP = `Sets up AOP_HOME, or ~/.aop. Asks for each setting, unless a flag gives it.
   --yes                Don't ask. Settings not given by flags use their defaults.
   --fill-missing       Config exists: only add missing default files. Never overwrites.
   --stages <file>      Use your own stages file instead of the default process.
-  --create-open-from   Create the open_from folder if it doesn't exist.`;
+  --create-open-from   Create the open_from folder if it doesn't exist.
+  --improvements-path <dir>
+                       The folder improvements may change. Default: ~/.aop/skills.`;
 
 /** What `aop init` reads and writes, so tests can run it with a fake terminal, PATH and home. */
 export interface InitIo {
@@ -113,13 +116,46 @@ agent_timeout_minutes: ${settings.agent_timeout_minutes}
 
 ${comment(ABOUT.stages)} It can live anywhere.
 stages: ${yamlScalar(settings.stages)}
+
+${comment(ABOUT.improvement_stages)} Leave it out to turn improvements off.
+improvement_stages: ./improvement_stages.yaml
+
+${comment(ABOUT.improvements_path)} Never config.yaml or a stages file.
+improvements_path: ${yamlScalar(settings.improvements_path)}
 `;
 }
 
-/** Copies the default process into `home`, skipping any file already there. */
-function copyDefaults(io: InitIo, home: string, say: (text: string) => void): void {
+/** Creates the improvements folder, unless that would write into a git repo, which is the user's to do. */
+function ensureImprovementsFolder(path: string, say: (text: string) => void): void {
+  if (existsSync(path)) {
+    if (!statSync(path).isDirectory()) throw new InitFailure(`improvements_path ${path} isn't a folder.`);
+    return;
+  }
+  const repo = repoAround(path);
+  if (repo !== undefined) {
+    throw new InitFailure(`improvements_path ${path} doesn't exist, and it's inside the git repo ${repo}, which AOP never writes to. Create it first.`);
+  }
+  mkdirSync(path, { recursive: true });
+  say(`Created ${path}`);
+}
+
+/** The default improvement pipeline's files, relative to `defaults/`. */
+function improvementDefaults(defaults: string): string[] {
+  const { graph } = loadStagesFile(join(defaults, "improvement_stages.yaml"));
+  return ["improvement_stages.yaml", ...promptFiles(graph).map((prompt) => join("prompts", basename(prompt)))];
+}
+
+/**
+ * Copies a default process into `home`, skipping any file already there: the work process, the
+ * improvement pipeline, or both.
+ */
+function copyDefaults(io: InitIo, home: string, say: (text: string) => void, which: { work: boolean; improvements: boolean }): void {
   const defaults = join(io.packageRoot, "defaults");
-  const files = ["stages.yaml", ...readdirSync(join(defaults, "prompts")).map((name) => join("prompts", name))];
+  const improvementFiles = improvementDefaults(defaults);
+  const workFiles = ["stages.yaml", ...readdirSync(join(defaults, "prompts")).map((name) => join("prompts", name))].filter(
+    (file) => !improvementFiles.includes(file),
+  );
+  const files = [...(which.work ? workFiles : []), ...(which.improvements ? improvementFiles : [])];
   mkdirSync(join(home, "prompts"), { recursive: true });
   for (const file of files) {
     const target = join(home, file);
@@ -132,12 +168,16 @@ function copyDefaults(io: InitIo, home: string, say: (text: string) => void): vo
   }
 }
 
-/** Whether the config at `home` uses `home/stages.yaml`, so the default process belongs there. */
-function usesHomeStages(home: string): boolean {
+/** Whether the config at `home` links `key` to `home/<file>`, so the default belongs there. */
+function usesHomeFile(home: string, key: string, file: string): boolean {
+  const value = configSetting(home, key);
+  return typeof value === "string" && resolveConfigPath(home, value) === join(home, file);
+}
+
+function configSetting(home: string, key: string): unknown {
   const parsed = parseYamlFile(configPath(home));
-  if (!parsed.ok || typeof parsed.value !== "object" || parsed.value === null) return false;
-  const stages = (parsed.value as Record<string, unknown>)["stages"];
-  return typeof stages === "string" && resolveConfigPath(home, stages) === join(home, "stages.yaml");
+  if (!parsed.ok || typeof parsed.value !== "object" || parsed.value === null) return undefined;
+  return (parsed.value as Record<string, unknown>)[key];
 }
 
 const quoted = (path: string) => (/\s/.test(path) ? `"${path}"` : path);
@@ -214,6 +254,7 @@ async function init(argv: string[], io: InitIo): Promise<void> {
         "create-open-from": { type: "boolean" },
         "agent-timeout-minutes": { type: "string" },
         stages: { type: "string" },
+        "improvements-path": { type: "string" },
         help: { type: "boolean", short: "h" },
       },
     }).values;
@@ -251,7 +292,15 @@ async function init(argv: string[], io: InitIo): Promise<void> {
 
   if (configExists) {
     say(`Keeping ${configFile}. Only adding missing files.`);
-    if (usesHomeStages(home)) copyDefaults(io, home, say);
+    const noImprovements = configSetting(home, "improvement_stages") === undefined;
+    copyDefaults(io, home, say, {
+      work: usesHomeFile(home, "stages", "stages.yaml"),
+      improvements: noImprovements || usesHomeFile(home, "improvement_stages", "improvement_stages.yaml"),
+    });
+    if (configSetting(home, "improvements_path") === undefined) ensureImprovementsFolder(join(home, "skills"), say);
+    if (noImprovements) {
+      say(`Improvements are off. To turn them on, add this line to ${configFile}:\n  improvement_stages: ./improvement_stages.yaml`);
+    }
   } else {
     const reader = values.yes === true ? undefined : lineReader(io.input, io.output);
     let gathered: Awaited<ReturnType<typeof gatherSettings>>;
@@ -262,12 +311,14 @@ async function init(argv: string[], io: InitIo): Promise<void> {
     }
     const { settings, createOpenFrom } = gathered;
     say("");
+    // First, because it's the one step here that can refuse, and nothing has been written yet.
+    ensureImprovementsFolder(expandPath(settings.improvements_path, home), say);
     if (createOpenFrom !== undefined) {
       mkdirSync(createOpenFrom, { recursive: true });
       say(`Created ${createOpenFrom}`);
     }
     mkdirSync(home, { recursive: true });
-    if (settings.stages === "./stages.yaml") copyDefaults(io, home, say);
+    copyDefaults(io, home, say, { work: settings.stages === "./stages.yaml", improvements: true });
     writeFileSync(configFile, configText(settings), { flag: "wx" });
     say(`Wrote ${configFile}`);
   }

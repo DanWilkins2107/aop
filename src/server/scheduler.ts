@@ -126,7 +126,7 @@ export class Scheduler {
   }
 
   private scheduledNodes(): NodeRow[] {
-    return this.db.prepare("SELECT * FROM nodes WHERE stage = 'scheduled' ORDER BY rowid").all() as NodeRow[];
+    return this.db.prepare("SELECT * FROM nodes WHERE stage = 'scheduled' AND kind = 'work' ORDER BY rowid").all() as NodeRow[];
   }
 
   /**
