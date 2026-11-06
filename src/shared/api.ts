@@ -1,4 +1,27 @@
-/** The shapes the HTTP API returns. Types only, so that the browser can import this file. */
+/** The shapes the HTTP API accepts and returns. Types only, so that the browser can import this file. */
+import type { z } from "zod";
+import type * as requests from "./requests.js";
+
+/** What a client may send. Defaulted fields, such as `actor`, are optional. */
+type RequestOf<S extends z.ZodType> = z.input<S>;
+export type AddProjectRequest = RequestOf<typeof requests.addProjectBody>;
+export type UpdateProjectRequest = RequestOf<typeof requests.updateProjectBody>;
+export type CreateNodeRequest = RequestOf<typeof requests.createNodeBody>;
+export type EditNodeRequest = RequestOf<typeof requests.editNodeBody>;
+export type NextRequest = RequestOf<typeof requests.nextBody>;
+export type MoveRequest = RequestOf<typeof requests.moveBody>;
+export type AskRequest = RequestOf<typeof requests.askBody>;
+export type AnswerRequest = RequestOf<typeof requests.answerBody>;
+export type FailRequest = RequestOf<typeof requests.failBody>;
+export type InvalidateRequest = RequestOf<typeof requests.invalidateBody>;
+export type ActorRequest = RequestOf<typeof requests.actorBody>;
+export type SteerRequest = RequestOf<typeof requests.steerBody>;
+export type BlockRequest = RequestOf<typeof requests.blockBody>;
+export type UnblockRequest = RequestOf<typeof requests.unblockBody>;
+export type ClaimRequest = RequestOf<typeof requests.claimBody>;
+export type MessageRequest = RequestOf<typeof requests.messageBody>;
+export type LinkRequest = RequestOf<typeof requests.linkBody>;
+export type EdgeRequest = RequestOf<typeof requests.edgeBody>;
 
 export type Actor = "human" | "agent" | "system";
 export type Turn = "agent" | "human";

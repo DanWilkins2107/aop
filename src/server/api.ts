@@ -6,7 +6,27 @@ import Database from "better-sqlite3";
 import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { z } from "zod";
+import type { z } from "zod";
+import {
+  actorBody,
+  addProjectBody,
+  answerBody,
+  askBody,
+  blockBody,
+  claimBody,
+  createNodeBody,
+  edgeBody,
+  editNodeBody,
+  failBody,
+  invalidateBody,
+  linkBody,
+  messageBody,
+  moveBody,
+  nextBody,
+  steerBody,
+  unblockBody,
+  updateProjectBody,
+} from "../shared/requests.js";
 import { ChangeFeed } from "./changes.js";
 import type { Db } from "./db.js";
 import { nodeContext } from "./context.js";
@@ -26,54 +46,6 @@ const BUILT_WEB_DIR = fileURLToPath(new URL("../../dist/web", import.meta.url));
 const STREAM_KEEP_ALIVE_MS = 25_000;
 
 const LOCAL_HOST = /^(localhost|127\.0\.0\.1)(:\d+)?$/i;
-
-const actor = z.enum(["human", "agent", "system"]);
-const nonBlank = z.string().refine((s) => s.trim().length > 0, "must not be blank");
-const title = nonBlank.refine((s) => [...s].length <= 200, "must be at most 200 characters");
-
-const repoPath = nonBlank.nullable().optional();
-const addProjectBody = z.strictObject({ name: title.optional(), repo_path: repoPath });
-const updateProjectBody = z
-  .strictObject({ name: title.optional(), repo_path: repoPath })
-  .refine((edit) => edit.name !== undefined || edit.repo_path !== undefined, "must include name or repo_path");
-const createNodeBody = z.strictObject({
-  type: nonBlank.optional(),
-  stage: nonBlank.optional(),
-  title,
-  body: z.string().optional(),
-  cron: nonBlank.optional(),
-  parent_id: nonBlank.optional(),
-  actor: actor.default("human"),
-});
-const editNodeBody = z
-  .strictObject({ title: title.optional(), body: z.string().optional(), actor: actor.default("human") })
-  .refine((edit) => edit.title !== undefined || edit.body !== undefined, "must include title or body");
-const nextBody = z.strictObject({ outcome: nonBlank, actor: actor.default("human") });
-const moveBody = z.strictObject({
-  stage: nonBlank,
-  type: nonBlank.optional(),
-  cron: nonBlank.optional(),
-});
-const askBody = z.strictObject({ question: nonBlank });
-const answerBody = z.strictObject({ answer: nonBlank });
-const failBody = z.strictObject({ actor: actor.default("system"), reason: nonBlank.optional() });
-const invalidateBody = z.strictObject({ reason: nonBlank, actor: actor.default("human") });
-const actorBody = z.strictObject({ actor: actor.default("human") });
-const steerBody = z.strictObject({ no_sandbox: z.boolean().default(false) });
-const blockBody = z.strictObject({ reason: nonBlank, actor: actor.default("human") });
-const unblockBody = z.strictObject({ actor: actor.default("human") });
-const claimBody = z.strictObject({ actor: z.enum(["human", "agent"]).default("human") });
-const messageBody = z.strictObject({ body: nonBlank, author: actor.default("human") });
-const linkBody = z.strictObject({
-  kind: z.enum(["ticket", "pr"]),
-  url: z.string().regex(/^https?:\/\/\S+$/, "must start with http:// or https://"),
-  actor: actor.default("human"),
-});
-const edgeBody = z.strictObject({
-  target_id: nonBlank,
-  kind: z.enum(["subtask", "blocks"]),
-  actor: actor.default("human"),
-});
 
 async function readBody<S extends z.ZodType>(c: Context, schema: S, emptyAllowed = false): Promise<z.output<S>> {
   const text = await c.req.text();

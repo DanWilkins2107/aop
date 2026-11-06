@@ -1,13 +1,24 @@
 import type {
+  AddProjectRequest,
+  AnswerRequest,
+  BlockRequest,
   ConfigView,
+  CreateNodeRequest,
+  EdgeRequest,
   EdgeRow,
+  EditNodeRequest,
   EventView,
+  InvalidateRequest,
   LinkRow,
+  MessageRequest,
   MessageRow,
+  MoveRequest,
+  NextRequest,
   NodeView,
   ProjectRow,
   ProcessView,
   StagesView,
+  UpdateProjectRequest,
 } from "../../../src/shared/api.js";
 
 /** A refusal from the API, or a failure to reach it. */
@@ -51,8 +62,8 @@ const projectPath = (id: string) => `/projects/${encodeURIComponent(id)}`;
 
 export const api = {
   projects: () => send<ProjectRow[]>("GET", "/projects"),
-  addProject: (name: string, repoPath: string | null) => send<ProjectRow>("POST", "/projects", { name, repo_path: repoPath }),
-  updateProject: (id: string, changes: { name?: string; repo_path?: string | null }) =>
+  addProject: (name: string, repoPath: string | null) => send<ProjectRow>("POST", "/projects", { name, repo_path: repoPath } satisfies AddProjectRequest),
+  updateProject: (id: string, changes: UpdateProjectRequest) =>
     send<ProjectRow>("PATCH", projectPath(id), changes),
   deleteProject: (id: string) => send<ProjectRow>("DELETE", projectPath(id)),
   nodes: (projectId: string) => send<NodeView[]>("GET", `${projectPath(projectId)}/nodes`),
@@ -60,7 +71,7 @@ export const api = {
   stages: () => send<StagesView>("GET", "/stages"),
   config: () => send<ConfigView>("GET", "/config"),
   process: () => send<ProcessView>("GET", "/process"),
-  createNode: (projectId: string, body: { type?: string; stage?: string; title: string; body: string; cron?: string }) =>
+  createNode: (projectId: string, body: CreateNodeRequest) =>
     send<NodeView>("POST", `${projectPath(projectId)}/nodes`, body),
 
   node: (id: string) => send<NodeView>("GET", nodePath(id)),
@@ -69,21 +80,21 @@ export const api = {
   links: (id: string) => send<LinkRow[]>("GET", `${nodePath(id)}/links`),
   edges: (id: string) => send<EdgeRow[]>("GET", `${nodePath(id)}/edges`),
 
-  editBody: (id: string, body: string) => send<NodeView>("PATCH", nodePath(id), { body }),
-  next: (id: string, outcome: string) => send<NodeView>("POST", `${nodePath(id)}/next`, { outcome }),
-  answer: (id: string, answer: string) => send<NodeView>("POST", `${nodePath(id)}/answer`, { answer }),
+  editBody: (id: string, body: string) => send<NodeView>("PATCH", nodePath(id), { body } satisfies EditNodeRequest),
+  next: (id: string, outcome: string) => send<NodeView>("POST", `${nodePath(id)}/next`, { outcome } satisfies NextRequest),
+  answer: (id: string, answer: string) => send<NodeView>("POST", `${nodePath(id)}/answer`, { answer } satisfies AnswerRequest),
   retry: (id: string) => send<NodeView>("POST", `${nodePath(id)}/retry`),
-  invalidate: (id: string, reason: string) => send<NodeView>("POST", `${nodePath(id)}/invalidate`, { reason }),
+  invalidate: (id: string, reason: string) => send<NodeView>("POST", `${nodePath(id)}/invalidate`, { reason } satisfies InvalidateRequest),
   restore: (id: string) => send<NodeView>("POST", `${nodePath(id)}/restore`),
-  block: (id: string, reason: string) => send<NodeView>("POST", `${nodePath(id)}/block`, { reason }),
+  block: (id: string, reason: string) => send<NodeView>("POST", `${nodePath(id)}/block`, { reason } satisfies BlockRequest),
   unblock: (id: string) => send<NodeView>("POST", `${nodePath(id)}/unblock`),
   claim: (id: string) => send<NodeView>("POST", `${nodePath(id)}/claim`),
   release: (id: string) => send<NodeView>("POST", `${nodePath(id)}/release`),
-  move: (id: string, body: { stage: string; type?: string; cron?: string }) =>
+  move: (id: string, body: MoveRequest) =>
     send<NodeView>("POST", `${nodePath(id)}/move`, body),
-  addMessage: (id: string, body: string) => send<MessageRow>("POST", `${nodePath(id)}/messages`, { body }),
-  addEdge: (sourceId: string, targetId: string, kind: EdgeRow["kind"]) =>
-    send<EdgeRow>("POST", `${nodePath(sourceId)}/edges`, { target_id: targetId, kind }),
+  addMessage: (id: string, body: string) => send<MessageRow>("POST", `${nodePath(id)}/messages`, { body } satisfies MessageRequest),
+  addEdge: (sourceId: string, targetId: string, kind: EdgeRequest["kind"]) =>
+    send<EdgeRow>("POST", `${nodePath(sourceId)}/edges`, { target_id: targetId, kind } satisfies EdgeRequest),
   stopRun: (runId: string) => send<NodeView>("POST", `/runs/${encodeURIComponent(runId)}/stop`),
   removeEdge: (edgeId: string) => send<EdgeRow>("DELETE", `/edges/${encodeURIComponent(edgeId)}`),
 };

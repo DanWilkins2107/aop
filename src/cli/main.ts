@@ -2,13 +2,23 @@
 import { spawn } from "node:child_process";
 import { parseArgs, type ParseArgsConfig } from "node:util";
 import type {
+  ActorRequest,
+  AddProjectRequest,
   AgentProcessView,
+  AskRequest,
+  CreateNodeRequest,
+  EdgeRequest,
   EdgeRow,
+  EditNodeRequest,
+  LinkRequest,
+  MessageRequest,
   MessageRow,
+  NextRequest,
   NodeView,
   ProjectRow,
   ReapResult,
   SearchResult,
+  SteerRequest,
   SteerSession,
 } from "../shared/api.js";
 
@@ -192,7 +202,7 @@ async function nodeCommand(argv: string[]): Promise<void> {
       ...(values.parent !== undefined ? { parent_id: values.parent } : {}),
       ...(values.type !== undefined ? { type: values.type } : {}),
       ...(values.stage !== undefined ? { stage: values.stage } : {}),
-    });
+    } satisfies CreateNodeRequest);
     console.log(`Created ${node.id} at ${node.stage}`);
     return;
   }
@@ -207,7 +217,7 @@ async function nodeCommand(argv: string[]): Promise<void> {
       actor: ACTOR,
       ...(values.title !== undefined ? { title: values.title } : {}),
       ...(values.body !== undefined ? { body: values.body } : {}),
-    });
+    } satisfies EditNodeRequest);
     console.log(`Edited ${id}`);
     return;
   }
@@ -219,7 +229,7 @@ async function edgeCommand(argv: string[]): Promise<void> {
   const [action, kind, from, to, ...extra] = args(argv, usage, {}).positionals;
   if (kind !== "blocks" || from === undefined || to === undefined || extra.length > 0) throw usageError(usage);
   if (action === "add") {
-    await send("POST", `${nodePath(from)}/edges`, { target_id: to, kind, actor: ACTOR });
+    await send("POST", `${nodePath(from)}/edges`, { target_id: to, kind, actor: ACTOR } satisfies EdgeRequest);
     console.log(`${from} now blocks ${to}`);
     return;
   }
@@ -227,7 +237,7 @@ async function edgeCommand(argv: string[]): Promise<void> {
     const edges = await send<EdgeRow[]>("GET", `${nodePath(from)}/edges`);
     const edge = edges.find((e) => e.kind === kind && e.source_id === from && e.target_id === to);
     if (!edge) throw new CliFailure(`${from} doesn't block ${to}`);
-    await send("DELETE", `/edges/${encodeURIComponent(edge.id)}`, { actor: ACTOR });
+    await send("DELETE", `/edges/${encodeURIComponent(edge.id)}`, { actor: ACTOR } satisfies ActorRequest);
     console.log(`${from} no longer blocks ${to}`);
     return;
   }
@@ -252,7 +262,7 @@ async function searchCommand(argv: string[]): Promise<void> {
 async function steerCommand(argv: string[]): Promise<void> {
   const { values, positionals } = args(argv, COMMANDS.steer, { "no-sandbox": { type: "boolean" } });
   const id = only(positionals, COMMANDS.steer);
-  const session = await send<SteerSession>("POST", `${nodePath(id)}/steer`, { no_sandbox: values["no-sandbox"] === true });
+  const session = await send<SteerSession>("POST", `${nodePath(id)}/steer`, { no_sandbox: values["no-sandbox"] === true } satisfies SteerRequest);
   console.log(`Claimed ${id}. Opening a session in ${session.cwd}. Release the claim in the UI when you're done.`);
   // The command is the user's own config string, which may need a shell. No node text goes in it.
   const child = spawn(session.command, {
@@ -305,25 +315,25 @@ async function run(argv: string[]): Promise<void> {
     }
     case "next": {
       const outcome = only(args(rest, COMMANDS.next, {}).positionals, COMMANDS.next);
-      movedTo(await send("POST", `${nodePath(ownNode())}/next`, { outcome, actor: ACTOR }));
+      movedTo(await send("POST", `${nodePath(ownNode())}/next`, { outcome, actor: ACTOR } satisfies NextRequest));
       return;
     }
     case "ask": {
       const question = only(args(rest, COMMANDS.ask, {}).positionals, COMMANDS.ask);
-      movedTo(await send("POST", `${nodePath(ownNode())}/ask`, { question }));
+      movedTo(await send("POST", `${nodePath(ownNode())}/ask`, { question } satisfies AskRequest));
       return;
     }
     case "message": {
       const { values, positionals } = args(rest, COMMANDS.message, { node: { type: "string" } });
       const body = only(positionals, COMMANDS.message);
-      const message = await send<MessageRow>("POST", `${nodePath(values.node ?? ownNode())}/messages`, { body, author: ACTOR });
+      const message = await send<MessageRow>("POST", `${nodePath(values.node ?? ownNode())}/messages`, { body, author: ACTOR } satisfies MessageRequest);
       console.log(`Posted to ${message.node_id}`);
       return;
     }
     case "link": {
       const [kind, url, ...extra] = args(rest, COMMANDS.link, {}).positionals;
       if ((kind !== "pr" && kind !== "ticket") || url === undefined || extra.length > 0) throw usageError(COMMANDS.link);
-      await send("POST", `${nodePath(ownNode())}/links`, { kind, url, actor: ACTOR });
+      await send("POST", `${nodePath(ownNode())}/links`, { kind, url, actor: ACTOR } satisfies LinkRequest);
       console.log(`Linked ${kind} ${url}`);
       return;
     }
@@ -342,7 +352,7 @@ async function run(argv: string[]): Promise<void> {
     case "project": {
       const [action, path, ...extra] = args(rest, COMMANDS.project, {}).positionals;
       if (action !== "add" || path === undefined || extra.length > 0) throw usageError(COMMANDS.project);
-      const project = await send<ProjectRow>("POST", "/projects", { repo_path: path });
+      const project = await send<ProjectRow>("POST", "/projects", { repo_path: path } satisfies AddProjectRequest);
       console.log(`Added project "${project.name}" (${project.id})`);
       return;
     }
