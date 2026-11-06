@@ -37,16 +37,22 @@ const tokensOf = (text: string) => text.replaceAll("\\|", "|").trim().split(/\s+
 describe("shipped defaults", () => {
   it("pass the real config and stages validators", () => {
     const config = loadConfig(installDefaults());
-    expect([...config.graph.types.keys()]).toEqual(["triage", "dev"]);
+    expect([...config.graph.types.keys()]).toEqual(["triage", "dev", "reports"]);
     for (const [, stage] of config.graph.stages) if (stage.turn === "agent") expect(stage.prompt).toBeDefined();
   });
 
-  it("have no scheduled type", () => {
+  it("have one scheduled example, standing on its own", () => {
     const config = loadConfig(installDefaults());
-    for (const [, type] of config.graph.types) {
-      expect(type.start).not.toBe("scheduled");
-      expect(type.stages.has("scheduled")).toBe(false);
-    }
+    const scheduledTypes = [...config.graph.types].filter(([, type]) => type.stages.has("scheduled")).map(([name]) => name);
+    expect(scheduledTypes).toEqual(["reports"]);
+
+    const reports = config.graph.types.get("reports")!;
+    expect(reports.start).toBe("scheduled");
+    expect(Object.fromEntries([...reports.stages].map(([stage, next]) => [stage, Object.fromEntries(next)]))).toEqual({
+      scheduled: { fire: "generate_report" },
+      generate_report: { done: "done" },
+    });
+    expect(config.graph.stages.get("generate_report")?.turn).toBe("agent");
   });
 
   it("have a prompt for every agent stage and nothing else", () => {
