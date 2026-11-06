@@ -7,7 +7,6 @@ import type { EdgeRow, EventView, LinkRow, MessageRow } from "../../src/shared/a
 import { directives, fakeCommand, settle, world, type World } from "./agents.helpers.js";
 import { aopInProcess } from "./cli.helpers.js";
 
-const TIMEOUT = { timeout: 90_000 };
 let w: World;
 
 beforeEach(async () => {
@@ -23,7 +22,7 @@ const parked = (extra: Record<string, unknown> = {}) => w.create("", { type: "de
 const eventsOf = async (id: string) => (await w.call<EventView[]>("GET", `/nodes/${id}/events`)).body;
 
 describe("the agent commands", () => {
-  it("context prints the node's place in the tree, its messages, links and outcomes", TIMEOUT, async () => {
+  it("context prints the node's place in the tree, its messages, links and outcomes", async () => {
     const parent = await parked({ title: "The parent" });
     const node = await parked({ title: "The child", parent_id: parent.id, body: "The description" });
     const sibling = await parked({ title: "The sibling", parent_id: parent.id });
@@ -41,7 +40,7 @@ describe("the agent commands", () => {
     expect((await aop(["context", node.id])).stdout).toBe(fromEnv.stdout);
   });
 
-  it("next, ask, fail and split need a node from the environment", TIMEOUT, async () => {
+  it("next, ask, fail and split need a node from the environment", async () => {
     for (const args of [["next", "x"], ["ask", "x"], ["fail", "x"], ["split", "start"], ["split", "finish"], ["context"]]) {
       const res = await aop(args);
       expect(res.code).toBe(1);
@@ -49,7 +48,7 @@ describe("the agent commands", () => {
     }
   });
 
-  it("agent commands are refused on human stages", TIMEOUT, async () => {
+  it("agent commands are refused on human stages", async () => {
     const node = await parked();
     const res = await aop(["next", "merged"], { node: node.id });
     expect(res.code).toBe(1);
@@ -58,7 +57,7 @@ describe("the agent commands", () => {
     expect((await aop(["ask", "?"], { node: node.id })).code).toBe(1);
   });
 
-  it("fail marks the agent's own node failed as the agent, posting the reason", TIMEOUT, async () => {
+  it("fail marks the agent's own node failed as the agent, posting the reason", async () => {
     const node = await w.create(directives("hang"));
     await w.runStarted(node.id);
     const res = await aop(["fail", "The service it needs is gone"], { node: node.id });
@@ -72,7 +71,7 @@ describe("the agent commands", () => {
     expect((await aop(["fail"], { node: node.id })).code).toBe(2);
   });
 
-  it("an unavailable outcome lists the ones that are", TIMEOUT, async () => {
+  it("an unavailable outcome lists the ones that are", async () => {
     const node = await w.create(directives("hang"));
     await w.runStarted(node.id);
     const res = await aop(["next", "nonsense"], { node: node.id });
@@ -80,7 +79,7 @@ describe("the agent commands", () => {
     expect(res.stderr).toContain("fixed");
   });
 
-  it("everything it writes says actor agent", TIMEOUT, async () => {
+  it("everything it writes says actor agent", async () => {
     const node = await parked();
     const other = await parked();
     await aop(["message", "from the agent"], { node: node.id });
@@ -107,7 +106,7 @@ describe("the agent commands", () => {
     expect(new Set(written.map((event) => event.actor))).toEqual(new Set(["agent"]));
   });
 
-  it("node create goes in the session's project, with a parent, type and stage", TIMEOUT, async () => {
+  it("node create goes in the session's project, with a parent, type and stage", async () => {
     const parent = await parked();
     const made = await aop(["node", "create", "--title", "A child", "--body", "b", "--parent", parent.id, "--type", "dev", "--stage", "pr_review"], {
       node: parent.id,
@@ -126,7 +125,7 @@ describe("the agent commands", () => {
     expect(named.code).toBe(0);
   });
 
-  it("a new child can't start before its parent holds it", TIMEOUT, async () => {
+  it("a new child can't start before its parent holds it", async () => {
     const parent = await w.create(directives('ifnot Stage: splitting :: aop ["split","start"]', "hang"), { type: "triage", stage: "split_approved" });
     await w.atStage(parent.id, "splitting");
     const made = await aop(["node", "create", "--title", "Held", "--type", "hotfix", "--parent", parent.id]);
@@ -135,7 +134,7 @@ describe("the agent commands", () => {
     expect(w.runs(id)).toEqual([]);
   });
 
-  it("bad usage is a clear message and exit code 2, with no stack trace", TIMEOUT, async () => {
+  it("bad usage is a clear message and exit code 2, with no stack trace", async () => {
     const bad = [["next"], ["node", "create"], ["edge", "add", "subtask", "a", "b"], ["link", "x", "y"], ["nonsense"], ["next", "--bad"], ["search"], ["ps", "x"], ["reap", "--bad"]];
     for (const args of bad) {
       const res = await aop(args, { node: "n" });
@@ -150,7 +149,7 @@ describe("the agent commands", () => {
     }
   });
 
-  it("a usage error shows that command's usage, as the help lists it", TIMEOUT, async () => {
+  it("a usage error shows that command's usage, as the help lists it", async () => {
     const help = (await aop(["help"])).stdout;
     const option = await aop(["next", "--bad"], { node: "n" });
     expect(option.stderr).toContain("--bad");
@@ -162,14 +161,14 @@ describe("the agent commands", () => {
     }
   });
 
-  it("says when the server can't be reached", TIMEOUT, async () => {
+  it("says when the server can't be reached", async () => {
     const res = await aop(["context", "x"], { env: { AOP_URL: "http://127.0.0.1:1" } });
     expect(res.code).toBe(1);
     expect(res.stderr).toContain("aop serve");
     expect(res.stderr).not.toContain("    at ");
   });
 
-  it("says when what answers isn't the API, and when an error isn't the API's", TIMEOUT, async () => {
+  it("says when what answers isn't the API, and when an error isn't the API's", async () => {
     // Stands in for something else on the port, such as the UI's dev server, which answers every path with a page.
     const stub = (status: number, type: string, body: string) =>
       new Promise<Server>((done) => {
@@ -197,14 +196,14 @@ describe("the agent commands", () => {
 });
 
 describe("the human commands", () => {
-  it("project add registers a path", TIMEOUT, async () => {
+  it("project add registers a path", async () => {
     const res = await aop(["project", "add", w.home]);
     expect(res.code).toBe(0);
     expect(res.stdout).toContain("Added project");
     expect((await aop(["project", "add", join(w.home, "nope")])).code).toBe(1);
   });
 
-  it("ps and reap talk to the server", TIMEOUT, async () => {
+  it("ps and reap talk to the server", async () => {
     expect((await aop(["ps"])).stdout).toContain("No agents running");
     const node = await w.create(directives("hang"), { title: "Listed" });
     const run = await w.runStarted(node.id);
@@ -225,7 +224,7 @@ describe("the human commands", () => {
         [`agent_session_command: ${JSON.stringify(agent)}`, ...(out ? [`out_of_sandbox_command: ${JSON.stringify(out)}`] : []), "stages: ./stages.yaml", ""].join("\n"),
       );
 
-    it("claims for the human and runs agent_session_command in the start folder, with no flags", TIMEOUT, async () => {
+    it("claims for the human and runs agent_session_command in the start folder, with no flags", async () => {
       const node = await parked();
       useCommands(session("in.json"));
       const res = await aop(["steer", node.id]);
@@ -242,7 +241,7 @@ describe("the human commands", () => {
       expect(w.node(node.id).claimed_by).toBe("human");
     });
 
-    it("--no-sandbox runs out_of_sandbox_command, and errors clearly if it isn't set", TIMEOUT, async () => {
+    it("--no-sandbox runs out_of_sandbox_command, and errors clearly if it isn't set", async () => {
       const node = await parked();
       useCommands(session("in.json", 1), session("out.json"));
       expect((await aop(["steer", node.id, "--no-sandbox"])).code).toBe(0);
@@ -259,7 +258,7 @@ describe("the human commands", () => {
       expect(w.node(other.id).claimed_by).toBeNull();
     });
 
-    it("refuses a node an agent run holds, including one on its way out", TIMEOUT, async () => {
+    it("refuses a node an agent run holds, including one on its way out", async () => {
       const node = await w.create(directives("hang"));
       await w.runStarted(node.id);
       const res = await aop(["steer", node.id]);
@@ -268,7 +267,7 @@ describe("the human commands", () => {
       expect(w.node(node.id).claimed_by).toBe("agent");
     });
 
-    it("passes on the session's exit code, and a steered session's commands work", TIMEOUT, async () => {
+    it("passes on the session's exit code, and a steered session's commands work", async () => {
       const node = await w.create("", { stage: "pr_review", type: "dev" });
       useCommands(session("in.json", 7));
       expect((await aop(["steer", node.id])).code).toBe(7);
@@ -278,7 +277,7 @@ describe("the human commands", () => {
       expect(refused.stderr).toContain("human turn");
     });
 
-    it("a human claim keeps agents off, and releasing lets them on", TIMEOUT, async () => {
+    it("a human claim keeps agents off, and releasing lets them on", async () => {
       useCommands(session("in.json"));
       const node = await parked();
       await aop(["steer", node.id]);

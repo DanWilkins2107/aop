@@ -13,9 +13,10 @@
 ## Commands
 - `npm run typecheck`: the server and web projects.
 - `npx vitest run test/server/api.test.ts -t "some name"`: one file, or one test in it. Prefer this.
-- `npm run test:fast`: everything except the files that spawn processes. `test:server`, `test:web` and `test:cli` split the suite by area.
+- `npm run test:fast`: the `unit` project, which is everything except the files that spawn processes. `test:server`, `test:web` and `test:cli` split the suite by area.
 - `npx vitest related --run web/src/lib/layout.ts`: the tests that import a file. Only useful for leaf modules: the server harness reaches almost every server file.
-- Don't run the whole suite unless asked. The slow files are `orchestrator`, `recovery`, `cli` (about 100s), `startup` and `test/cli/init`.
+- `vitest.config.ts` has two projects. `unit` (30s per test) is in-process. `integration` (90s per test) is the files that spawn processes: `orchestrator`, `recovery`, `startup`, `cli.smoke` and `test/cli/init`. A new file that spawns processes goes in its list. Pick one with `--project unit`.
+- Don't run the whole suite, or `npm run test:integration`, unless asked. Run the one integration file you need.
 - Never run `npm start`, `npm run demo`, `npm run dev:web` or `aop serve`.
 
 ## Rules
