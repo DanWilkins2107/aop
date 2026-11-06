@@ -41,6 +41,38 @@ describe("markdown", () => {
     ]);
   });
 
+  it("drops a closing run of # only when a space comes before it", () => {
+    expect(parseMarkdown("## Title ##\n\n# Learn C#\n\n# ##")).toEqual([
+      { kind: "heading", level: 2, children: [text("Title")] },
+      { kind: "heading", level: 1, children: [text("Learn C#")] },
+      { kind: "heading", level: 1, children: [] },
+    ]);
+  });
+
+  it("reads links and marks inside headings", () => {
+    expect(parseMarkdown("### See [the **spec**](/specs) #")).toEqual([
+      {
+        kind: "heading",
+        level: 3,
+        children: [
+          text("See "),
+          { kind: "link", href: "/specs", children: [text("the "), { kind: "strong", children: [text("spec")] }] },
+        ],
+      },
+    ]);
+  });
+
+  it("joins wrapped lines of a paragraph and of a list item", () => {
+    expect(parseMarkdown("one\ntwo\n\n- first\n  continued\n- second")).toEqual([
+      { kind: "paragraph", children: [text("one two")] },
+      { kind: "list", ordered: false, items: [[text("first continued")], [text("second")]] },
+    ]);
+  });
+
+  it("keeps snake_case words whole", () => {
+    expect(parseMarkdown("use return_stage here")).toEqual([{ kind: "paragraph", children: [text("use return_stage here")] }]);
+  });
+
   it("drops HTML comments, so the roadmap's editing note stays hidden", () => {
     const blocks = parseMarkdown(readFileSync("docs/roadmap.md", "utf8"));
     expect(blocks[0]).toEqual({ kind: "heading", level: 1, children: [text("Roadmap")] });

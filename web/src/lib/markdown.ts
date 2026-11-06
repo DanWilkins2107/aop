@@ -19,7 +19,9 @@ export type Block =
   | { kind: "code"; text: string }
   | { kind: "rule" };
 
-const HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
+const HEADING = /^(#{1,6})\s+(.*)$/;
+/** An optional closing run of `#`, which only counts after a space, so `# C#` keeps its `#`. */
+const CLOSING_HASHES = /(^|\s+)#+\s*$/;
 const BULLET = /^\s*[-*+]\s+(.*)$/;
 const NUMBERED = /^\s*\d+[.)]\s+(.*)$/;
 const FENCE = /^\s*(```|~~~)/;
@@ -47,7 +49,7 @@ export function parseMarkdown(source: string): Block[] {
     const heading = HEADING.exec(line);
     if (heading) {
       const level = (heading[1] ?? "#").length as 1 | 2 | 3 | 4 | 5 | 6;
-      blocks.push({ kind: "heading", level, children: parseInline(heading[2] ?? "") });
+      blocks.push({ kind: "heading", level, children: parseInline((heading[2] ?? "").replace(CLOSING_HASHES, "").trim()) });
       i++;
       continue;
     }
