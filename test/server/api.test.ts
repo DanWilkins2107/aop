@@ -782,4 +782,22 @@ describe("routing", () => {
     const node = await h.create("dev", { body });
     expect(node.body).toBe(body);
   });
+
+  it("marks text written by agents and people as nosniff", async () => {
+    const { createApp } = await import("../../src/server/api.js");
+    const { beginRun } = await import("../../src/server/runs.js");
+    const { appendToLog, logPathFor } = await import("../../src/server/runLog.js");
+    const { getNodeRow } = await import("../../src/server/nodes.js");
+    const node = await h.create("dev", { body: "<html><script>alert(1)</script></html>" });
+    const run = beginRun(h.db, getNodeRow(h.db, node.id), "run-nosniff", logPathFor("run-nosniff"));
+    appendToLog(run.log_path, "<html><script>alert(1)</script></html>\n");
+    const app = createApp(h.db);
+    for (const path of [`/api/nodes/${node.id}/context`, `/api/runs/${run.id}/log`]) {
+      const res = await app.request(path, { headers: { host: "localhost" } });
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toMatch(/^text\/plain/);
+      expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+      expect(await res.text()).toContain("<script>");
+    }
+  });
 });

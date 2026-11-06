@@ -158,6 +158,13 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
     return;
   });
 
+  // Some routes serve what agents and people wrote as text/plain (a node's context, a run's log).
+  // Browsers must take the type as given, so none of it can ever run as a page on this origin.
+  app.use("/api/*", async (c, proceed) => {
+    await proceed();
+    c.res.headers.set("X-Content-Type-Options", "nosniff");
+  });
+
   // Bodies are read whole, so they are capped before any route reads one.
   app.use(
     "/api/*",
@@ -350,8 +357,6 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
     if (!run) throw notFound(`No run ${c.req.param("id")}`);
     const log = readRunLog(run.log_path);
     if (log === null) throw notFound(`The log for run ${run.id} is gone`);
-    // Text, and marked as such: what an agent printed must never run as a page on this origin.
-    c.header("X-Content-Type-Options", "nosniff");
     return c.text(log);
   });
   app.get("/api/runs/:id/tail", (c) => {
