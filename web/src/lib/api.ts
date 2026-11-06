@@ -88,6 +88,17 @@ export const api = {
   removeEdge: (edgeId: string) => send<EdgeRow>("DELETE", `/edges/${encodeURIComponent(edgeId)}`),
 };
 
+/** A project's whole graph, with the stages and the project itself. The graph page and the node page both need it. */
+export async function loadProjectGraph(projectId: string) {
+  const [nodes, edges, stages, projects] = await Promise.all([
+    api.nodes(projectId),
+    api.projectEdges(projectId),
+    api.stages(),
+    api.projects(),
+  ]);
+  return { nodes, edges, stages, project: projects.find((p) => p.id === projectId) ?? null };
+}
+
 /** The message to show for a failed action. */
 export function failureText(error: unknown): string {
   return error instanceof Error ? error.message : "Something went wrong";
