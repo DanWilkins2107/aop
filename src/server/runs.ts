@@ -3,6 +3,7 @@
 import type { RunView } from "../shared/api.js";
 import type { OutputFormat, Usage } from "./agentOutput.js";
 import type { Db } from "./db.js";
+import { refused } from "./errors.js";
 import type { NodeRow } from "./nodes.js";
 import type { Identity } from "./processes.js";
 import { appendEvent, now, type Actor } from "./records.js";
@@ -155,10 +156,14 @@ export function decideRunEnd({ run, ending, reported, nodeExists }: RunEndInput)
   }
 }
 
-/** Takes the node's claim and opens its run, together, so that nothing else can start on it. */
+/**
+ * Takes the node's claim and opens its run, together, so that nothing else can start on it. Refused,
+ * with nothing written, if anything holds the claim already.
+ */
 export function beginRun(db: Db, node: NodeRow, id: string, logPath: string, format: OutputFormat = "text"): RunRow {
   db.transaction(() => {
-    db.prepare("UPDATE nodes SET claimed_by = 'agent' WHERE id = ?").run(node.id);
+    const claimed = db.prepare("UPDATE nodes SET claimed_by = 'agent' WHERE id = ? AND claimed_by IS NULL").run(node.id);
+    if (claimed.changes !== 1) throw refused(`Node ${node.id} is already claimed, so no run can start on it`);
     appendEvent(db, node.id, "system", "claim_taken", { holder: "agent", run_id: id });
     db.prepare(
       "INSERT INTO runs (id, created_at, node_id, stage, status, log_path, output_format) VALUES (?, ?, ?, ?, 'running', ?, ?)",

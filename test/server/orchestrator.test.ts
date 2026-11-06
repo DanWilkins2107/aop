@@ -1,8 +1,9 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { HEADLESS_AGENT_FLAGS } from "../../src/server/agentOutput.js";
 import { isAlive, waitGone } from "../../src/server/processes.js";
+import { listProcesses } from "../../src/server/runs.js";
 import type { EventView, MessageRow, NodeView, RunView } from "../../src/shared/api.js";
 import { directives, settle, until, world, type World } from "./agents.helpers.js";
 import { makeRepo, STAGES_YAML } from "./helpers.js";
@@ -208,6 +209,22 @@ describe("how a run ends", () => {
     expect(await logOf(run!.id)).toContain("no-such-folder");
     const failure = (await events(res.body.id)).find((event) => (event.data as { via?: string }).via === "fail");
     expect(JSON.stringify(failure?.data)).toContain("start folder doesn't exist");
+  });
+
+  it("a logs folder that can't be written fails each run cleanly, and doesn't hold up the others", TIMEOUT, async () => {
+    w = await world();
+    const logs = join(w.home, "logs");
+    rmSync(logs, { recursive: true, force: true });
+    // A file where the folder should be, which makes every log write fail, on any platform.
+    writeFileSync(logs, "not a folder");
+    const nodes = [await w.create(""), await w.create("")];
+    for (const node of nodes) {
+      await w.atStage(node.id, "failed");
+      const [run] = await w.runsEnded(node.id);
+      expect(run).toMatchObject({ end_reason: "failed", pid: null });
+      expect(w.node(node.id).claimed_by).toBeNull();
+    }
+    expect(listProcesses(w.db)).toEqual([]);
   });
 
   it("running past the timeout: failed, and the process is gone", TIMEOUT, async () => {

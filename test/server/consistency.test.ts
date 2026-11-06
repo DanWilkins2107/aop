@@ -106,6 +106,26 @@ describe("agent identity", () => {
   });
 });
 
+describe("claims", () => {
+  it("a run starts only on an unclaimed node, and a refused start writes nothing", async () => {
+    const h = harness();
+    const runsOn = (id: string) => (h.db.prepare("SELECT count(*) AS n FROM runs WHERE node_id = ?").get(id) as { n: number }).n;
+
+    const human = await h.create("dev");
+    h.db.prepare("UPDATE nodes SET claimed_by = 'human' WHERE id = ?").run(human.id);
+    expect(() => beginRun(h.db, getNodeRow(h.db, human.id), randomUUID(), "unused.log")).toThrow(/already claimed/);
+    expect(getNodeRow(h.db, human.id).claimed_by).toBe("human");
+    expect(runsOn(human.id)).toBe(0);
+
+    // A row read before another start took the claim still can't start a second run.
+    const free = await h.create("dev");
+    const stale = getNodeRow(h.db, free.id);
+    beginRun(h.db, stale, randomUUID(), "unused.log");
+    expect(() => beginRun(h.db, stale, randomUUID(), "unused.log")).toThrow(/already claimed/);
+    expect(runsOn(free.id)).toBe(1);
+  });
+});
+
 describe("an agent's own fail", () => {
   it("is a report like next or ask: the agent gets its grace period to exit", TIMEOUT, async () => {
     const w = await world({ graceMs: 5_000 });

@@ -195,6 +195,24 @@ describe("reap and identity", () => {
     expect(listProcesses(w.db).map((row) => row.id)).toEqual([legitRun.id]);
   });
 
+  it("an agent it reaps because a parent was invalidated is held, not stopped", TIMEOUT, async () => {
+    // No reconcile on a timer, so the reap is the one to find it.
+    w = await world({ reconcileIntervalMs: 600_000 });
+    const parent = await w.create("", { stage: "pr_review", type: "dev" });
+    const child = await w.create(directives(`pid ${w.file("child.pid")}`, "hang"), { parent_id: parent.id });
+    const pid = await w.pidFrom("child.pid");
+    await w.runStarted(child.id);
+    // Behind the orchestrator's back, so that only the reap sees it.
+    w.db.prepare("UPDATE nodes SET stage = 'invalidated', invalidation_reason = 'Not wanted' WHERE id = ?").run(parent.id);
+
+    const res = await w.call<ReapResult>("POST", "/agents/reap");
+    expect(res.body.killed.map((k) => k.reason)).toEqual(["its node is invalidated by a parent"]);
+    expect(await waitGone(pid, 10_000)).toBe(true);
+    const [run] = await w.runsEnded(child.id);
+    expect(run).toMatchObject({ end_reason: "held" });
+    expect(w.node(child.id)).toMatchObject({ stage: "implement", claimed_by: null });
+  });
+
   it("won't kill a reused process ID: the start time has to match", TIMEOUT, async () => {
     w = await world();
     const innocent = stray();

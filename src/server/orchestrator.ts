@@ -211,15 +211,22 @@ export class Orchestrator {
 
   private launch(node: NodeRow, config: AopConfig): void {
     const id = newId();
-    const logPath = logPathFor(id);
     const { command, format } = headlessCommand(config.agent_session_command);
-    const run = beginRun(this.db, node, id, logPath, format);
-    const cwd = agentStartPath(getProject(this.db, node.project_id), config);
-    appendToLog(logPath, `[aop] run ${id} on node ${node.id}, stage ${node.stage}, at ${run.created_at}\n[aop] ${command}\n[aop] in ${cwd}\n`);
+    let run: RunRow;
+    try {
+      run = beginRun(this.db, node, id, logPathFor(id), format);
+    } catch (error) {
+      // Nothing was written, so the node is as it was. Other launches carry on.
+      logFailure(error);
+      return;
+    }
 
+    // From here the run is open and holds the claim, so anything that goes wrong has to close it.
     let prompt: string;
     let child: ChildProcessWithoutNullStreams;
     try {
+      const cwd = agentStartPath(getProject(this.db, node.project_id), config);
+      appendToLog(run.log_path, `[aop] run ${id} on node ${node.id}, stage ${node.stage}, at ${run.created_at}\n[aop] ${command}\n[aop] in ${cwd}\n`);
       if (!isFolder(cwd)) throw new Error(`The start folder doesn't exist: ${cwd}`);
       prompt = buildPrompt(this.db, config, node);
       // The command is the user's own string, so it may need a shell. Nothing from a node goes in
@@ -245,7 +252,12 @@ export class Orchestrator {
   }
 
   private failBeforeLaunch(run: RunRow, reason: string): void {
-    appendToLog(run.log_path, `[aop] ${reason}\n`);
+    try {
+      appendToLog(run.log_path, `[aop] ${reason}\n`);
+    } catch (error) {
+      // The reason is posted to the node either way, and the log may be what failed.
+      logFailure(error);
+    }
     this.db.transaction(() => {
       closeRun(this.db, run, "failed", null);
       markFailed(this.db, getNodeRow(this.db, run.node_id), { reason, runId: run.id });
@@ -449,13 +461,21 @@ export class Orchestrator {
 
   /** Why a process shouldn't exist, or null if it should. */
   private whyCondemned(process: ProcessRow): string | null {
+    return this.condemnation(process)?.why ?? null;
+  }
+
+  /** Why a process shouldn't exist, and what stopping its run counts as, or null if it should exist. */
+  private condemnation(process: ProcessRow): { why: string; stop: StopReason } | null {
     const run = getRun(this.db, process.id);
-    if (!run) return "it has no run: its node was deleted";
-    if (run.status !== "running") return "its run has ended";
-    if (!this.active.has(run.id)) return "this server didn't start it";
-    if (run.left_at !== null && Date.now() - new Date(run.left_at).getTime() >= this.graceMs) return "its node moved on";
+    if (!run) return { why: "it has no run: its node was deleted", stop: "moved_on" };
+    if (run.status !== "running") return { why: "its run has ended", stop: "moved_on" };
+    if (!this.active.has(run.id)) return { why: "this server didn't start it", stop: "moved_on" };
+    if (run.left_at !== null && Date.now() - new Date(run.left_at).getTime() >= this.graceMs) {
+      return { why: "its node moved on", stop: "moved_on" };
+    }
     if (holdersOf(this.db, run.node_id).some((holder) => holder.via === "invalidated_parent")) {
-      return "its node is invalidated by a parent";
+      // Held, not stopped: restoring the parent lets the node carry on.
+      return { why: "its node is invalidated by a parent", stop: "held" };
     }
     return null;
   }
@@ -527,10 +547,10 @@ export class Orchestrator {
       const active = this.active.get(row.id);
       if (active) {
         // Its open handle vouches for it, so it only needs to be one that shouldn't be running.
-        const reason = this.whyCondemned(row);
-        if (reason !== null) {
-          result.killed.push({ run_id: row.id, pid: row.pid, reason });
-          await this.stop(active, "moved_on");
+        const condemned = this.condemnation(row);
+        if (condemned !== null) {
+          result.killed.push({ run_id: row.id, pid: row.pid, reason: condemned.why });
+          await this.stop(active, condemned.stop);
         }
         continue;
       }

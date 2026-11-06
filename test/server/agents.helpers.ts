@@ -103,7 +103,7 @@ const CLOSE_TIMEOUT_MS = 60_000;
  * back even if it fails to start.
  */
 export async function world(
-  options: { config?: string; graceMs?: number; home?: Record<string, string>; claude?: boolean } = {},
+  options: { config?: string; graceMs?: number; reconcileIntervalMs?: number; home?: Record<string, string>; claude?: boolean } = {},
 ): Promise<World> {
   const outer = { home: process.env["AOP_HOME"], path: process.env["PATH"], url: process.env["AOP_URL"] };
   const shim = aopShim();
@@ -146,7 +146,12 @@ export async function world(
   const scratch = mkdtempSync(join(aopHome(), "scratch-"));
   mkdirSync(scratch, { recursive: true });
 
-  const makeOrchestrator = (graceMs?: number) => new Orchestrator(db, { changes, graceMs: graceMs ?? options.graceMs ?? 500 });
+  const makeOrchestrator = (graceMs?: number) =>
+    new Orchestrator(db, {
+      changes,
+      graceMs: graceMs ?? options.graceMs ?? 500,
+      ...(options.reconcileIntervalMs === undefined ? {} : { reconcileIntervalMs: options.reconcileIntervalMs }),
+    });
   const holder = { current: makeOrchestrator() };
   // The API reaches the orchestrator through this, so that a test can restart it behind a running server.
   const proxy = new Proxy({} as Orchestrator, {
