@@ -1,10 +1,10 @@
-import { loadConfig } from "./config.js";
+import { type AopConfig, loadConfig } from "./config.js";
 import type { Db } from "./db.js";
 import { badRequest, notFound, refused } from "./errors.js";
-import type { EdgeRow, EventView, LinkRow, MessageRow, NodeRow, NodeView, Turn } from "../shared/api.js";
+import type { EdgeRow, EventView, LinkRow, MessageRow, NodeKind, NodeRow, NodeView, Turn } from "../shared/api.js";
 import { appendEvent, newId, now, type Actor } from "./records.js";
 import { cronProblem } from "./cron.js";
-import { isBuiltIn, type StageGraph } from "./stages.js";
+import { EMPTY_GRAPH, isBuiltIn, type StageGraph } from "./stages.js";
 
 export type { EdgeRow, EventView, LinkRow, MessageRow, NodeRow, NodeView };
 
@@ -14,9 +14,29 @@ export function getNodeRow(db: Db, id: string): NodeRow {
   return node;
 }
 
-/** Read from disk every time, so edits to `stages.yaml` apply without a restart. */
-function currentGraph(): StageGraph {
-  return loadConfig().graph;
+/** Work nodes follow `stages.yaml`, and improvements their own pipeline. */
+export interface Graphs {
+  work: StageGraph;
+  /** Null while improvements are off, which leaves every improvement on a stage that doesn't exist. */
+  improvement: StageGraph | null;
+  /** Whether outcomes leading to `raise_pr` are offered: `improvements_path` is inside a git repo. */
+  raisePrAvailable: boolean;
+}
+
+/** The stage an improvement's outcome must not lead to unless Raise PR is possible. */
+export const RAISE_PR_STAGE = "raise_pr";
+
+export function graphsOf(config: AopConfig): Graphs {
+  return { work: config.graph, improvement: config.improvementGraph, raisePrAvailable: config.improvementsRepo !== null };
+}
+
+export function graphFor(graphs: Graphs, kind: NodeKind): StageGraph {
+  return kind === "improvement" ? (graphs.improvement ?? EMPTY_GRAPH) : graphs.work;
+}
+
+/** Read from disk every time, so edits to the process files apply without a restart. */
+function currentGraphs(): Graphs {
+  return graphsOf(loadConfig());
 }
 
 /** Whether a node of this type can sit on this stage under the current `stages.yaml`. */
@@ -36,6 +56,13 @@ function outcomesOf(graph: StageGraph, node: NodeRow): Map<string, string> {
   // A scheduled node's one outcome is for the scheduler: it says where the child starts.
   if (node.stage === "scheduled") return new Map();
   return graph.types.get(node.type)?.stages.get(node.stage) ?? new Map();
+}
+
+/** The outcomes a node offers now. An improvement can't head for `raise_pr` without a git repo. */
+function availableOutcomes(graphs: Graphs, node: NodeRow): Map<string, string> {
+  const outcomes = outcomesOf(graphFor(graphs, node.kind), node);
+  if (node.kind !== "improvement" || graphs.raisePrAvailable) return outcomes;
+  return new Map([...outcomes].filter(([, target]) => target !== RAISE_PR_STAGE));
 }
 
 /** Invalidated ancestors of a node. Derived at read time; being invalidated by a parent is never stored. */
@@ -94,7 +121,8 @@ export function holdersOf(db: Db, nodeId: string): Holder[] {
   return [...rows, ...ancestors];
 }
 
-function toView(db: Db, graph: StageGraph, node: NodeRow): NodeView {
+function toView(db: Db, graphs: Graphs, node: NodeRow): NodeView {
+  const graph = graphFor(graphs, node.kind);
   const holders = holdersOf(db, node.id);
   const holdersVia = (via: Holder["via"]) => holders.filter((holder) => holder.via === via).map((holder) => holder.id);
   const invalidatedParents = holdersVia("invalidated_parent");
@@ -106,7 +134,7 @@ function toView(db: Db, graph: StageGraph, node: NodeRow): NodeView {
     ...node,
     stage_exists: stageIsLive(graph, node.type, node.stage),
     turn: turnOf(graph, node),
-    available_outcomes: [...outcomesOf(graph, node)].map(([outcome, target]) => ({ outcome, target })),
+    available_outcomes: [...availableOutcomes(graphs, node)].map(([outcome, target]) => ({ outcome, target })),
     invalidated_by_parent: invalidatedParents.length > 0,
     invalidated_ancestors: invalidatedParents,
     blocked_by: holdersVia("blocks"),
@@ -118,13 +146,19 @@ function toView(db: Db, graph: StageGraph, node: NodeRow): NodeView {
 }
 
 export function getNode(db: Db, id: string): NodeView {
-  return toView(db, currentGraph(), getNodeRow(db, id));
+  return toView(db, currentGraphs(), getNodeRow(db, id));
 }
 
 export function listNodes(db: Db, projectId: string): NodeView[] {
-  const graph = currentGraph();
+  const graphs = currentGraphs();
   const rows = db.prepare("SELECT * FROM nodes WHERE project_id = ? ORDER BY rowid").all(projectId) as NodeRow[];
-  return rows.map((node) => toView(db, graph, node));
+  return rows.map((node) => toView(db, graphs, node));
+}
+
+/** Views of rows the caller already has, reading the process files once. */
+export function viewsOf(db: Db, rows: NodeRow[]): NodeView[] {
+  const graphs = currentGraphs();
+  return rows.map((node) => toView(db, graphs, node));
 }
 
 function assertValidCron(cron: string): void {
@@ -174,8 +208,14 @@ export function createNode(
     parent_id?: string | undefined;
     actor: Actor;
   },
+  /** Improvements are created through `createImprovement`, which holds the transaction. */
+  kind: NodeKind = "work",
 ): NodeView {
-  const graph = currentGraph();
+  const graphs = currentGraphs();
+  if (kind === "improvement" && graphs.improvement === null) {
+    throw refused("Improvements are off: config.yaml has no improvement_stages");
+  }
+  const graph = graphFor(graphs, kind);
   const { type, stage } = resolveStart(graph, input);
   if (stage === "scheduled") {
     if (input.cron === undefined) throw badRequest("A node starting at scheduled requires a cron");
@@ -187,9 +227,9 @@ export function createNode(
   const id = newId();
   db.transaction(() => {
     db.prepare(
-      `INSERT INTO nodes (id, created_at, project_id, title, body, type, stage, cron)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(id, now(), projectId, input.title, input.body ?? "", type, stage, input.cron ?? null);
+      `INSERT INTO nodes (id, created_at, project_id, title, body, type, stage, cron, kind)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(id, now(), projectId, input.title, input.body ?? "", type, stage, input.cron ?? null, kind);
     appendEvent(db, id, input.actor, "node_created", { type, stage, title: input.title });
     // In the same transaction, so a child being split off can't be started before its parent holds it.
     if (input.parent_id !== undefined) {
@@ -289,7 +329,7 @@ function assertRunStillOnNode(db: Db, nodeId: string): void {
 }
 
 /** Nodes an agent should start on now: on an agent stage, unclaimed, not held, with no run still leaving. */
-export function startableNodes(db: Db, graph: StageGraph): NodeRow[] {
+export function startableNodes(db: Db, graphs: Graphs): NodeRow[] {
   const rows = db
     .prepare(
       `SELECT * FROM nodes n WHERE claimed_by IS NULL
@@ -297,7 +337,7 @@ export function startableNodes(db: Db, graph: StageGraph): NodeRow[] {
         ORDER BY rowid`,
     )
     .all() as NodeRow[];
-  return rows.filter((node) => turnOf(graph, node) === "agent" && holdersOf(db, node.id).length === 0);
+  return rows.filter((node) => turnOf(graphFor(graphs, node.kind), node) === "agent" && holdersOf(db, node.id).length === 0);
 }
 
 /**
@@ -402,10 +442,11 @@ function returnPlacement(
 }
 
 export function next(db: Db, nodeId: string, input: { outcome: string; actor: Actor }): NodeView {
-  const graph = currentGraph();
+  const graphs = currentGraphs();
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
+    const graph = graphFor(graphs, node.kind);
     if (input.actor === "agent") assertRunStillOnNode(db, nodeId);
     if (node.stage === "scheduled") {
       throw refused("Can't call next on a scheduled node: it stays there and creates children when it fires");
@@ -416,7 +457,7 @@ export function next(db: Db, nodeId: string, input: { outcome: string; actor: Ac
     if (input.actor === "agent" && turnOf(graph, node) === "human") {
       throw refused(`Stage "${node.stage}" is a human turn, so an agent can't report its outcome`);
     }
-    const outcomes = outcomesOf(graph, node);
+    const outcomes = availableOutcomes(graphs, node);
     const target = outcomes.get(input.outcome);
     if (target === undefined) {
       throw refused(`Outcome "${input.outcome}" isn't available at stage "${node.stage}" of type "${node.type}"`, {
@@ -471,7 +512,7 @@ export function move(
   nodeId: string,
   input: { stage: string; type?: string | undefined; cron?: string | undefined },
 ): NodeView {
-  const graph = currentGraph();
+  const graphs = currentGraphs();
 
   assertNoOwnAction(input.stage);
   if (input.cron !== undefined) {
@@ -481,6 +522,7 @@ export function move(
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
+    const graph = graphFor(graphs, node.kind);
     const type = resolveStageType(graph, node.type, input.stage, input.type);
     assertCanEnter(db, node, input.stage, input.cron);
     applyStageChange(db, node, {
@@ -504,10 +546,11 @@ function postMessage(db: Db, nodeId: string, stage: string, author: Actor, body:
 }
 
 export function ask(db: Db, nodeId: string, input: { question: string }): NodeView {
-  const graph = currentGraph();
+  const graphs = currentGraphs();
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
+    const graph = graphFor(graphs, node.kind);
     assertRunStillOnNode(db, nodeId);
     assertAgentStage(graph, node, "ask");
     applyStageChange(db, node, {
@@ -523,10 +566,11 @@ export function ask(db: Db, nodeId: string, input: { question: string }): NodeVi
 }
 
 export function answer(db: Db, nodeId: string, input: { answer: string }): NodeView {
-  const graph = currentGraph();
+  const graphs = currentGraphs();
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
+    const graph = graphFor(graphs, node.kind);
     if (node.stage !== "ask_human_question" || node.return_stage === null) {
       throw refused(`Can't answer: the node is at "${node.stage}", not ask_human_question`);
     }
@@ -546,10 +590,11 @@ export function fail(
   if (input.actor === "human") {
     throw refused("Only AOP marks a node failed. Stop its agent run, or move the node");
   }
-  const graph = currentGraph();
+  const graphs = currentGraphs();
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
+    const graph = graphFor(graphs, node.kind);
     if (input.actor === "agent") assertRunStillOnNode(db, nodeId);
     assertAgentStage(graph, node, "fail");
     applyStageChange(db, node, {
@@ -565,10 +610,11 @@ export function fail(
 }
 
 export function retry(db: Db, nodeId: string): NodeView {
-  const graph = currentGraph();
+  const graphs = currentGraphs();
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
+    const graph = graphFor(graphs, node.kind);
     if (node.stage !== "failed" || node.return_stage === null) {
       throw refused(`Can't retry: the node is at "${node.stage}", not failed`);
     }
@@ -598,10 +644,11 @@ export function invalidate(db: Db, nodeId: string, input: { reason: string; acto
 
 /** Returns an invalidated node to where it was, read from the event that invalidated it. */
 export function restore(db: Db, nodeId: string): NodeView {
-  const graph = currentGraph();
+  const graphs = currentGraphs();
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
+    const graph = graphFor(graphs, node.kind);
     if (node.stage !== "invalidated") {
       throw refused(`Can't restore: the node is at "${node.stage}", not invalidated`);
     }
@@ -649,10 +696,11 @@ export function block(db: Db, nodeId: string, input: { reason: string; actor: Ac
 /** Returns a blocked node to where it was, including that stage's own `return_stage`. */
 export function unblock(db: Db, nodeId: string, input: { actor: Actor }): NodeView {
   assertHuman(input.actor, "unblock a node");
-  const graph = currentGraph();
+  const graphs = currentGraphs();
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
+    const graph = graphFor(graphs, node.kind);
     if (node.stage !== "externally_blocked" || node.return_stage === null) {
       throw refused(`Can't unblock: the node is at "${node.stage}", not externally_blocked`);
     }
@@ -671,10 +719,11 @@ export function unblock(db: Db, nodeId: string, input: { actor: Actor }): NodeVi
 
 /** Lets an agent create children and edges without any of them starting early. */
 export function splitStart(db: Db, nodeId: string): NodeView {
-  const graph = currentGraph();
+  const graphs = currentGraphs();
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
+    const graph = graphFor(graphs, node.kind);
     assertRunStillOnNode(db, nodeId);
     if (node.stage === "splitting") throw refused("The node is already splitting");
     assertAgentStage(graph, node, "start a split");

@@ -33,6 +33,16 @@ Commands act on your own node (`AOP_NODE_ID`) unless they take an ID. You can on
 | `aop split start` | Begin a split. Children you create are held until it finishes |
 | `aop split finish` | End the split. Your node becomes `broken_down` and the children start |
 
+### Improvements
+An **improvement** is a node that changes how agents work: a skill or a stage prompt. It belongs to no project. You start in the improvements folder, and you never edit real files: you propose their new contents, a human reviews the diff, and a later stage applies it.
+
+| Command | Use |
+|---|---|
+| `aop propose <path> [--from <file>]` | Store a file's proposed contents, from a draft file or stdin. The real file is unchanged |
+| `aop propose <path> --withdraw` | Drop that proposal |
+| `aop proposals [--show <path>]` | List the proposals, or print one |
+| `aop apply [--into <checkout>]` | Write the proposals: to the real files at `save_locally`, or into a worktree at `raise_pr` |
+
 ## Notes
 - Your node's ID is on the `Node:` line of `aop context`.
 - `aop next` and `aop ask` end your turn. Stop working once you've run one.

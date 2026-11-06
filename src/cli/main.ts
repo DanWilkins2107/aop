@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { parseArgs, type ParseArgsConfig } from "node:util";
 import type {
   AgentProcessView,
+  ApplyResult,
+  ProposalView,
   EdgeRow,
   MessageRow,
   NodeView,
@@ -24,10 +28,13 @@ const AGENT_COMMANDS = {
   "node edit": ["aop node edit [<id>] [--title ...] [--body ...]"],
   edge: ["aop edge add blocks <from> <to>", "aop edge remove blocks <from> <to>"],
   split: ["aop split start", "aop split finish"],
+  propose: ["aop propose <path> [--from <file>]", "aop propose <path> --withdraw"],
+  proposals: ["aop proposals [--show <path>]"],
+  apply: ["aop apply [--into <checkout>]"],
 } as const;
 const HUMAN_COMMANDS = {
   init: [
-    "aop init [--yes] [--fill-missing] [--agent-session-command <cmd>] [--out-of-sandbox-command <cmd>] [--open-from <dir>] [--create-open-from] [--agent-timeout-minutes <n>] [--stages <file>]",
+    "aop init [--yes] [--fill-missing] [--agent-session-command <cmd>] [--out-of-sandbox-command <cmd>] [--open-from <dir>] [--create-open-from] [--agent-timeout-minutes <n>] [--stages <file>] [--improvements-path <dir>]",
   ],
   project: ["aop project add <path>"],
   serve: ["aop serve [--port <port>]"],
@@ -240,7 +247,11 @@ async function searchCommand(argv: string[]): Promise<void> {
   const query = new URLSearchParams({ q: positionals.join(" ") });
   const own = process.env["AOP_NODE_ID"];
   // With no node there's no current project to narrow to.
-  if (values.all !== true && own) query.set("project", (await send<NodeView>("GET", nodePath(own))).project_id);
+  if (values.all !== true && own) {
+    const node = await send<NodeView>("GET", nodePath(own));
+    // An improvement belongs to no project, so it searches them all.
+    if (node.kind !== "improvement") query.set("project", node.project_id);
+  }
   const results = await send<SearchResult[]>("GET", `/search?${query}`);
   if (results.length === 0) console.log("No matches.");
   for (const result of results) {
@@ -268,6 +279,70 @@ async function steerCommand(argv: string[]): Promise<void> {
       done();
     });
   });
+}
+
+const improvementPath = (id: string) => `/improvements/${encodeURIComponent(id)}`;
+
+async function readStdin(): Promise<string> {
+  if (process.stdin.isTTY) throw new CliFailure("Pass --from <file>, or pipe the contents in.");
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk as Buffer));
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+/** Stores a file's proposed contents on this improvement. The real file isn't touched. */
+async function proposeCommand(argv: string[]): Promise<void> {
+  const usage = COMMANDS.propose;
+  const { values, positionals } = args(argv, usage, { from: { type: "string" }, withdraw: { type: "boolean" } });
+  const target = resolve(only(positionals, usage));
+  if (values.withdraw === true) {
+    if (values.from !== undefined) throw usageError(usage);
+    await send("DELETE", `${improvementPath(ownNode())}/proposals`, { path: target, actor: ACTOR });
+    console.log(`Withdrew the proposal for ${target}`);
+    return;
+  }
+  let content: string;
+  if (values.from === undefined) {
+    content = await readStdin();
+  } else {
+    try {
+      content = readFileSync(resolve(values.from), "utf8");
+    } catch (error) {
+      throw new CliFailure(`Can't read ${values.from}: ${(error as Error).message}`);
+    }
+  }
+  const proposal = await send<ProposalView>("PUT", `${improvementPath(ownNode())}/proposals`, {
+    path: target,
+    content,
+    actor: ACTOR,
+  });
+  console.log(`Proposed ${proposal.path}${proposal.current === null ? " (new file)" : ""}. The real file is unchanged.`);
+}
+
+async function proposalsCommand(argv: string[]): Promise<void> {
+  const { values, positionals } = args(argv, COMMANDS.proposals, { show: { type: "string" } });
+  if (positionals.length > 0) throw usageError(COMMANDS.proposals);
+  const proposals = await send<ProposalView[]>("GET", `${improvementPath(ownNode())}/proposals`);
+  if (values.show !== undefined) {
+    const wanted = resolve(values.show).toLowerCase();
+    const proposal = proposals.find((p) => p.path.toLowerCase() === wanted || p.display_path === values.show);
+    if (!proposal) throw new CliFailure(`No proposal for ${values.show}`);
+    process.stdout.write(proposal.proposed);
+    return;
+  }
+  if (proposals.length === 0) console.log("No proposals.");
+  for (const p of proposals) console.log(`${p.path}  (${p.current === null ? "new file" : "changes the file"}, last by ${p.updated_by})`);
+}
+
+async function applyCommand(argv: string[]): Promise<void> {
+  const { values, positionals } = args(argv, COMMANDS.apply, { into: { type: "string" } });
+  if (positionals.length > 0) throw usageError(COMMANDS.apply);
+  const result = await send<ApplyResult>("POST", `${improvementPath(ownNode())}/apply`, {
+    actor: ACTOR,
+    ...(values.into !== undefined ? { into: resolve(values.into) } : {}),
+  });
+  for (const path of result.written) console.log(`Wrote ${path}`);
+  for (const path of result.skipped) console.log(`Skipped ${path}: it's outside the repo`);
 }
 
 function printAgents(agents: AgentProcessView[]): void {
@@ -339,6 +414,12 @@ async function run(argv: string[]): Promise<void> {
       movedTo(await send("POST", `${nodePath(ownNode())}/split/${action}`));
       return;
     }
+    case "propose":
+      return proposeCommand(rest);
+    case "proposals":
+      return proposalsCommand(rest);
+    case "apply":
+      return applyCommand(rest);
     case "project": {
       const [action, path, ...extra] = args(rest, COMMANDS.project, {}).positionals;
       if (action !== "add" || path === undefined || extra.length > 0) throw usageError(COMMANDS.project);

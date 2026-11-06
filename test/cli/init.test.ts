@@ -218,6 +218,50 @@ describe("existing config", () => {
   });
 });
 
+describe("improvements", () => {
+  it("sets up the improvement pipeline and the skills folder", async () => {
+    const box = sandbox();
+    expect((await init(box, flags(box))).code).toBe(0);
+    const config = loadConfig(box.home);
+    expect(config.improvementStagesPath).toBe(join(box.home, "improvement_stages.yaml"));
+    expect([...config.improvementGraph!.types.keys()]).toEqual(["improvement"]);
+    expect(config.improvementsDir).toBe(join(box.home, "skills"));
+    expect(statSync(config.improvementsDir).isDirectory()).toBe(true);
+    expect(readFileSync(join(box.home, "config.yaml"), "utf8")).toContain("improvements_path: ./skills");
+  });
+
+  it("takes your own improvements folder, but won't create one inside a git repo", async () => {
+    const box = sandbox();
+    mkdirSync(join(box.root, "dotfiles", ".git"), { recursive: true });
+    const refused = await init(box, flags(box, "--improvements-path", "dotfiles/skills"));
+    expect(refused.code).toBe(1);
+    expect(refused.err).toContain("Create it first");
+    expect(existsSync(box.home)).toBe(false);
+
+    mkdirSync(join(box.root, "dotfiles", "skills"));
+    expect((await init(box, flags(box, "--improvements-path", "dotfiles/skills"))).code).toBe(0);
+    const config = loadConfig(box.home);
+    expect(config.improvementsDir).toBe(join(box.root, "dotfiles", "skills"));
+    expect(config.improvementsRepo).toBe(join(box.root, "dotfiles"));
+  });
+
+  it("adds the improvement defaults to an older config with --fill-missing, and says how to turn them on", async () => {
+    const box = sandbox();
+    expect((await init(box, flags(box))).code).toBe(0);
+    const older = readFileSync(join(box.home, "config.yaml"), "utf8").replace(/\n[^\n]*\nimprovement_stages: .*\n/, "\n");
+    writeFileSync(join(box.home, "config.yaml"), older);
+    rmSync(join(box.home, "improvement_stages.yaml"));
+    rmSync(join(box.home, "prompts", "draft_change.md"));
+
+    const result = await init(box, ["--fill-missing"]);
+    expect(result.code).toBe(0);
+    expect(result.out).toContain(`Wrote ${join(box.home, "improvement_stages.yaml")}`);
+    expect(result.out).toContain("improvement_stages: ./improvement_stages.yaml");
+    expect(existsSync(join(box.home, "prompts", "draft_change.md"))).toBe(true);
+    expect(readFileSync(join(box.home, "config.yaml"), "utf8")).toBe(older);
+  });
+});
+
 describe("open_from", () => {
   it("must exist", async () => {
     const box = sandbox();

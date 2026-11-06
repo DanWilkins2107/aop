@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ChangeFeed } from "../../src/server/changes.js";
-import { startableNodes, type NodeView } from "../../src/server/nodes.js";
+import { graphsOf, startableNodes, type NodeView } from "../../src/server/nodes.js";
 import { RUN_EVENT, Scheduler, SKIP_EVENT } from "../../src/server/scheduler.js";
 import { loadConfig } from "../../src/server/config.js";
 import { harness, type Harness } from "./helpers.js";
@@ -131,7 +131,7 @@ describe("firing", () => {
     const node = await createScheduled();
     at("2026-03-02T10:05:00Z");
     scheduler.tick();
-    const startable = startableNodes(h.db, loadConfig().graph).map((n) => n.id);
+    const startable = startableNodes(h.db, graphsOf(loadConfig())).map((n) => n.id);
     expect(startable).not.toContain(node.id);
     // Its child is on an agent stage, so that one is for the orchestrator.
     expect(startable).toContain(children(node.id)[0]!.id);

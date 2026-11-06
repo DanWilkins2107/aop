@@ -51,7 +51,8 @@ describe("shipped defaults", () => {
 
   it("have a prompt for every agent stage and nothing else", () => {
     const config = loadConfig(installDefaults());
-    const agentStages = [...config.graph.stages].filter(([, s]) => s.turn === "agent").map(([name]) => `${name}.md`);
+    const pools = [...config.graph.stages, ...(config.improvementGraph?.stages ?? [])];
+    const agentStages = pools.filter(([, s]) => s.turn === "agent").map(([name]) => `${name}.md`);
     expect(readdirSync(join(DEFAULTS, "prompts")).sort()).toEqual(agentStages.sort());
   });
 });

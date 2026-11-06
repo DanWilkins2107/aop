@@ -22,8 +22,19 @@ export interface ConfigView {
     agent_timeout_minutes: number;
     stages: string;
     stages_path: string;
+    /** Null when improvements are off. */
+    improvement_stages: string | null;
+    improvement_stages_path: string | null;
+    improvements_path: string;
+    /** `improvements_path`, resolved. */
+    improvements_dir: string;
+    /** The git repo holding it, which Raise PR needs. */
+    improvements_repo: string | null;
   } | null;
 }
+
+/** A node is project work, or an improvement to how agents work, which belongs to no project. */
+export type NodeKind = "work" | "improvement";
 
 export interface NodeRow {
   id: string;
@@ -38,6 +49,7 @@ export interface NodeRow {
   return_stage: string | null;
   spawned_by: string | null;
   claimed_by: "human" | "agent" | null;
+  kind: NodeKind;
 }
 
 export interface NodeView extends NodeRow {
@@ -154,4 +166,60 @@ export interface ProcessView {
   stages_path: string | null;
   problems: string[];
   process: StagesView | null;
+  /** The improvement pipeline, when the config is valid and improvements are on. */
+  improvement_stages_path: string | null;
+  improvement_process: StagesView | null;
+}
+
+/** Where an improvement came from. The IDs are cleared if the source project is deleted; the text stays. */
+export interface ImprovementSource {
+  node_id: string | null;
+  message_id: string | null;
+  project_id: string | null;
+  /** The source message's text, as it was when the improvement was captured. */
+  excerpt: string;
+  node_title: string;
+  /** Null once the project has gone. */
+  project_name: string | null;
+}
+
+export interface ImprovementView {
+  node: NodeView;
+  source: ImprovementSource | null;
+  proposal_count: number;
+}
+
+/** The Improvements tab. `note` says why improvements are off, when they are. */
+export interface ImprovementsList {
+  enabled: boolean;
+  note: string | null;
+  improvements: ImprovementView[];
+}
+
+/** An improvement's page, with what its agents may change. */
+export interface ImprovementDetail extends ImprovementView {
+  improvements_dir: string;
+  /** False hides the outcomes that lead to `raise_pr`. */
+  raise_pr_available: boolean;
+}
+
+/** One proposed file, with the real file's current contents to diff against. */
+export interface ProposalView {
+  id: string;
+  /** Absolute. */
+  path: string;
+  /** Relative to the improvements folder when it's inside it, otherwise the absolute path. */
+  display_path: string;
+  proposed: string;
+  /** Null when the file doesn't exist yet. */
+  current: string | null;
+  updated_at: string;
+  updated_by: "human" | "agent";
+}
+
+export interface ApplyResult {
+  /** Absolute paths written. */
+  written: string[];
+  /** With `into`: proposals outside the repo, which have no place in the checkout. */
+  skipped: string[];
 }

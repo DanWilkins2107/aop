@@ -138,6 +138,7 @@ function nodeAt(stage: string, extra: Partial<NodeView> = {}): NodeView {
     held: false,
     held_by: [],
     claimed_by: null,
+    kind: "work",
     ...extra,
   };
 }

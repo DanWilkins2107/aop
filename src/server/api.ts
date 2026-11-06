@@ -19,7 +19,9 @@ import { addProject, deleteProject, getProject, listProjects, updateProject } fr
 import { deleteLogs } from "./runLog.js";
 import { getRun, projectLogPaths } from "./runs.js";
 import { search } from "./search.js";
-import { describeStages } from "./stages.js";
+import { describeStages, EMPTY_GRAPH } from "./stages.js";
+import { applyProposals } from "./applyProposals.js";
+import { createImprovement, getImprovement, listImprovements, listProposals, propose, withdraw } from "./improvements.js";
 import { prepareSteer } from "./steer.js";
 
 const BUILT_WEB_DIR = fileURLToPath(new URL("../../dist/web", import.meta.url));
@@ -74,6 +76,19 @@ const edgeBody = z.strictObject({
   kind: z.enum(["subtask", "blocks"]),
   actor: actor.default("human"),
 });
+
+const improvementBody = z.strictObject({
+  body: nonBlank,
+  source_message_id: nonBlank.optional(),
+  actor: actor.default("human"),
+});
+const proposalBody = z.strictObject({
+  path: nonBlank,
+  content: z.string().max(1_000_000, "must be at most 1,000,000 characters"),
+  actor: actor.default("human"),
+});
+const withdrawBody = z.strictObject({ path: nonBlank, actor: actor.default("human") });
+const applyBody = z.strictObject({ into: nonBlank.optional(), actor: actor.default("agent") });
 
 async function readBody<S extends z.ZodType>(c: Context, schema: S, emptyAllowed = false): Promise<z.output<S>> {
   const text = await c.req.text();
@@ -214,6 +229,23 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
   app.get("/api/stages", (c) => c.json(describeStages(loadConfig().graph)));
   // For the process page, which still answers when the config is invalid, listing the problems.
   app.get("/api/process", (c) => c.json(describeProcess()));
+
+  app.get("/api/improvement-stages", (c) => c.json(describeStages(loadConfig().improvementGraph ?? EMPTY_GRAPH)));
+
+  // Improvements. Proposals are stored here; only apply writes files, and only where allowedTarget says.
+  app.get("/api/improvements", (c) => c.json(listImprovements(db)));
+  app.post("/api/improvements", async (c) => c.json(createImprovement(db, await readBody(c, improvementBody)), 201));
+  app.get("/api/improvements/:id", (c) => c.json(getImprovement(db, c.req.param("id"))));
+  app.get("/api/improvements/:id/proposals", (c) => c.json(listProposals(db, c.req.param("id"))));
+  app.put("/api/improvements/:id/proposals", async (c) =>
+    c.json(propose(db, c.req.param("id"), await readBody(c, proposalBody))),
+  );
+  app.delete("/api/improvements/:id/proposals", async (c) =>
+    c.json(withdraw(db, c.req.param("id"), await readBody(c, withdrawBody))),
+  );
+  app.post("/api/improvements/:id/apply", async (c) =>
+    c.json(applyProposals(db, c.req.param("id"), await readBody(c, applyBody, true))),
+  );
 
   // Read-only on purpose. Agents can reach this API, so no route may change commands.
   app.get("/api/config", (c) => c.json(describeConfig()));

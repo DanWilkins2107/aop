@@ -7,7 +7,7 @@ import { type AopConfig, loadConfig } from "./config.js";
 import { buildPrompt } from "./context.js";
 import type { Db } from "./db.js";
 import { ConfigError, refused } from "./errors.js";
-import { getNodeRow, holdersOf, markFailed, startableNodes, type NodeRow, type NodeView, getNode } from "./nodes.js";
+import { getNodeRow, graphsOf, holdersOf, markFailed, startableNodes, type NodeRow, type NodeView, getNode } from "./nodes.js";
 import {
   type Identity,
   killConfirmed,
@@ -20,7 +20,7 @@ import {
   sweepRuns,
   waitGone,
 } from "./processes.js";
-import { agentStartPath, getProject } from "./projects.js";
+import { nodeStartPath } from "./projects.js";
 import { newId } from "./records.js";
 import { appendToLog, logPathFor, openLog } from "./runLog.js";
 import {
@@ -195,7 +195,7 @@ export class Orchestrator {
       if (error instanceof ConfigError) return;
       throw error;
     }
-    for (const node of startableNodes(this.db, config.graph)) {
+    for (const node of startableNodes(this.db, graphsOf(config))) {
       if (!this.closingProjects.has(node.project_id)) this.launch(node, config);
     }
   }
@@ -204,7 +204,7 @@ export class Orchestrator {
     const id = newId();
     const logPath = logPathFor(id);
     const run = beginRun(this.db, node, id, logPath);
-    const cwd = agentStartPath(getProject(this.db, node.project_id), config);
+    const cwd = nodeStartPath(this.db, node, config);
     const command = `${config.agent_session_command} ${HEADLESS_AGENT_FLAGS}`;
     appendToLog(logPath, `[aop] run ${id} on node ${node.id}, stage ${node.stage}, at ${run.created_at}\n[aop] ${command}\n[aop] in ${cwd}\n`);
 

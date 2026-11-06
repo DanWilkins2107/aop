@@ -4,7 +4,7 @@ import { loadConfig } from "./config.js";
 import type { Db } from "./db.js";
 import { refused } from "./errors.js";
 import { claim, getNodeRow } from "./nodes.js";
-import { agentStartPath, getProject } from "./projects.js";
+import { nodeStartPath } from "./projects.js";
 
 export function isFolder(path: string): boolean {
   try {
@@ -26,7 +26,7 @@ export function prepareSteer(db: Db, nodeId: string, input: { no_sandbox: boolea
   if (command === undefined) {
     throw refused("aop steer --no-sandbox needs out_of_sandbox_command, which isn't set in config.yaml");
   }
-  const cwd = agentStartPath(getProject(db, node.project_id), config);
+  const cwd = nodeStartPath(db, node, config);
   if (!isFolder(cwd)) throw refused(`Can't open a session: the start folder doesn't exist: ${cwd}`);
 
   // A run on its way out has already given up its claim, but its process is still on the node.

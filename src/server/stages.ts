@@ -86,22 +86,24 @@ function zodProblems(prefix: string, error: z.ZodError): string[] {
 export function validateStages(
   raw: unknown,
   baseDir: string,
+  /** How problems name the file, such as `improvement_stages.yaml`. */
+  fileLabel = "stages.yaml",
 ): { graph: StageGraph; problems: string[] } {
   const problems: string[] = [];
   const graph: StageGraph = { start: "", stages: new Map(), types: new Map() };
 
   const file = fileSchema.safeParse(raw);
   if (!file.success) {
-    return { graph, problems: zodProblems("stages.yaml", file.error) };
+    return { graph, problems: zodProblems(fileLabel, file.error) };
   }
   const poolNames = new Set(Object.keys(file.data.stages));
   const typeNames = new Set(Object.keys(file.data.types));
 
   if (file.data.start === undefined) {
-    problems.push('stages.yaml: the top-level "start" is missing');
+    problems.push(`${fileLabel}: the top-level "start" is missing`);
   } else {
     graph.start = file.data.start;
-    if (!typeNames.has(file.data.start)) problems.push(`stages.yaml: start "${file.data.start}" is not a type`);
+    if (!typeNames.has(file.data.start)) problems.push(`${fileLabel}: start "${file.data.start}" is not a type`);
   }
 
   for (const [name, rawStage] of Object.entries(file.data.stages)) {
@@ -199,10 +201,18 @@ export function describeStages(graph: StageGraph): StagesView {
 }
 
 /** Returns the parsed file and every problem in it. Never throws for bad content. */
-export function loadStagesFile(path: string): { graph: StageGraph; problems: string[] } {
+export function loadStagesFile(path: string, fileLabel?: string): { graph: StageGraph; problems: string[] } {
   const parsed = parseYamlFile(path);
   if (!parsed.ok) {
     return { graph: { start: "", stages: new Map(), types: new Map() }, problems: parsed.problems };
   }
-  return validateStages(parsed.value, dirname(path));
+  return validateStages(parsed.value, dirname(path), fileLabel);
+}
+
+/** A process with nothing in it, for improvements while they're turned off. */
+export const EMPTY_GRAPH: StageGraph = { start: "", stages: new Map(), types: new Map() };
+
+/** Every prompt file the graph's agent stages use. */
+export function promptFiles(graph: StageGraph): string[] {
+  return [...graph.stages.values()].flatMap((stage) => (stage.prompt === undefined ? [] : [stage.prompt]));
 }
