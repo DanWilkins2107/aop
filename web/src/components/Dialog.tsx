@@ -1,5 +1,6 @@
 import { useEffect, useRef, type FormEvent, type ReactNode } from "react";
 import { FOCUSABLE, wrappedFocus } from "../lib/focusTrap.js";
+import { FormError } from "./FormError.js";
 
 /** A modal form. Escape or a click outside closes it, unless `busy`. */
 export function Dialog({
@@ -72,7 +73,7 @@ export function Dialog({
       >
         <h2>{title}</h2>
         {children}
-        {error ? <div className="form-error">{error}</div> : null}
+        <FormError error={error} />
         <div className="dialog-actions">
           <button type="button" disabled={busy} onClick={onClose}>
             Cancel

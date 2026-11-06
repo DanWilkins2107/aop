@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type { ProjectRow } from "../../../src/shared/api.js";
 import { ErrorNotice } from "../components/ErrorNotice.js";
+import { FormError, useFormError } from "../components/FormError.js";
 import { DeleteProjectDialog, RepoPathHint } from "../components/ProjectDialogs.js";
 import { api } from "../lib/api.js";
 import { useLiveData } from "../lib/live.js";
@@ -21,6 +22,7 @@ function DetailsForm({
   const [pathDraft, setPathDraft] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const { busy, error, run } = useAction(reload);
+  const { errorId, describedBy } = useFormError(error);
 
   const name = (nameDraft ?? project.name).trim();
   const path = (pathDraft ?? project.repo_path ?? "").trim();
@@ -51,6 +53,7 @@ function DetailsForm({
         Name
         <input
           maxLength={200}
+          aria-describedby={describedBy}
           value={nameDraft ?? project.name}
           onChange={(e) => {
             setNameDraft(e.target.value);
@@ -65,6 +68,7 @@ function DetailsForm({
         <input
           className="mono"
           spellCheck={false}
+          aria-describedby={describedBy}
           value={pathDraft ?? project.repo_path ?? ""}
           onChange={(e) => {
             setPathDraft(e.target.value);
@@ -73,7 +77,7 @@ function DetailsForm({
         />
       </label>
       <RepoPathHint openFrom={openFrom} />
-      {error ? <div className="form-error">{error}</div> : null}
+      <FormError error={error} id={errorId} />
       <div className="action-row">
         <button type="submit" className="btn-primary" disabled={busy || name === "" || (!nameChanged && !pathChanged)}>
           Save

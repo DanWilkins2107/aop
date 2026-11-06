@@ -1,6 +1,7 @@
 import { Fragment, useLayoutEffect, useRef, useState, type FocusEvent } from "react";
 import type { EventView, NodeView, StagesView } from "../../../../src/shared/api.js";
 import { FINISHED_STAGES } from "../../../../src/shared/builtInStages.js";
+import { FormError } from "../../components/FormError.js";
 import { api, urls } from "../../lib/api.js";
 import { humanize, toTarget } from "../../lib/format.js";
 import { focusIsLost, stageChangeNotice, stillHoldsFocus } from "../../lib/panelFocus.js";
@@ -40,7 +41,7 @@ function SingleAction({
           {label}
         </button>
       </div>
-      {error ? <div className="form-error">{error}</div> : null}
+      <FormError error={error} />
     </div>
   );
 }
@@ -63,7 +64,7 @@ function Outcomes({ node, reload }: { node: NodeView; reload: Reload }) {
           </button>
         ))}
       </div>
-      {error ? <div className="form-error">{error}</div> : null}
+      <FormError error={error} />
     </div>
   );
 }
