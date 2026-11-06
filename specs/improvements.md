@@ -60,6 +60,7 @@ aop proposals [--show <path>]
 ## Applying
 - `aop apply` at `save_locally` writes every proposal to its real path, creating folders, and records an event listing them.
 - `aop apply --into <checkout>` at `raise_pr` writes each proposal to the same place relative to the repo's root inside another checkout of it, such as a git worktree. The repo's own checkout is refused, and files outside the repo are skipped and listed. The agent then commits, pushes, opens the PR and links it.
+- Each file is written beside its target first, then moved into place. If one can't be written, no real file changes. In a checkout given to `--into`, a path that a link leads out of it is refused.
 
 ## UI
 - **Improvements tab:** beside Projects, at the same level. A plain list, newest first, of each title, stage and source, with a quiet "New improvement". No graph.
