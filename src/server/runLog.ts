@@ -7,14 +7,16 @@ function logsFolder(): string {
   return join(aopHome(), "logs");
 }
 
-/** The one place the server writes files of its own: each run's log, under AOP_HOME. Never the config. */
+/**
+ * The one place the server writes files of its own: each run's log, under AOP_HOME. Never the config.
+ * Only works out the path, so it can't fail: the first write makes the folder.
+ */
 export function logPathFor(runId: string): string {
-  const folder = logsFolder();
-  mkdirSync(folder, { recursive: true });
-  return join(folder, `${runId}.log`);
+  return join(logsFolder(), `${runId}.log`);
 }
 
 export function appendToLog(path: string, text: string): void {
+  mkdirSync(dirname(path), { recursive: true });
   appendFileSync(path, text);
 }
 

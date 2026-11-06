@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { agentToolFor, HEADLESS_AGENT_FLAGS, readableLines, StreamJsonUsage } from "../../src/server/agentOutput.js";
 import { aopHome } from "../../src/server/paths.js";
+import { decideRunEnd, LOST_RUN_REASON, type RunEndInput, type RunEnding, type StopReason } from "../../src/server/runs.js";
 import type { LogTail, RunView } from "../../src/shared/api.js";
 import { directives, until, world, type World } from "./agents.helpers.js";
 
@@ -102,6 +103,106 @@ async function eventually<T>(what: string, check: () => Promise<T | null | false
     await new Promise((done) => setTimeout(done, 100));
   }
 }
+
+describe("what a run's end means", () => {
+  const running = { status: "running", left_via: null, shutting_down: 0 } as const;
+  const exited = (stopReason: StopReason | null, extra: Partial<Extract<RunEnding, { kind: "exited" }>> = {}): RunEnding => ({
+    kind: "exited",
+    stopReason,
+    exitCode: 0,
+    signal: null,
+    launchError: null,
+    timeoutMinutes: 60,
+    ...extra,
+  });
+  const decide = (input: Partial<RunEndInput> & Pick<RunEndInput, "ending">) =>
+    decideRunEnd({ run: running, reported: false, nodeExists: true, ...input });
+
+  it("decides nothing for a run that's gone, already closed, or whose node is gone", () => {
+    expect(decide({ run: undefined, ending: exited(null) })).toBeNull();
+    expect(decide({ run: { status: "exited", left_via: null, shutting_down: 0 }, ending: exited(null) })).toBeNull();
+    expect(decide({ run: { status: "exited", left_via: null, shutting_down: 0 }, ending: { kind: "lost" } })).toBeNull();
+    expect(decide({ nodeExists: false, ending: exited("project_deleted") })).toBeNull();
+  });
+
+  it("a node that moved on while the run went is reported if the agent moved it, stopped if not, and its claim left alone", () => {
+    for (const ending of [exited(null), exited("moved_on"), exited("timeout"), exited("human"), { kind: "lost" } as const]) {
+      expect(decide({ run: { status: "running", left_via: "next", shutting_down: 0 }, reported: true, ending })).toEqual({
+        outcome: "reported",
+        timedOut: false,
+        then: { kind: "none" },
+      });
+      expect(decide({ run: { status: "running", left_via: "move", shutting_down: 0 }, ending })).toEqual({
+        outcome: "stopped",
+        timedOut: false,
+        then: { kind: "none" },
+      });
+    }
+  });
+
+  it("each stop by AOP or a human gets its own outcome, and none of them fails the node", () => {
+    expect(decide({ ending: exited("human") })).toEqual({ outcome: "stopped", timedOut: false, then: { kind: "hand_to_human" } });
+    expect(decide({ ending: exited("held") })).toEqual({ outcome: "held", timedOut: false, then: { kind: "release_claim", via: "held" } });
+    expect(decide({ ending: exited("shutdown") })).toEqual({
+      outcome: "shutdown",
+      timedOut: false,
+      then: { kind: "release_claim", via: "shutdown" },
+    });
+    for (const reason of ["moved_on", "project_deleted"] as const) {
+      expect(decide({ ending: exited(reason) })).toEqual({ outcome: "stopped", timedOut: false, then: { kind: "release_claim", via: "stop" } });
+    }
+  });
+
+  it("a timeout fails the node and is flagged as one", () => {
+    expect(decide({ ending: exited("timeout", { exitCode: null, signal: "SIGTERM", timeoutMinutes: 5 }) })).toEqual({
+      outcome: "failed",
+      timedOut: true,
+      then: { kind: "mark_failed", reason: "The agent ran past agent_timeout_minutes (5)." },
+    });
+  });
+
+  it("an exit with no report fails the node, saying how it exited", () => {
+    const reasonOf = (ending: RunEnding) => {
+      const decision = decide({ ending });
+      expect(decision).toMatchObject({ outcome: "failed", timedOut: false, then: { kind: "mark_failed" } });
+      return (decision?.then as { reason: string }).reason;
+    };
+    expect(reasonOf(exited(null, { exitCode: 0 }))).toBe("The agent exited without reporting an outcome (exit code 0).");
+    expect(reasonOf(exited(null, { exitCode: 3 }))).toBe("The agent exited without reporting an outcome (exit code 3).");
+    expect(reasonOf(exited(null, { exitCode: null, signal: "SIGKILL" }))).toBe(
+      "The agent exited without reporting an outcome (signal SIGKILL).",
+    );
+    expect(reasonOf(exited(null, { exitCode: null, launchError: "spawn ENOENT" }))).toBe("The agent couldn't be launched: spawn ENOENT");
+  });
+
+  it("an agent's report counts only once its node has moved on", () => {
+    // `reported` is about how the node left the stage, so it means nothing while the node is still there.
+    expect(decide({ reported: true, ending: exited(null) })).toMatchObject({ outcome: "failed" });
+  });
+
+  it("a run lost when the server went down fails its node, as only a crash does", () => {
+    expect(decide({ ending: { kind: "lost" } })).toEqual({
+      outcome: "failed",
+      timedOut: false,
+      then: { kind: "mark_failed", reason: LOST_RUN_REASON },
+    });
+  });
+
+  it("a run a clean shutdown began stopping goes back in the queue, even if its process outlived the shutdown", () => {
+    const stopping = { status: "running", left_via: null, shutting_down: 1 } as const;
+    const requeued = { outcome: "shutdown", timedOut: false, then: { kind: "release_claim", via: "shutdown" } };
+    expect(decide({ run: stopping, ending: { kind: "lost" } })).toEqual(requeued);
+    expect(decide({ run: stopping, ending: exited("shutdown") })).toEqual(requeued);
+    // Exited by itself after the shutdown began, before the kill came.
+    expect(decide({ run: stopping, ending: exited(null, { exitCode: 1 }) })).toEqual(requeued);
+    // A stop already under way, or a node that had moved on, still decides.
+    expect(decide({ run: stopping, ending: exited("human") })).toMatchObject({ then: { kind: "hand_to_human" } });
+    expect(decide({ run: stopping, ending: exited("timeout") })).toMatchObject({ outcome: "failed", timedOut: true });
+    expect(decide({ run: { ...stopping, left_via: "next" }, reported: true, ending: { kind: "lost" } })).toMatchObject({
+      outcome: "reported",
+    });
+  });
+});
 
 describe("runs on a node", () => {
   it("Claude Code gets stream-json, and its runs show context consumed and a readable tail", TIMEOUT, async () => {
