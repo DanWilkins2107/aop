@@ -9,6 +9,8 @@ out_of_sandbox_command: claude            # optional, only for aop steer --no-sa
 open_from: ~/code                         # where sessions start for projects with no path
 agent_timeout_minutes: 60
 stages: ./stages.yaml                     # link to the stages config, which can be anywhere
+improvement_stages: ./improvement_stages.yaml   # optional: see improvements.md
+improvements_path: ./skills               # what improvements may change, with the stage prompts
 ```
 
 Launched agents run `agent_session_command`, and AOP adds what it needs to run without a terminal: `-p`, with the prompt on stdin. For Claude Code it also asks for streamed JSON output, so it can record context consumed per run and show a readable log. Other tools show what AOP can read. AOP doesn't ship a sandbox or check that the command is one.
@@ -17,7 +19,7 @@ Launched agents run `agent_session_command`, and AOP adds what it needs to run w
 ## Running a stage
 1. A node entering an agent stage is queued.
 2. It starts once it's unclaimed, no `blocks` edge holds it and it isn't invalidated by a parent. There is no limit on how many agents run at once.
-3. Each stage is a fresh process, started in the project's path, or `open_from` if it has none. Its prompt goes in on stdin, built from a short instruction to load the plugin's `aop-context` and `aop-rulebook` skills, the output of `aop context` for the node, and the stage's prompt file. AOP generates that output itself, so an agent always knows where it is in the tree.
+3. Each stage is a fresh process, started in the project's path, or `open_from` if it has none. Improvements start in `improvements_path`. Its prompt goes in on stdin, built from a short instruction to load the plugin's `aop-context` and `aop-rulebook` skills, the output of `aop context` for the node, and the stage's prompt file. AOP generates that output itself, so an agent always knows where it is in the tree.
 4. The agent finishes with `aop next <outcome>`, `aop ask "..."` or by exiting. Only outcomes in that stage's `next` are accepted.
 5. Exiting without either, or running past `agent_timeout_minutes`, moves the node to `failed`. Nothing retries automatically.
 
