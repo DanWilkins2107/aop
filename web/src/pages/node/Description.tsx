@@ -1,26 +1,16 @@
 import { useState } from "react";
 import type { NodeView } from "../../../../src/shared/api.js";
-import { api, failureText } from "../../lib/api.js";
+import { api } from "../../lib/api.js";
+import { useAction } from "../../lib/useAction.js";
 
 export function Description({ node, reload }: { node: NodeView; reload: () => Promise<void> }) {
   // Null while reading, so that live updates show through unless there's a draft to protect.
   const [draft, setDraft] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { busy, error, run } = useAction(reload);
 
   async function save() {
     if (draft === null) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await api.editBody(node.id, draft);
-      await reload();
-      setDraft(null);
-    } catch (failure) {
-      setError(failureText(failure));
-    } finally {
-      setBusy(false);
-    }
+    if (await run(() => api.editBody(node.id, draft))) setDraft(null);
   }
 
   return (

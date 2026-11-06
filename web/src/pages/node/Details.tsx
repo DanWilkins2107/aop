@@ -5,10 +5,10 @@ import { Dialog } from "../../components/Dialog.js";
 import { api } from "../../lib/api.js";
 import { humanize } from "../../lib/format.js";
 import { FINISHED_STAGES } from "../../lib/stageStyle.js";
+import { useAction } from "../../lib/useAction.js";
 import { Edges } from "./Edges.js";
 import { History } from "./History.js";
 import { MoveForm } from "./MoveForm.js";
-import { useAction } from "./useAction.js";
 
 type Reload = () => Promise<void>;
 

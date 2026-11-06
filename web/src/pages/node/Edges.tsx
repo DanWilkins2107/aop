@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import type { EdgeRow, NodeView } from "../../../../src/shared/api.js";
 import { api, ApiFailure, failureText } from "../../lib/api.js";
 import { humanize } from "../../lib/format.js";
+import { useAction } from "../../lib/useAction.js";
 
 /** An edge as seen from this node. `outgoing` means this node is its source. */
 const RELATIONS = [
@@ -15,6 +16,11 @@ const RELATIONS = [
 function relationOf(edge: EdgeRow, nodeId: string) {
   const outgoing = edge.source_id === nodeId;
   return RELATIONS.find((r) => r.kind === edge.kind && r.outgoing === outgoing);
+}
+
+function describeFailure(failure: unknown): string {
+  const duplicate = failure instanceof ApiFailure && failure.code === "constraint_violation";
+  return duplicate ? "Those two nodes already have that edge." : failureText(failure);
 }
 
 export function Edges({
@@ -30,24 +36,12 @@ export function Edges({
 }) {
   const [relation, setRelation] = useState<(typeof RELATIONS)[number]["value"]>("parent");
   const [other, setOther] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { busy, error, run } = useAction(reload, describeFailure);
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const candidates = nodes.filter((n) => n.id !== node.id);
 
   async function act(action: () => Promise<unknown>) {
-    setBusy(true);
-    setError(null);
-    try {
-      await action();
-      setOther("");
-      await reload();
-    } catch (failure) {
-      const duplicate = failure instanceof ApiFailure && failure.code === "constraint_violation";
-      setError(duplicate ? "Those two nodes already have that edge." : failureText(failure));
-    } finally {
-      setBusy(false);
-    }
+    if (await run(action)) setOther("");
   }
 
   function add() {
