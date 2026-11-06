@@ -233,4 +233,13 @@ CREATE TRIGGER messages_fts_delete AFTER DELETE ON messages
 BEGIN DELETE FROM messages_fts WHERE rowid = OLD.rowid; END;
 `,
   },
+  {
+    version: 7,
+    // Lookups made for every node on every read of a project, and on every scheduler pass, which
+    // otherwise scan the whole table: a node's latest run, and a scheduled node's latest child.
+    sql: `
+CREATE INDEX runs_node ON runs(node_id);
+CREATE INDEX nodes_spawned_by ON nodes(spawned_by) WHERE spawned_by IS NOT NULL;
+`,
+  },
 ];
