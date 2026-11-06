@@ -1,0 +1,48 @@
+/* ---- messages ---- */
+
+/* One card per visit to a stage, inside the Messages card. Quiet grey, so the white human
+   messages stand out, with a thin edge in the stage's colour set inline. */
+.visit {
+  margin-top: 12px;
+  padding: 8px 10px 10px;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: 6px;
+}
+.visit-stage {
+  font-weight: 500;
+  margin: 0;
+}
+.message {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  min-width: 0;
+}
+.message-agent {
+  background: #e7f1fc;
+  border-color: #c9dcf2;
+}
+.message-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 8px;
+  font-size: 12.5px;
+}
+.message-author {
+  font-weight: 600;
+}
+.message-context {
+  color: #495057;
+}
+.message-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.composer + .section-text {
+  margin-top: 12px;
+}
