@@ -1,5 +1,5 @@
 import type { EventView, NodeView, StagesView } from "../../../../src/shared/api.js";
-import { api } from "../../lib/api.js";
+import { api, urls } from "../../lib/api.js";
 import { humanize, toTarget } from "../../lib/format.js";
 import { FINISHED_STAGES } from "../../lib/stageStyle.js";
 import { useAction } from "../../lib/useAction.js";
@@ -99,7 +99,7 @@ function Content({
           />
           {node.last_run_id ? (
             <p className="action-text">
-              <a className="inline-link" href={`/api/runs/${encodeURIComponent(node.last_run_id)}/log`} target="_blank" rel="noreferrer">
+              <a className="inline-link" href={urls.runLog(node.last_run_id)} target="_blank" rel="noreferrer">
                 View log
               </a>
             </p>
