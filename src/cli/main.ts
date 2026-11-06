@@ -17,6 +17,7 @@ const AGENT_COMMANDS = {
   context: ["aop context [<id>]"],
   next: ["aop next <outcome>"],
   ask: ['aop ask "..."'],
+  fail: ['aop fail "<reason>"'],
   message: ['aop message "..." [--node <id>]'],
   link: ["aop link pr|ticket <url>"],
   search: ["aop search <query> [--all]"],
@@ -311,6 +312,11 @@ async function run(argv: string[]): Promise<void> {
     case "ask": {
       const question = only(args(rest, COMMANDS.ask, {}).positionals, COMMANDS.ask);
       movedTo(await send("POST", `${nodePath(ownNode())}/ask`, { question }));
+      return;
+    }
+    case "fail": {
+      const reason = only(args(rest, COMMANDS.fail, {}).positionals, COMMANDS.fail);
+      movedTo(await send("POST", `${nodePath(ownNode())}/fail`, { reason, actor: ACTOR }));
       return;
     }
     case "message": {

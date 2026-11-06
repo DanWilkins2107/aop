@@ -25,6 +25,7 @@ Commands act on your own node (`AOP_NODE_ID`) unless they take an ID. You can on
 | `aop message "..." [--node <id>]` | Post a message, on your node or another |
 | `aop link pr\|ticket <url>` | Attach a PR or ticket link to your node |
 | `aop ask "..."` | Ask a human. The node waits, and this stage restarts with the answer. Then exit |
+| `aop fail "<reason>"` | Mark your node failed, only when the work can't be done and asking won't help. Then exit |
 | `aop next <outcome>` | Finish the stage with one outcome. Then exit |
 | `aop node create --title ... [--body ...] [--parent <id>] [--project ...] [--type ... \| --stage ...]` | Create a node. `--type` starts it at that type's first stage; `--stage` starts it exactly there |
 | `aop node edit [<id>] [--title ...] [--body ...]` | Edit a title or description |
@@ -35,6 +36,6 @@ Commands act on your own node (`AOP_NODE_ID`) unless they take an ID. You can on
 
 ## Notes
 - Your node's ID is on the `Node:` line of `aop context`.
-- `aop next` and `aop ask` end your turn. Stop working once you've run one.
+- `aop next`, `aop ask` and `aop fail` end your turn. Stop working once you've run one.
 - Exiting without `aop next` or `aop ask` marks the node failed, so always finish with one.
 - Every edit is recorded, so act on other nodes only when your stage needs it.

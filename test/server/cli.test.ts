@@ -57,8 +57,8 @@ describe("the agent commands", () => {
     expect((await aop(["context", node.id])).stdout).toBe(fromEnv.stdout);
   });
 
-  it("next, ask and split need a node from the environment", TIMEOUT, async () => {
-    for (const args of [["next", "x"], ["ask", "x"], ["split", "start"], ["split", "finish"], ["context"]]) {
+  it("next, ask, fail and split need a node from the environment", TIMEOUT, async () => {
+    for (const args of [["next", "x"], ["ask", "x"], ["fail", "x"], ["split", "start"], ["split", "finish"], ["context"]]) {
       const res = await aop(args);
       expect(res.code).toBe(1);
       expect(res.stderr).toContain("AOP_NODE_ID");
@@ -72,6 +72,20 @@ describe("the agent commands", () => {
     expect(res.stderr).toContain("human turn");
     expect(w.node(node.id).stage).toBe("pr_review");
     expect((await aop(["ask", "?"], { node: node.id })).code).toBe(1);
+  });
+
+  it("fail marks the agent's own node failed as the agent, posting the reason", TIMEOUT, async () => {
+    const node = await w.create(directives("hang"));
+    await w.runStarted(node.id);
+    const res = await aop(["fail", "The service it needs is gone"], { node: node.id });
+    expect(res.code).toBe(0);
+    expect(res.stdout).toContain("failed");
+    expect(w.node(node.id)).toMatchObject({ stage: "failed" });
+    const changed = (await eventsOf(node.id)).filter((e) => e.kind === "stage_changed").at(-1);
+    expect(changed).toMatchObject({ actor: "agent", data: { via: "fail", reason: "The service it needs is gone" } });
+    const messages = (await w.call<MessageRow[]>("GET", `/nodes/${node.id}/messages`)).body;
+    expect(messages.at(-1)).toMatchObject({ author: "agent", stage: "failed", body: "The service it needs is gone" });
+    expect((await aop(["fail"], { node: node.id })).code).toBe(2);
   });
 
   it("an unavailable outcome lists the ones that are", TIMEOUT, async () => {
