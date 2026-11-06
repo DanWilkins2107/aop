@@ -7,6 +7,7 @@ import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { z } from "zod";
+import type { ApiErrorBody, ApiErrorCode } from "../shared/api.js";
 import {
   actorBody,
   addProjectBody,
@@ -67,8 +68,9 @@ async function readBody<S extends z.ZodType>(c: Context, schema: S, emptyAllowed
   return parsed.data;
 }
 
-function errorResponse(c: Context, status: ContentfulStatusCode, code: string, message: string, details?: unknown) {
-  return c.json({ error: { code, message, ...(details !== undefined ? { details } : {}) } }, status);
+function errorResponse(c: Context, status: ContentfulStatusCode, code: ApiErrorCode, message: string, details?: unknown) {
+  const body: ApiErrorBody = { error: { code, message, ...(details !== undefined ? { details } : {}) } };
+  return c.json(body, status);
 }
 
 /** The Origins of pages this server could have served, given the Host it was reached on. */

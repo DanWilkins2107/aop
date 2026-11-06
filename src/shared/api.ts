@@ -23,6 +23,25 @@ export type MessageRequest = RequestOf<typeof requests.messageBody>;
 export type LinkRequest = RequestOf<typeof requests.linkBody>;
 export type EdgeRequest = RequestOf<typeof requests.edgeBody>;
 
+/** Every `code` the API refuses a request with. */
+export type ApiErrorCode =
+  | "bad_request"
+  | "not_found"
+  | "refused"
+  | "repo_path_not_absolute"
+  | "repo_path_not_found"
+  | "repo_path_taken"
+  | "config_invalid"
+  | "constraint_violation"
+  | "forbidden_host"
+  | "forbidden_origin"
+  | "internal_error";
+
+/** The body of every error response. `config_invalid` carries the problems, as strings, in `details`. */
+export interface ApiErrorBody {
+  error: { code: ApiErrorCode; message: string; details?: unknown };
+}
+
 export type Actor = "human" | "agent" | "system";
 export type Turn = "agent" | "human";
 

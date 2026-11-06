@@ -5,6 +5,7 @@ import type {
   ActorRequest,
   AddProjectRequest,
   AgentProcessView,
+  ApiErrorBody,
   AskRequest,
   CreateNodeRequest,
   EdgeRequest,
@@ -83,7 +84,7 @@ const notTheApi = () => new CliFailure(`What answered at ${serverUrl()} isn't th
 /** The API's own error, if that's what the body is. */
 function apiError(text: string): { message: string; details?: unknown } | undefined {
   try {
-    const { error } = JSON.parse(text) as { error?: { message?: unknown; details?: unknown } };
+    const { error } = JSON.parse(text) as { error?: Partial<ApiErrorBody["error"]> };
     if (typeof error?.message === "string") return { message: error.message, details: error.details };
   } catch {
     // Not JSON, or JSON null.

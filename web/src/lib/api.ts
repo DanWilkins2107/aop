@@ -1,6 +1,8 @@
 import type {
   AddProjectRequest,
   AnswerRequest,
+  ApiErrorBody,
+  ApiErrorCode,
   BlockRequest,
   ConfigView,
   CreateNodeRequest,
@@ -21,20 +23,16 @@ import type {
   UpdateProjectRequest,
 } from "../../../src/shared/api.js";
 
-/** A refusal from the API, or a failure to reach it. */
+/** A refusal from the API, or a failure to reach it, or an answer that isn't the API's error shape. */
 export class ApiFailure extends Error {
   constructor(
     message: string,
-    readonly code: string,
+    readonly code: ApiErrorCode | "unreachable" | "unknown",
     readonly details?: unknown,
   ) {
     super(message);
     this.name = "ApiFailure";
   }
-}
-
-interface ErrorBody {
-  error?: { code: string; message: string; details?: unknown };
 }
 
 async function send<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -51,7 +49,7 @@ async function send<T>(method: string, path: string, body?: unknown): Promise<T>
   }
   const payload: unknown = await response.json().catch(() => null);
   if (!response.ok) {
-    const error = (payload as ErrorBody | null)?.error;
+    const error = (payload as Partial<ApiErrorBody> | null)?.error;
     throw new ApiFailure(error?.message ?? `Request failed (${response.status})`, error?.code ?? "unknown", error?.details);
   }
   return payload as T;
