@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { holdersOf, type EventView, type NodeView } from "../../src/server/nodes.js";
+import { holdersOf, type EventView, type MessageRow, type NodeView } from "../../src/server/nodes.js";
 import { harness, makeRepo, STAGES_YAML, type Harness } from "./helpers.js";
 
 let h: Harness;
@@ -451,6 +451,16 @@ describe("fail and retry", () => {
     const node = await h.create("dev");
     expect((await h.post(node.id, "fail", { actor: "human" })).status).toBe(409);
     expect((await h.node(node.id)).stage).toBe("write_spec");
+  });
+
+  it("lets the node's own agent fail it at a dead end, posting its reason", async () => {
+    const node = await h.create("dev");
+    const failed = await h.post(node.id, "fail", { actor: "agent", reason: "The API it needs was removed" });
+    expect(failed.body).toMatchObject({ stage: "failed", return_stage: "write_spec" });
+    expect((await stageEvents(node.id))[0]).toMatchObject({ via: "fail", reason: "The API it needs was removed" });
+    const messages = await h.call<MessageRow[]>("GET", `/api/nodes/${node.id}/messages`);
+    expect(messages.body.at(-1)).toMatchObject({ author: "agent", stage: "failed", body: "The API it needs was removed" });
+    expect((await h.post(node.id, "retry")).body.stage).toBe("write_spec");
   });
 
   it("refuses next while failed", async () => {

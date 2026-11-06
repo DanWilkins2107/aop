@@ -542,9 +542,10 @@ export function fail(
   nodeId: string,
   input: { actor: Actor; reason?: string | undefined },
 ): NodeView {
-  // `failed` is AOP's record of a run that ended without finishing. A human stops the run instead.
+  // `failed` is AOP's record of a run that ended without finishing, or the node's own agent reporting
+  // a dead end. A human stops the run instead.
   if (input.actor === "human") {
-    throw refused("Only AOP marks a node failed. Stop its agent run, or move the node");
+    throw refused("Only AOP or the node's own agent marks a node failed. Stop its agent run, or move the node");
   }
   const graph = currentGraph();
 
@@ -560,6 +561,10 @@ export function fail(
       actor: input.actor,
       ...(input.reason !== undefined ? { detail: { reason: input.reason } } : {}),
     });
+    // As with a question, an agent's reason goes on the node for the human who picks it up.
+    if (input.actor === "agent" && input.reason !== undefined) {
+      postMessage(db, node.id, "failed", "agent", input.reason);
+    }
   })();
   return getNode(db, nodeId);
 }

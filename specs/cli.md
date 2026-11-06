@@ -9,6 +9,7 @@ AOP sets `AOP_NODE_ID` when it launches an agent, so commands act on that agent'
 aop context [<id>]          # where the node sits in the tree, its description, messages, links and outcomes
 aop next <outcome>
 aop ask "..."
+aop fail "<reason>"         # only when the work can't be done and asking won't help
 aop message "..." [--node <id>]
 aop link pr|ticket <url>
 aop search <query>
@@ -20,7 +21,7 @@ aop split start
 aop split finish
 ```
 
-- An agent can only move its own node. `next`, `ask` and the split commands take no ID.
+- An agent can only move its own node. `next`, `ask`, `fail` and the split commands take no ID.
 - Reading other nodes, messaging them, and editing titles and bodies are allowed. Agents are trusted to behave on the board, and every edit is recorded in `events`.
 - During `split_approved`, the agent chooses each child's type or stage with `aop node create`.
 
