@@ -102,6 +102,8 @@ export class Orchestrator {
   private readonly background = new Set<Promise<unknown>>();
   private url = "";
   private running = false;
+  /** Set for good by `shutdown`, which can come while `start` is still waiting on its first sweep. */
+  private shutDown = false;
   private kicked = false;
   private reaping: Promise<ReapResult> | null = null;
   private timers: NodeJS.Timeout[] = [];
@@ -123,6 +125,8 @@ export class Orchestrator {
     this.url = url;
     prepareSweeps();
     await this.reap();
+    // Shut down while the sweep above ran, such as Ctrl+C during a slow startup: start nothing.
+    if (this.shutDown) return;
     this.releaseStrandedClaims();
     this.running = true;
     this.unsubscribe = this.changes.subscribe(() => this.kick());
@@ -137,6 +141,7 @@ export class Orchestrator {
 
   /** Stops every agent and puts its node back in the queue for the next start. */
   async shutdown(): Promise<void> {
+    this.shutDown = true;
     this.running = false;
     this.unsubscribe?.();
     for (const timer of this.timers) clearInterval(timer);
@@ -501,7 +506,19 @@ export class Orchestrator {
     // carrying its marker is killed straight away. That reaches what the record doesn't: a child
     // started after it was written, or a crash before the start times were read.
     const lost = rows.filter((row) => !this.active.has(row.id)).map((row) => row.id);
-    const swept = lost.length === 0 ? [] : ((await sweepRuns(lost, true)) ?? []);
+    // A crash between opening a run and recording its process leaves a `running` row with no process
+    // on record, but whatever was launched still carries the run's marker.
+    const recorded = new Set(rows.map((row) => row.id));
+    const unrecorded = runningRuns(this.db)
+      .filter((run) => !this.active.has(run.id) && !recorded.has(run.id))
+      .map((run) => run.id);
+    const targets = [...lost, ...unrecorded];
+    const swept = targets.length === 0 ? [] : ((await sweepRuns(targets, true)) ?? []);
+    for (const found of swept) {
+      if (unrecorded.includes(found.runId)) {
+        result.killed.push({ run_id: found.runId, pid: found.pid, reason: "AOP never recorded its process" });
+      }
+    }
 
     for (const row of rows) {
       if (!this.db.open) return result;

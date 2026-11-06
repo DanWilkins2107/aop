@@ -9,7 +9,7 @@ One TypeScript Node process per machine serves the API and the built Vite app, o
 - A node on a stage that no longer exists in `stages.yaml` is flagged for a human to move.
 
 ## Schema
-Every table has `id TEXT PRIMARY KEY` and `created_at TEXT NOT NULL`. All foreign keys are `NOT NULL`, with deletes restricted.
+Every table has `id TEXT PRIMARY KEY` and `created_at TEXT NOT NULL`. All foreign keys are `NOT NULL` except `spawned_by`, with deletes restricted.
 
 | Table | Columns and constraints |
 |---|---|

@@ -63,7 +63,7 @@ export function runningRuns(db: Db): RunRow[] {
 
 /** Whether the agent itself finished the stage, which earns it a moment to exit, or someone moved it off. */
 export function agentReported(run: RunRow): boolean {
-  return run.left_actor === "agent" && ["next", "ask", "split_finish"].includes(run.left_via ?? "");
+  return run.left_actor === "agent" && ["next", "ask", "fail", "split_finish"].includes(run.left_via ?? "");
 }
 
 /** Takes the node's claim and opens its run, together, so that nothing else can start on it. */
