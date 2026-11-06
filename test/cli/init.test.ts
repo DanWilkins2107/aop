@@ -246,7 +246,7 @@ describe("existing config", () => {
     const inRepo = { ...box, home: join(box.root, "repo", ".aop") };
     const result = await init(inRepo, flags(box));
     expect(result.code).toBe(1);
-    expect(result.err).toContain("never writes to repos");
+    expect(result.err).toContain("keeps its own files out of git repos");
     expect(existsSync(inRepo.home)).toBe(false);
   });
 });

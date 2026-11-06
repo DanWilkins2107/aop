@@ -4,7 +4,7 @@ For installing AOP and creating your first node, see [setup.md](setup.md).
 ## Projects
 Projects are a way of organising different bits of work done with aop into logical groups.
 
-- A project needs only a name. A repo path is optional: agents start in it, or in `open_from` from your config if there isn't one. AOP never writes to the repo.
+- A project needs only a name. A repo path is optional: agents start in it, or in `open_from` from your config if there isn't one.
 - Add one with **Add project** on the home page, or `aop project add <path>`.
 - Each project has a settings page for its name, path and delete. Deleting is permanent, asks you to type the project's name, stops its agents first and never touches the repo.
 

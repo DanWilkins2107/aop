@@ -134,7 +134,7 @@ function ensureImprovementsFolder(path: string, say: (text: string) => void): vo
   }
   const repo = repoAround(path);
   if (repo !== undefined) {
-    throw new InitFailure(`improvements_path ${path} doesn't exist, and it's inside the git repo ${repo}, which AOP never writes to. Create it first.`);
+    throw new InitFailure(`improvements_path ${path} doesn't exist, and it's inside the git repo ${repo}, so AOP won't create it. Create it first.`);
   }
   mkdirSync(path, { recursive: true });
   say(`Created ${path}`);
@@ -272,7 +272,7 @@ async function init(argv: string[], io: InitIo): Promise<void> {
   const home = aopHome(io.env, io.cwd);
   const repo = repoAround(home);
   if (repo !== undefined) {
-    throw new InitFailure(`${home} is inside the git repo ${repo}. AOP never writes to repos. Set AOP_HOME to a folder outside it.`);
+    throw new InitFailure(`${home} is inside the git repo ${repo}. AOP keeps its own files out of git repos. Set AOP_HOME to a folder outside it.`);
   }
   const configFile = configPath(home);
   const configExists = existsSync(configFile);

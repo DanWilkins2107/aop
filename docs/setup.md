@@ -17,7 +17,7 @@ You need Node 22 or newer.
 To update, run `git pull` in the clone and restart `aop serve`. It rebuilds itself when the sources have changed.
 
 ## aop init
-`aop init` creates `~/.aop`, which holds your config and database. Nothing is ever added to the repos you work in. It asks for:
+`aop init` creates `~/.aop`, which holds your config and database. It asks for:
 
 1. **Agent session command** (required). What AOP runs to start an agent. AOP adds `-p` and sends the prompt on stdin. Defaults to `claude --permission-mode auto`, or `copilot` if that's the only tool you have.
    - AOP doesn't ship a sandbox. Point this at your own sandboxed wrapper before you let agents run unattended.

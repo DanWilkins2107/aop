@@ -24,7 +24,7 @@
 - Never bind port 4317 (the user's real server) or 4318. Servers in tests use port 0. `test/server/setup.ts` gives every test file a throwaway `AOP_HOME` and `AOP_PORT=0`.
 - Never touch the real `~/.aop`. Build every state path from `aopHome()` in `src/server/paths.ts`, and in tests use `makeHome()`, `harness()` or `world()`.
 - Never launch real agent tools (`claude`, `copilot`) in tests. Agents are `test/fixtures/fake-agent.mjs`, driven by `@@` lines in the node body or prompt (listed at the top of that file).
-- AOP stays invisible in user repos: it never writes to a project's path, and tests check the folder is unchanged. The plugin tells agents never to mention AOP in anything committed or published.
+- AOP keeps its own files out of user repos: the server never writes to a project's path, and tests check the folder is unchanged. The plugin tells agents never to mention AOP in anything committed or published.
 - Agents can reach the API, so no route may change commands or `config.yaml`. `actor` is self-reported.
 - Migrations are append-only: add a step to the end of the list in `migrations.ts`, and never edit, remove or reorder one. A step's version is its place in the list, so there are no numbers to collide at merge. `schema.test.ts` upgrades a database from every earlier version.
 - The dev machine is Windows. Keep scripts and paths cross-platform, and expect process lookups to be slow there.
