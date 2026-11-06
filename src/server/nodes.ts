@@ -1,6 +1,6 @@
 // Everything a caller does with nodes, in one place, so `api.ts` can use it as `nodes.*`. The rules
 // live in the modules re-exported here: `stageMachine.ts` (every stage change and stage action),
-// `claims.ts`, `messages.ts` (messages and links), `edges.ts`, `nodeViews.ts` (views and holders)
+// `schedule.ts`, `claims.ts`, `messages.ts` (messages and links), `edges.ts`, `nodeViews.ts` (views and holders)
 // and `nodeCore.ts` (what they share). Events are read here.
 
 import type { Db } from "./db.js";
@@ -28,6 +28,7 @@ export {
   splitStart,
   unblock,
 } from "./stageMachine.js";
+export { setSchedule } from "./schedule.js";
 export { claim, releaseClaim } from "./claims.js";
 export { addLink, addMessage, listLinks, listMessages } from "./messages.js";
 export { addEdge, listEdges, listProjectEdges, removeEdge } from "./edges.js";

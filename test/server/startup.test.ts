@@ -99,6 +99,7 @@ describe("the demo", () => {
     expect(nodes.length).toBeGreaterThan(0);
     const report = nodes.find((n) => n.title === "Weekly status report");
     expect(report).toMatchObject({ type: "reports", stage: "scheduled", cron: "0 7 * * 1" });
+    expect(report?.next_fire_at).toEqual(expect.any(String));
     expect(((await (await fetch(`${url}/api/stages`)).json()) as StagesView).types.length).toBeGreaterThan(0);
 
     expect(existsSync(join(home, ".aop"))).toBe(false);

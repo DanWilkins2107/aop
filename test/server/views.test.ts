@@ -106,7 +106,8 @@ async function variedGraph(h: Harness) {
 
   // Human stages, scheduled, claimed, and a stage the process no longer has.
   await ok(await make("reviewing", "dev"), "move", { stage: "spec_review" });
-  await make("nightly", "nightly", { cron: "0 3 * * *" });
+  const nightly = await make("nightly", "nightly");
+  await h.call("PUT", `/api/nodes/${nightly}/schedule`, { time: "03:00", days: [0, 1, 2, 3, 4, 5, 6] });
   await ok(await make("claimed", "dev"), "claim", { actor: "human" });
   const orphan = await make("orphan", "dev");
   await ok(orphan, "move", { stage: "pr_review" });

@@ -27,12 +27,9 @@ export function MoveForm({
   reload: () => Promise<void>;
 }) {
   const [choice, setChoice] = useState("");
-  const [cron, setCron] = useState("");
   const { busy, error, run } = useAction(reload);
   const { errorId, describedBy } = useFormError(error);
   const parsed = choice ? (JSON.parse(choice) as { stage: string; type?: string }) : null;
-  const toScheduled = parsed?.stage === "scheduled";
-  const needsCron = toScheduled && node.cron === null;
 
   return (
     <>
@@ -41,12 +38,8 @@ export function MoveForm({
         onSubmit={(event) => {
           event.preventDefault();
           if (!parsed) return;
-          const body = toScheduled && cron.trim() !== "" ? { ...parsed, cron: cron.trim() } : parsed;
-          void run(() => api.move(node.id, body)).then((ok) => {
-            if (ok) {
-              setChoice("");
-              setCron("");
-            }
+          void run(() => api.move(node.id, parsed)).then((ok) => {
+            if (ok) setChoice("");
           });
         }}
       >
@@ -62,17 +55,7 @@ export function MoveForm({
             </optgroup>
           ))}
         </select>
-        {toScheduled ? (
-          <input
-            className="mono"
-            value={cron}
-            onChange={(e) => setCron(e.target.value)}
-            placeholder={node.cron ?? "0 3 * * *"}
-            aria-label="Cron schedule"
-            aria-describedby={describedBy}
-          />
-        ) : null}
-        <button type="submit" className="btn-small" disabled={busy || !parsed || (needsCron && cron.trim() === "")}>
+        <button type="submit" className="btn-small" disabled={busy || !parsed}>
           Move
         </button>
       </form>

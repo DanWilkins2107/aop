@@ -7,6 +7,7 @@ import { humanize, toTarget } from "../../lib/format.js";
 import { focusIsLost, stageChangeNotice, stillHoldsFocus } from "../../lib/panelFocus.js";
 import { useAction } from "../../lib/useAction.js";
 import { MoveForm } from "./MoveForm.js";
+import { ScheduleEditor } from "./ScheduleEditor.js";
 
 type Reload = () => Promise<void>;
 
@@ -129,11 +130,7 @@ function Content({
         </p>
       );
     case "scheduled":
-      return (
-        <p className="action-text muted">
-          Stays here and creates a child each time it fires. Schedule: <code>{node.cron}</code>
-        </p>
-      );
+      return <ScheduleEditor node={node} reload={reload} />;
   }
   if (FINISHED_STAGES.includes(node.stage)) {
     return (

@@ -82,11 +82,11 @@ describe("creating nodes in the right place", () => {
     expect((await h.call("POST", path(), { title: "x", stage: "broken_down" })).status).toBe(409);
   });
 
-  it("requires a cron to start at scheduled by stage, and only then", async () => {
-    expect((await h.call("POST", path(), { title: "x", stage: "scheduled" })).status).toBe(400);
-    const res = await h.call<NodeView>("POST", path(), { title: "x", stage: "scheduled", cron: "0 0 * * *" });
-    expect(res.body).toMatchObject({ type: "nightly", stage: "scheduled" });
-    expect((await h.call("POST", path(), { title: "x", stage: "awaiting_agent_breakdown", cron: "0 0 * * *" })).status).toBe(400);
+  it("starts at scheduled by stage with no schedule", async () => {
+    const res = await h.call<NodeView>("POST", path(), { title: "x", stage: "scheduled" });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ type: "nightly", stage: "scheduled", cron: null });
+    expect((await h.call("POST", path(), { title: "x", stage: "scheduled", cron: "0 0 * * *" })).status).toBe(400);
   });
 
   it("reports the start in the stages view", async () => {

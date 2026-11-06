@@ -9,8 +9,8 @@
 #   be used in several types.
 # - Built-in names are reserved: done, broken_down, invalidated, ask_human_question, failed,
 #   externally_blocked, splitting and scheduled. A stage and a type can't share a name.
-# - A type can start at `scheduled`: its node stays there and, on the cron set when it's created,
-#   makes a child at its `next` target. See `reports` below.
+# - A type can start at `scheduled`: its node stays there and, on the time and days set on its
+#   page, makes a child at its `next` target. With no schedule it doesn't fire. See `reports` below.
 
 start: triage                 # the type new nodes start in
 

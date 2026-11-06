@@ -26,6 +26,7 @@ export type ImprovementRequest = RequestOf<typeof requests.improvementBody>;
 export type ProposalRequest = RequestOf<typeof requests.proposalBody>;
 export type WithdrawRequest = RequestOf<typeof requests.withdrawBody>;
 export type ApplyRequest = RequestOf<typeof requests.applyBody>;
+export type ScheduleRequest = RequestOf<typeof requests.scheduleBody>;
 
 /** Every `code` the API refuses a request with. */
 export type ApiErrorCode =
@@ -125,6 +126,8 @@ export interface NodeView extends NodeRow {
   held_by: string[];
   /** The run that's on this node now, including one on its way out after the node moved on. */
   run_id: string | null;
+  /** At scheduled, when its schedule next fires. Null with no schedule, or at any other stage. */
+  next_fire_at: string | null;
   /** The node's latest run, running or not, which is whose log a failed node links to. */
   last_run_id: string | null;
 }
@@ -216,6 +219,8 @@ export interface EventDataByKind {
   edge_removed: { edge_id: string; target_id: string; kind: EdgeRow["kind"] };
   scheduled_run: { due_at: string; child_id: string };
   scheduled_run_skipped: { due_at: string } & ScheduleSkip;
+  /** A human set the schedule, or cleared it with null. Firing counts from here. */
+  schedule_changed: { cron: string | null; previous: string | null };
   /** On the work node a message was captured from: the improvement it became. */
   improvement_captured: { improvement_id: string; message_id: string };
   /** On the improvement: the work node and message it was captured from. */

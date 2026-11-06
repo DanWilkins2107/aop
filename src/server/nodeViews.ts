@@ -1,6 +1,7 @@
 // Node views: `toView` derives what a node row doesn't store, `holdersOf` and `holdersIn` find what
 // holds a node, and `listNodes`, `viewsOf` and `startableNodes` do the same for many nodes at once.
 
+import { nextFireAt } from "./cron.js";
 import type { Db } from "./db.js";
 import type { HolderVia, NodeRow, NodeView } from "../shared/api.js";
 import { availableOutcomes, currentGraphs, getNodeRow, graphFor, stageIsLive, turnOf, type Graphs } from "./nodeCore.js";
@@ -185,6 +186,7 @@ function deriveView(graphs: Graphs, node: NodeRow, holders: Holder[], latestRun:
     blocked_by: holdersVia("blocks"),
     held: heldBy.length > 0,
     held_by: heldBy,
+    next_fire_at: node.stage === "scheduled" && node.cron !== null ? nextFireAt(node.cron) : null,
     run_id: latestRun?.status === "running" ? latestRun.id : null,
     last_run_id: latestRun?.id ?? null,
   };

@@ -4,6 +4,7 @@
  * only types from here, never the schemas, so that zod stays out of the browser's bundle.
  */
 import { z } from "zod";
+import { TIME_PATTERN } from "./schedule.js";
 
 const actor = z.enum(["human", "agent", "system"]);
 const nonBlank = z.string().refine((s) => s.trim().length > 0, "must not be blank");
@@ -19,7 +20,6 @@ export const createNodeBody = z.strictObject({
   stage: nonBlank.optional(),
   title,
   body: z.string().optional(),
-  cron: nonBlank.optional(),
   parent_id: nonBlank.optional(),
   actor: actor.default("human"),
 });
@@ -30,7 +30,6 @@ export const nextBody = z.strictObject({ outcome: nonBlank, actor: actor.default
 export const moveBody = z.strictObject({
   stage: nonBlank,
   type: nonBlank.optional(),
-  cron: nonBlank.optional(),
 });
 export const askBody = z.strictObject({ question: nonBlank });
 export const answerBody = z.strictObject({ answer: nonBlank });
@@ -64,3 +63,13 @@ export const proposalBody = z.strictObject({
 });
 export const withdrawBody = z.strictObject({ path: nonBlank, actor: actor.default("human") });
 export const applyBody = z.strictObject({ into: nonBlank.optional(), actor: actor.default("agent") });
+/** A time of day and the days to fire on, or null for no schedule. */
+export const scheduleBody = z
+  .strictObject({
+    time: z.string().regex(TIME_PATTERN, "must be HH:MM, from 00:00 to 23:59"),
+    days: z
+      .array(z.number().int().min(0).max(6))
+      .min(1, "must include at least one day")
+      .refine((days) => new Set(days).size === days.length, "must not repeat a day"),
+  })
+  .nullable();

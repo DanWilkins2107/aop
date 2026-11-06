@@ -328,6 +328,76 @@ ALTER TABLE proposals ADD COLUMN base TEXT NOT NULL DEFAULT 'unknown'
   );
 `,
   },
+  {
+    // A scheduled node can have no schedule, and then doesn't fire, so the cron CHECK goes. Dropping a
+    // table CHECK means rebuilding `nodes`, with its indexes and triggers, keeping each rowid for the
+    // search index. Triggers on other tables name `nodes`, which doesn't exist between the drop and the
+    // rename, so the rename runs with the legacy behaviour that doesn't re-check them.
+    foreignKeysOff: true,
+    sql: `
+CREATE TABLE nodes_new (
+  id                  TEXT PRIMARY KEY NOT NULL,
+  created_at          TEXT NOT NULL,
+  project_id          TEXT NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+  title               TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 200),
+  body                TEXT NOT NULL DEFAULT '',
+  type                TEXT NOT NULL,
+  stage               TEXT NOT NULL,
+  cron                TEXT CONSTRAINT nodes_cron_not_blank CHECK (cron IS NULL OR length(cron) > 0),
+  invalidation_reason TEXT,
+  return_stage        TEXT,
+  spawned_by          TEXT REFERENCES nodes(id) ON DELETE RESTRICT,
+  claimed_by          TEXT
+    CONSTRAINT nodes_claimed_by_known CHECK (claimed_by IN ('human', 'agent'))
+    CONSTRAINT nodes_held_stages_require_return_stage
+      CHECK (stage NOT IN ('externally_blocked', 'splitting') OR return_stage IS NOT NULL),
+  kind                TEXT NOT NULL DEFAULT 'work'
+    CONSTRAINT nodes_kind_known CHECK (kind IN ('work', 'improvement'))
+    CONSTRAINT nodes_improvements_in_their_project CHECK ((kind = 'improvement') = (project_id = 'improvements')),
+  CONSTRAINT nodes_invalidated_requires_reason
+    CHECK (stage <> 'invalidated' OR (invalidation_reason IS NOT NULL AND length(invalidation_reason) > 0)),
+  CONSTRAINT nodes_waiting_requires_return_stage
+    CHECK (stage NOT IN ('ask_human_question', 'failed') OR return_stage IS NOT NULL)
+) STRICT;
+INSERT INTO nodes_new (rowid, id, created_at, project_id, title, body, type, stage, cron, invalidation_reason,
+                       return_stage, spawned_by, claimed_by, kind)
+  SELECT rowid, id, created_at, project_id, title, body, type, stage, nullif(cron, ''), invalidation_reason,
+         return_stage, spawned_by, claimed_by, kind FROM nodes;
+DROP TABLE nodes;
+PRAGMA legacy_alter_table = ON;
+ALTER TABLE nodes_new RENAME TO nodes;
+PRAGMA legacy_alter_table = OFF;
+
+CREATE INDEX nodes_project ON nodes(project_id);
+CREATE INDEX nodes_spawned_by ON nodes(spawned_by) WHERE spawned_by IS NOT NULL;
+
+CREATE TRIGGER nodes_no_delete BEFORE DELETE ON nodes
+WHEN OLD.project_id IS NOT aop_project_being_deleted()
+BEGIN SELECT RAISE(ABORT, 'nodes are never deleted'); END;
+
+CREATE TRIGGER nodes_project_immutable BEFORE UPDATE OF project_id ON nodes
+WHEN NEW.project_id <> OLD.project_id
+BEGIN SELECT RAISE(ABORT, 'a node cannot change project'); END;
+
+CREATE TRIGGER nodes_fts_insert AFTER INSERT ON nodes
+BEGIN
+  INSERT INTO nodes_fts (rowid, title, body, invalidation_reason)
+    VALUES (NEW.rowid, NEW.title, NEW.body, coalesce(NEW.invalidation_reason, ''));
+END;
+
+CREATE TRIGGER nodes_fts_update AFTER UPDATE OF title, body, invalidation_reason ON nodes
+WHEN OLD.title IS NOT NEW.title OR OLD.body IS NOT NEW.body
+  OR OLD.invalidation_reason IS NOT NEW.invalidation_reason
+BEGIN
+  DELETE FROM nodes_fts WHERE rowid = OLD.rowid;
+  INSERT INTO nodes_fts (rowid, title, body, invalidation_reason)
+    VALUES (NEW.rowid, NEW.title, NEW.body, coalesce(NEW.invalidation_reason, ''));
+END;
+
+CREATE TRIGGER nodes_fts_delete AFTER DELETE ON nodes
+BEGIN DELETE FROM nodes_fts WHERE rowid = OLD.rowid; END;
+`,
+  },
 ];
 
 export interface Migration extends Step {

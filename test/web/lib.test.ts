@@ -146,6 +146,7 @@ function nodeAt(stage: string, extra: Partial<NodeView> = {}): NodeView {
     blocked_by: [],
     held: false,
     held_by: [],
+    next_fire_at: null,
     claimed_by: null,
     kind: "work",
     ...extra,

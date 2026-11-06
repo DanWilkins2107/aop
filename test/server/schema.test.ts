@@ -128,11 +128,11 @@ describe("nodes", () => {
     expect(db.prepare("SELECT body FROM nodes WHERE id = 'n1'").get()).toEqual({ body: "" });
   });
 
-  it("requires cron at scheduled", () => {
-    expect(() => node("x", "p1", { stage: "scheduled" })).toThrow(/nodes_scheduled_requires_cron/);
-    expect(() => node("x", "p1", { stage: "scheduled", cron: "" })).toThrow(/nodes_scheduled_requires_cron/);
+  it("lets a scheduled node have no cron, but not a blank one", () => {
+    node("none", "p1", { stage: "scheduled" });
     node("x", "p1", { stage: "scheduled", cron: "0 0 * * *" });
-    expect(() => db.prepare("UPDATE nodes SET cron = NULL WHERE id = 'x'").run()).toThrow(/CHECK|cron/);
+    db.prepare("UPDATE nodes SET cron = NULL WHERE id = 'x'").run();
+    expect(() => node("blank", "p1", { stage: "scheduled", cron: "" })).toThrow(/nodes_cron_not_blank/);
   });
 
   it("requires a reason at invalidated", () => {
@@ -573,6 +573,56 @@ describe("upgrading proposals to record their base", () => {
       }
       upgraded.prepare("UPDATE proposals SET base = 'absent'").run();
       upgraded.prepare("UPDATE proposals SET base = ?").run(`sha256:${"0a".repeat(32)}`);
+    } finally {
+      upgraded.close();
+    }
+  });
+});
+
+describe("upgrading to optional schedules", () => {
+  it("keeps scheduled nodes, their cron and what points at them, and drops the cron requirement", () => {
+    const step = migrations.findIndex((m) => m.sql.includes("nodes_cron_not_blank"));
+    expect(step).toBeGreaterThan(0);
+    const path = join(mkdtempSync(join(aopHome(), "upgrade-")), "aop.db");
+    const old = new Database(path);
+    old.function("aop_project_being_deleted", { deterministic: false }, () => null);
+    for (const migration of migrations.slice(0, step)) old.exec(migration.sql);
+    old.pragma(`user_version = ${step}`);
+    old.pragma("foreign_keys = ON");
+    old.prepare("INSERT INTO projects (id, created_at, name, repo_path) VALUES ('p', ?, 'P', '/repo/p')").run(T);
+    const add = old.prepare(
+      "INSERT INTO nodes (id, created_at, project_id, title, type, stage, cron, spawned_by) VALUES (?, ?, 'p', ?, 'weekly', ?, ?, ?)",
+    );
+    add.run("s", T, "Weekly wombat", "scheduled", "0 7 * * 1", null);
+    add.run("c", T, "Child", "implement", null, "s");
+    old.prepare("INSERT INTO edges (id, created_at, source_id, target_id, kind) VALUES ('e', ?, 's', 'c', 'subtask')").run(T);
+    old.prepare("INSERT INTO events (id, created_at, node_id, actor, kind, data) VALUES ('ev', ?, 's', 'system', 'x', '{}')").run(T);
+    old.close();
+
+    const upgraded = openDb(path);
+    try {
+      expect(upgraded.prepare("SELECT id, stage, cron, spawned_by FROM nodes ORDER BY rowid").all()).toEqual([
+        { id: "s", stage: "scheduled", cron: "0 7 * * 1", spawned_by: null },
+        { id: "c", stage: "implement", cron: null, spawned_by: "s" },
+      ]);
+      expect(upgraded.pragma("foreign_key_check")).toEqual([]);
+      expect(upgraded.prepare("SELECT count(*) AS n FROM edges").get()).toEqual({ n: 1 });
+      expect(upgraded.prepare("SELECT count(*) AS n FROM events").get()).toEqual({ n: 1 });
+      // The search index still lines up with the rebuilt rows.
+      const found = upgraded
+        .prepare("SELECT n.id FROM nodes_fts f JOIN nodes n ON n.rowid = f.rowid WHERE nodes_fts MATCH 'wombat'")
+        .all();
+      expect(found).toEqual([{ id: "s" }]);
+
+      upgraded.prepare("UPDATE nodes SET cron = NULL WHERE id = 's'").run();
+      upgraded
+        .prepare("INSERT INTO nodes (id, created_at, project_id, title, type, stage) VALUES ('n', ?, 'p', 't', 'weekly', 'scheduled')")
+        .run(T);
+      expect(() => upgraded.exec("DELETE FROM nodes")).toThrow(/never deleted/);
+      expect(() => upgraded.prepare("UPDATE nodes SET project_id = 'x' WHERE id = 's'").run()).toThrow(/change project/);
+      expect(() =>
+        upgraded.prepare("INSERT INTO nodes (id, created_at, project_id, title, type, stage) VALUES ('o', ?, 'missing', 't', 'dev', 'implement')").run(T),
+      ).toThrow(/FOREIGN KEY/);
     } finally {
       upgraded.close();
     }

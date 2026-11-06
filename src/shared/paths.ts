@@ -27,7 +27,8 @@ export type NodeAction =
   | "links"
   | "edges"
   | "events"
-  | "runs";
+  | "runs"
+  | "schedule";
 
 /** The routes under a project, as `/api/projects/:id/<action>`. */
 export type ProjectAction = "nodes" | "edges";

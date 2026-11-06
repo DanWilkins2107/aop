@@ -31,6 +31,7 @@ import {
   moveBody,
   nextBody,
   proposalBody,
+  scheduleBody,
   steerBody,
   unblockBody,
   updateProjectBody,
@@ -332,6 +333,9 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
   );
   app.post(routes.nodeAction("move"), async (c) =>
     c.json(nodes.move(db, c.req.param("id"), await readBody(c, moveBody))),
+  );
+  app.put(routes.nodeAction("schedule"), async (c) =>
+    c.json(nodes.setSchedule(db, c.req.param("id"), await readBody(c, scheduleBody))),
   );
   app.post(routes.nodeAction("ask"), async (c) =>
     c.json(nodes.ask(db, c.req.param("id"), { ...(await readBody(c, askBody)), runId: runIdOf(c) })),

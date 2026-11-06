@@ -1,6 +1,7 @@
 // The history list's wording for each event kind the server records.
 import type { EventKind, EventView, NodeEvent, RunEndReason, ScheduleSkip } from "../../../src/shared/api.js";
 import { humanize } from "./format.js";
+import { describeScheduleChange } from "./schedule.js";
 
 // A Record, so that adding a kind to `EventDataByKind` fails to compile until it's listed here.
 const KNOWN_KINDS: Record<EventKind, true> = {
@@ -18,6 +19,7 @@ const KNOWN_KINDS: Record<EventKind, true> = {
   edge_removed: true,
   scheduled_run: true,
   scheduled_run_skipped: true,
+  schedule_changed: true,
   improvement_captured: true,
   improvement_sourced: true,
   proposal_saved: true,
@@ -122,6 +124,10 @@ export function describeEvent(event: EventView, titleOf: (id: string) => string)
     case "scheduled_run_skipped": {
       const reason = event.data.reason;
       return `Scheduled run skipped: ${SKIP_REASONS[reason] ?? humanize(text(reason))}`;
+    }
+    case "schedule_changed": {
+      const cron = event.data.cron;
+      return describeScheduleChange(typeof cron === "string" && cron !== "" ? cron : null);
     }
     case "improvement_captured":
       return "Improvement captured from a message";

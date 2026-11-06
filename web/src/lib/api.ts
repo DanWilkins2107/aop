@@ -29,6 +29,7 @@ import type {
   ProjectRow,
   ProcessView,
   RunView,
+  ScheduleRequest,
   StagesView,
   UpdateProjectRequest,
 } from "../../../src/shared/api.js";
@@ -104,6 +105,8 @@ export const api = {
   release: (id: string) => send<NodeView>("POST", apiPaths.nodeAction(id, "release")),
   move: (id: string, body: MoveRequest) =>
     send<NodeView>("POST", apiPaths.nodeAction(id, "move"), body),
+  setSchedule: (id: string, schedule: ScheduleRequest) =>
+    send<NodeView>("PUT", apiPaths.nodeAction(id, "schedule"), schedule),
   addMessage: (id: string, body: string) => send<MessageRow>("POST", apiPaths.nodeAction(id, "messages"), { body } satisfies MessageRequest),
   addEdge: (sourceId: string, targetId: string, kind: EdgeRequest["kind"]) =>
     send<EdgeRow>("POST", apiPaths.nodeAction(sourceId, "edges"), { target_id: targetId, kind } satisfies EdgeRequest),

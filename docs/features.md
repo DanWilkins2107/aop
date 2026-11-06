@@ -78,10 +78,12 @@ These have fixed behaviour and reserved names:
 - `scheduled`: below.
 
 #### Scheduled nodes
-A scheduled node stays where it is and creates a new child node each time its cron schedule fires. The child carries out the task described on the scheduled node. The default stages don't include one, so add the built-in `scheduled` stage to a type in your `stages.yaml` to use it.
+A scheduled node stays where it is and creates a new child node each time its schedule fires. The child carries out the task described on the scheduled node. The default stages don't include one, so add the built-in `scheduled` stage to a type in your `stages.yaml` to use it.
 
 - The default `reports` type is an example: its `scheduled` stage fires into `generate_report`.
-- Set the cron schedule (such as `0 3 * * *`) when you create the node, so nodes of one type can run at different times.
+- A new scheduled node has no schedule and doesn't fire. On its page, pick a time and the days of the week to fire on, and save. Each node has its own, so nodes of one type can run at different times.
+- Times are in the server's time zone. The page shows when the node next fires.
+- Clear the schedule to stop it firing. A new schedule fires from the next matching time, with no catch-up.
 - A firing is skipped if the previous child hasn't finished.
 - Blocking it pauses it. Unblocking resumes from the next slot, with no catch-up.
 

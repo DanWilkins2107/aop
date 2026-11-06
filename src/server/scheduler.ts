@@ -18,6 +18,7 @@ const MAX_SLEEP_MS = 60_000;
 
 export const RUN_EVENT = "scheduled_run" satisfies EventKind;
 export const SKIP_EVENT = "scheduled_run_skipped" satisfies EventKind;
+const SCHEDULE_EVENT = "schedule_changed" satisfies EventKind;
 
 export interface SchedulerOptions {
   changes: ChangeFeed;
@@ -136,8 +137,9 @@ export class Scheduler {
 
   /**
    * The time from which slots count: the last slot handled, or when the node last arrived at
-   * scheduled, whichever is later. Arriving again, such as on restore, unblock or a new cron, starts
-   * afresh, so slots missed while invalidated or externally blocked aren't caught up.
+   * scheduled or had its schedule set, whichever is latest. Arriving again, such as on restore or
+   * unblock, or a new schedule, starts afresh, so slots missed while invalidated, externally blocked
+   * or under an earlier schedule aren't caught up.
    */
   private anchor(node: NodeRow): Date {
     const handled = this.db
@@ -150,7 +152,8 @@ export class Scheduler {
       .prepare(
         `SELECT created_at AS at FROM events
           WHERE node_id = ? AND ((kind = 'stage_changed' AND json_extract(data, '$.to_stage') = 'scheduled')
-             OR (kind = 'node_created' AND json_extract(data, '$.stage') = 'scheduled'))
+             OR (kind = 'node_created' AND json_extract(data, '$.stage') = 'scheduled')
+             OR kind = '${SCHEDULE_EVENT}')
           ORDER BY rowid DESC LIMIT 1`,
       )
       .get(node.id) as { at: string } | undefined;

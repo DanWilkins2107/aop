@@ -80,13 +80,11 @@ describe("creating nodes", () => {
     expect((await h.call("POST", path, { type: "dev", title: "😀".repeat(200) })).status).toBe(201);
   });
 
-  it("requires a cron for scheduled, and only for scheduled", async () => {
+  it("creates a scheduled node with no schedule, and takes no cron", async () => {
     const path = `/api/projects/${h.projectId}/nodes`;
-    expect((await h.call("POST", path, { type: "nightly", title: "x" })).status).toBe(400);
-    expect((await h.call("POST", path, { type: "nightly", title: "x", cron: "tomorrow" })).status).toBe(400);
-    expect((await h.call("POST", path, { type: "dev", title: "x", cron: "0 0 * * *" })).status).toBe(400);
-    const node = await h.create("nightly", { cron: "0 0 * * *" });
-    expect(node).toMatchObject({ stage: "scheduled", cron: "0 0 * * *" });
+    expect((await h.call("POST", path, { type: "nightly", title: "x", cron: "0 0 * * *" })).status).toBe(400);
+    const node = await h.create("nightly");
+    expect(node).toMatchObject({ stage: "scheduled", cron: null, next_fire_at: null });
   });
 
   it("rejects malformed and unexpected input", async () => {
@@ -187,7 +185,7 @@ describe("next", () => {
   });
 
   it("refuses next on a scheduled node, and shows it no outcomes", async () => {
-    const node = await h.create("nightly", { cron: "0 0 * * *" });
+    const node = await h.create("nightly");
     expect(node.available_outcomes).toEqual([]);
     const res = await h.post(node.id, "next", { outcome: "fire" });
     expect(res.status).toBe(409);
@@ -195,12 +193,10 @@ describe("next", () => {
     expect((await h.node(node.id)).stage).toBe("scheduled");
   });
 
-  it("needs a cron to enter a scheduled type", async () => {
+  it("enters a scheduled type with no schedule", async () => {
     const node = await h.create("hotfix");
     const res = await h.post(node.id, "next", { outcome: "to_nightly" });
-    expect(res.status).toBe(409);
-    expect(errorOf(res).message).toContain("cron");
-    expect((await h.node(node.id)).type).toBe("hotfix");
+    expect(res.body).toMatchObject({ type: "nightly", stage: "scheduled", cron: null });
   });
 
   it("takes no reason", async () => {
@@ -251,13 +247,14 @@ describe("human move", () => {
     expect((await h.post(node.id, "move", { stage: "broken_down" })).body.stage).toBe("broken_down");
   });
 
-  it("moves to scheduled with a cron", async () => {
+  it("moves to scheduled with no schedule, and keeps one set before", async () => {
     const node = await h.create("dev");
-    expect((await h.post(node.id, "move", { stage: "scheduled" })).status).toBe(409);
-    expect((await h.post(node.id, "move", { stage: "scheduled", cron: "nope" })).status).toBe(400);
-    expect((await h.post(node.id, "move", { stage: "implement", cron: "0 0 * * *" })).status).toBe(400);
-    const res = await h.post(node.id, "move", { stage: "scheduled", cron: "0 0 * * *" });
-    expect(res.body).toMatchObject({ stage: "scheduled", type: "nightly", cron: "0 0 * * *" });
+    expect((await h.post(node.id, "move", { stage: "scheduled", cron: "0 0 * * *" })).status).toBe(400);
+    const res = await h.post(node.id, "move", { stage: "scheduled" });
+    expect(res.body).toMatchObject({ stage: "scheduled", type: "nightly", cron: null });
+    await h.call("PUT", `/api/nodes/${node.id}/schedule`, { time: "03:00", days: [1] });
+    await h.post(node.id, "move", { stage: "implement", type: "dev" });
+    expect((await h.post(node.id, "move", { stage: "scheduled" })).body).toMatchObject({ cron: "0 3 * * 1" });
   });
 
   it("sends stages with their own required state to their own actions", async () => {
@@ -403,7 +400,7 @@ describe("ask and answer", () => {
     expect(human.status).toBe(409);
     expect(errorOf(human).message).toContain("not an agent stage");
 
-    const scheduled = await h.create("nightly", { cron: "0 0 * * *" });
+    const scheduled = await h.create("nightly");
     expect((await h.post(scheduled.id, "ask", { question: "?" })).status).toBe(409);
     await h.post(node.id, "move", { stage: "done" });
     expect((await h.post(node.id, "ask", { question: "?" })).status).toBe(409);
@@ -517,8 +514,9 @@ describe("invalidate and restore", () => {
     expect((await h.post(node.id, "answer", { answer: "a" })).body.stage).toBe("write_spec");
   });
 
-  it("restores a scheduled node with its cron", async () => {
-    const node = await h.create("nightly", { cron: "0 0 * * *" });
+  it("restores a scheduled node with its schedule", async () => {
+    const node = await h.create("nightly");
+    await h.call("PUT", `/api/nodes/${node.id}/schedule`, { time: "00:00", days: [0, 1, 2, 3, 4, 5, 6] });
     await h.post(node.id, "invalidate", { reason: "x" });
     expect((await h.post(node.id, "restore")).body).toMatchObject({ stage: "scheduled", cron: "0 0 * * *" });
   });

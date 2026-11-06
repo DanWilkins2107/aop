@@ -158,12 +158,12 @@ export async function seed(app: Hono, db: Db, projectId: string): Promise<void> 
   await create(undefined, "Flaky login test on CI", "Fails about one run in twenty.");
 
   // A schedule on its own. Early on a Monday, so a demo session is unlikely to see it fire.
-  await call("POST", `/projects/${projectId}/nodes`, {
-    type: "reports",
-    title: "Weekly status report",
-    body: "Summarise last week for the team: PRs merged and still open, anything blocked or failed, and decisions waiting on a human. Keep it to one screen.",
-    cron: "0 7 * * 1",
-  });
+  const report = await create(
+    "reports",
+    "Weekly status report",
+    "Summarise last week for the team: PRs merged and still open, anything blocked or failed, and decisions waiting on a human. Keep it to one screen.",
+  );
+  await call("PUT", `/nodes/${report.id}/schedule`, { time: "07:00", days: [1] });
 
   const timezone = await create("triage", "Fix daylight saving bug in schedules", "Runs fire an hour late after the clocks change.");
   await outcome(timezone, "ready");

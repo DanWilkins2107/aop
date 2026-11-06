@@ -19,3 +19,39 @@
 p.action-text:last-child {
   margin-bottom: 0;
 }
+
+.schedule-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.schedule-time input {
+  width: auto;
+  align-self: flex-start;
+}
+.schedule-days {
+  border: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.schedule-days legend {
+  padding: 0;
+  margin-bottom: 4px;
+  font-weight: 600;
+  font-size: 13px;
+}
+.schedule-day-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.day-toggle[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.schedule-form .action-row,
+.schedule-form .field-hint {
+  margin-top: 0;
+}

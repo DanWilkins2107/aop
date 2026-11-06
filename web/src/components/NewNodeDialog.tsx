@@ -20,16 +20,13 @@ export function NewNodeDialog({
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [type, setType] = useState(stages.start);
-  const [cron, setCron] = useState("");
   const { busy, error, run } = useAction();
 
   // A node enters at its type's own start.
   const start = findType(stages, type)?.start;
-  const scheduled = start === "scheduled";
 
   async function create() {
-    const input = { type, title: title.trim(), body };
-    await run(async () => onCreated(await api.createNode(projectId, scheduled ? { ...input, cron: cron.trim() } : input)));
+    await run(async () => onCreated(await api.createNode(projectId, { type, title: title.trim(), body })));
   }
 
   return (
@@ -40,7 +37,7 @@ export function NewNodeDialog({
       onSubmit={() => void create()}
       error={error}
       submitLabel="Create node"
-      canSubmit={title.trim() !== "" && (!scheduled || cron.trim() !== "")}
+      canSubmit={title.trim() !== ""}
     >
       <label>
         Title
@@ -64,13 +61,8 @@ export function NewNodeDialog({
       {start ? (
         <p className="field-hint">
           Type {humanize(type)}, starting at {humanize(start)}.
+          {start === "scheduled" ? " Set its schedule on the node's page." : ""}
         </p>
-      ) : null}
-      {scheduled ? (
-        <label>
-          Cron schedule
-          <input value={cron} onChange={(e) => setCron(e.target.value)} placeholder="0 3 * * *" className="mono" />
-        </label>
       ) : null}
     </Dialog>
   );

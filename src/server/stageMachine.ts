@@ -7,17 +7,11 @@ import { badRequest, refused } from "./errors.js";
 import type { EventDataByKind, NodeKind, NodeRow, NodeView, StageChangeVia } from "../shared/api.js";
 import { FINISHED_STAGES, isBuiltIn, type OwnActionStage } from "../shared/builtInStages.js";
 import { appendEvent, newId, now, type Actor } from "./records.js";
-import { cronProblem } from "./cron.js";
 import type { StageGraph } from "./stages.js";
 import { availableOutcomes, currentGraphs, getNodeRow, graphFor, stageIsLive, turnOf } from "./nodeCore.js";
 import { viewOf } from "./nodeViews.js";
 import { postMessage } from "./messages.js";
 import { addEdge } from "./edges.js";
-
-function assertValidCron(cron: string): void {
-  const problem = cronProblem(cron);
-  if (problem !== null) throw badRequest(`Invalid cron "${cron}": ${problem}`);
-}
 
 /** Built-ins with state of their own, which their actions collect. Create and move can't land on them. */
 const OWN_ACTIONS = new Map<string, string>(
@@ -59,7 +53,6 @@ export function createNode(
     stage?: string | undefined;
     title: string;
     body?: string | undefined;
-    cron?: string | undefined;
     parent_id?: string | undefined;
     actor: Actor;
   },
@@ -72,19 +65,13 @@ export function createNode(
   }
   const graph = graphFor(graphs, kind);
   const { type, stage } = resolveStart(graph, input);
-  if (stage === "scheduled") {
-    if (input.cron === undefined) throw badRequest("A node starting at scheduled requires a cron");
-    assertValidCron(input.cron);
-  } else if (input.cron !== undefined) {
-    throw badRequest(`cron only applies to a scheduled node, and this one starts at "${stage}"`);
-  }
 
   const id = newId();
   db.transaction(() => {
     db.prepare(
-      `INSERT INTO nodes (id, created_at, project_id, title, body, type, stage, cron, kind)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(id, now(), projectId, input.title, input.body ?? "", type, stage, input.cron ?? null, kind);
+      `INSERT INTO nodes (id, created_at, project_id, title, body, type, stage, kind)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(id, now(), projectId, input.title, input.body ?? "", type, stage, kind);
     appendEvent(db, id, input.actor, "node_created", { type, stage, title: input.title });
     // In the same transaction, so a child being split off can't be started before its parent holds it.
     if (input.parent_id !== undefined) {
@@ -123,7 +110,6 @@ interface StageChange {
   type: string;
   returnStage?: string | null;
   reason?: string | null;
-  cron?: string;
   via: StageChangeVia;
   actor: Actor;
   /** Extra fields for the event's data. */
@@ -141,14 +127,13 @@ interface StageChange {
 function applyStageChange(db: Db, node: NodeRow, change: StageChange): void {
   const dropsClaim = node.claimed_by === "agent" && change.keepsAgentClaim !== true;
   db.prepare(
-    `UPDATE nodes SET stage = ?, type = ?, return_stage = ?, invalidation_reason = ?, cron = ?, claimed_by = ?
+    `UPDATE nodes SET stage = ?, type = ?, return_stage = ?, invalidation_reason = ?, claimed_by = ?
       WHERE id = ?`,
   ).run(
     change.stage,
     change.type,
     change.returnStage ?? null,
     change.reason ?? null,
-    change.cron ?? node.cron,
     dropsClaim ? null : node.claimed_by,
     node.id,
   );
@@ -214,12 +199,9 @@ function hasSubtaskChildren(db: Db, nodeId: string): boolean {
   return child !== undefined;
 }
 
-function assertCanEnter(db: Db, node: NodeRow, stage: string, cron?: string): void {
+function assertCanEnter(db: Db, node: NodeRow, stage: string): void {
   if (stage === "broken_down" && !hasSubtaskChildren(db, node.id)) {
     throw refused("Can't move to broken_down: the node has no subtask children");
-  }
-  if (stage === "scheduled" && cron === undefined && node.cron === null) {
-    throw refused("Can't move to scheduled: the node has no cron. A human move can set one");
   }
 }
 
@@ -361,25 +343,20 @@ function resolveStageType(graph: StageGraph, ownType: string, stage: string, typ
 export function move(
   db: Db,
   nodeId: string,
-  input: { stage: string; type?: string | undefined; cron?: string | undefined },
+  input: { stage: string; type?: string | undefined },
 ): NodeView {
   const graphs = currentGraphs();
 
   assertNoOwnAction(input.stage);
-  if (input.cron !== undefined) {
-    if (input.stage !== "scheduled") throw badRequest("cron only applies when moving to scheduled");
-    assertValidCron(input.cron);
-  }
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
     const graph = graphFor(graphs, node.kind);
     const type = resolveStageType(graph, node.type, input.stage, input.type);
-    assertCanEnter(db, node, input.stage, input.cron);
+    assertCanEnter(db, node, input.stage);
     applyStageChange(db, node, {
       stage: input.stage,
       type,
-      ...(input.cron !== undefined ? { cron: input.cron } : {}),
       via: "move",
       actor: "human",
     });

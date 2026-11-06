@@ -52,8 +52,21 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const createScheduled = (type = "weekly", cron = "*/5 * * * *", extra: Record<string, unknown> = {}) =>
-  h.create(type, { cron, title: "Weekly report", body: "Summarise the week's merged PRs.", ...extra });
+/**
+ * A scheduled node with a cron written straight to the row, as older data can have, which keeps
+ * firing counted from its creation. The schedule route is tested on its own below.
+ */
+const createScheduled = async (type = "weekly", cron = "*/5 * * * *") => {
+  const node = await h.create(type, { title: "Weekly report", body: "Summarise the week's merged PRs." });
+  h.db.prepare("UPDATE nodes SET cron = ? WHERE id = ?").run(cron, node.id);
+  return { ...node, cron };
+};
+
+/** A time in the server's time zone, which is what crons are read in. */
+const local = (day: number, hour: number, minute = 0) => new Date(2026, 2, day, hour, minute);
+const atLocal = (day: number, hour: number, minute = 0) => vi.setSystemTime(local(day, hour, minute));
+
+const putSchedule = (id: string, body: unknown) => h.call<NodeView & { error: { code: string; message: string } }>("PUT", `/api/nodes/${id}/schedule`, body);
 
 const children = (id: string) =>
   h.db.prepare("SELECT * FROM nodes WHERE spawned_by = ? ORDER BY rowid").all(id) as NodeView[];
@@ -63,19 +76,144 @@ const events = (id: string, kind: string) =>
     (row) => JSON.parse(row.data) as Record<string, unknown>,
   );
 
-describe("cron validation", () => {
-  it("refuses invalid crons on create and move, with the parser's reason", async () => {
-    const path = `/api/projects/${h.projectId}/nodes`;
-    for (const cron of ["61 * * * *", "* * * *", "* * * * * *", "0 0 31 2 *", "tomorrow"]) {
-      const res = await h.call<{ error: { message: string } }>("POST", path, { type: "weekly", title: "x", cron });
-      expect(res.status, cron).toBe(400);
-      expect(res.body.error.message).toContain("Invalid cron");
-    }
-    expect((await h.call("POST", path, { type: "weekly", title: "x", cron: "0 9 * * MON-FRI" })).status).toBe(201);
+describe("no schedule", () => {
+  it("creates a scheduled node with no schedule, which never fires", async () => {
+    const node = await h.create("weekly");
+    expect(node).toMatchObject({ stage: "scheduled", cron: null, next_fire_at: null });
+    at("2026-03-09T10:00:00Z");
+    expect(scheduler.tick()).toEqual([]);
+    expect(children(node.id)).toHaveLength(0);
+  });
 
+  it("moves a node to scheduled with no schedule, which never fires", async () => {
     const node = await h.create("work");
-    expect((await h.post(node.id, "move", { stage: "scheduled", type: "weekly", cron: "0 25 * * *" })).status).toBe(400);
-    expect((await h.post(node.id, "move", { stage: "scheduled", type: "weekly", cron: "@daily" })).status).toBe(200);
+    const moved = await h.post(node.id, "move", { stage: "scheduled", type: "weekly" });
+    expect(moved.body).toMatchObject({ stage: "scheduled", type: "weekly", cron: null });
+    at("2026-03-09T10:00:00Z");
+    expect(scheduler.tick()).toEqual([]);
+  });
+
+  it("no longer takes a cron on create or move", async () => {
+    const path = `/api/projects/${h.projectId}/nodes`;
+    expect((await h.call("POST", path, { type: "weekly", title: "x", cron: "0 9 * * *" })).status).toBe(400);
+    const node = await h.create("work");
+    expect((await h.post(node.id, "move", { stage: "scheduled", type: "weekly", cron: "0 9 * * *" })).status).toBe(400);
+  });
+});
+
+describe("setting a schedule", () => {
+  beforeEach(() => atLocal(2, 8));
+
+  it("sets, changes and clears the schedule, recording each change", async () => {
+    const node = await h.create("weekly");
+    const set = await putSchedule(node.id, { time: "09:30", days: [5, 1, 3] });
+    expect(set.status).toBe(200);
+    expect(set.body).toMatchObject({ cron: "30 9 * * 1,3,5", next_fire_at: local(2, 9, 30).toISOString() });
+
+    const changed = await putSchedule(node.id, { time: "07:00", days: [0, 1, 2, 3, 4, 5, 6] });
+    expect(changed.body).toMatchObject({ cron: "0 7 * * *", next_fire_at: local(3, 7).toISOString() });
+
+    const cleared = await putSchedule(node.id, null);
+    expect(cleared.body).toMatchObject({ cron: null, next_fire_at: null });
+
+    expect(events(node.id, "schedule_changed")).toEqual([
+      { cron: "30 9 * * 1,3,5", previous: null },
+      { cron: "0 7 * * *", previous: "30 9 * * 1,3,5" },
+      { cron: null, previous: "0 7 * * *" },
+    ]);
+    const actors = h.db.prepare("SELECT actor FROM events WHERE node_id = ? AND kind = 'schedule_changed'").all(node.id);
+    expect(actors).toEqual([{ actor: "human" }, { actor: "human" }, { actor: "human" }]);
+
+    atLocal(9, 12);
+    expect(scheduler.tick()).toEqual([]);
+  });
+
+  it("fires on the days and time set, and not on other days", async () => {
+    const node = await h.create("report");
+    await putSchedule(node.id, { time: "09:30", days: [1, 3] });
+    atLocal(2, 9, 29);
+    expect(scheduler.tick()).toEqual([]);
+    atLocal(2, 9, 30);
+    expect(scheduler.tick()).toEqual([expect.objectContaining({ fired: true, dueAt: local(2, 9, 30).toISOString() })]);
+    await h.post(children(node.id)[0]!.id, "next", { outcome: "finished", actor: "human" });
+    // Tuesday isn't one of its days.
+    atLocal(3, 9, 30);
+    expect(scheduler.tick()).toEqual([]);
+    atLocal(4, 9, 30);
+    expect(scheduler.tick()).toEqual([expect.objectContaining({ fired: true, dueAt: local(4, 9, 30).toISOString() })]);
+  });
+
+  it("fires from when it's set, without catching up on slots already past", async () => {
+    // Created at 08:00 with no schedule, and given one for 09:00 at 10:00.
+    const node = await h.create("weekly");
+    atLocal(2, 10);
+    await putSchedule(node.id, { time: "09:00", days: [1, 2] });
+    expect(scheduler.tick()).toEqual([]);
+    atLocal(3, 9);
+    expect(scheduler.tick()).toEqual([expect.objectContaining({ fired: true, dueAt: local(3, 9).toISOString() })]);
+  });
+
+  it("replaces an earlier schedule, so its slots no longer fire", async () => {
+    const node = await h.create("weekly");
+    await putSchedule(node.id, { time: "11:00", days: [1] });
+    await putSchedule(node.id, { time: "12:00", days: [1] });
+    atLocal(2, 11, 30);
+    expect(scheduler.tick()).toEqual([]);
+    atLocal(2, 12);
+    expect(scheduler.tick()).toEqual([expect.objectContaining({ fired: true })]);
+  });
+
+  it("replaces a cron the picker couldn't have made", async () => {
+    const node = await createScheduled("weekly", "*/5 * * * *");
+    expect((await putSchedule(node.id, { time: "18:15", days: [6] })).body.cron).toBe("15 18 * * 6");
+  });
+
+  it("refuses bad times and days", async () => {
+    const node = await h.create("weekly");
+    const bad = [
+      { time: "9:30", days: [1] },
+      { time: "24:00", days: [1] },
+      { time: "12:60", days: [1] },
+      { time: "", days: [1] },
+      { time: "09:30", days: [] },
+      { time: "09:30", days: [7] },
+      { time: "09:30", days: [-1] },
+      { time: "09:30", days: [1.5] },
+      { time: "09:30", days: [1, 1] },
+      { time: "09:30" },
+      { days: [1] },
+      { time: "09:30", days: [1], cron: "0 9 * * *" },
+      "0 9 * * *",
+      {},
+    ];
+    for (const body of bad) {
+      const res = await putSchedule(node.id, body);
+      expect(res.status, JSON.stringify(body)).toBe(400);
+      expect(res.body.error.code).toBe("bad_request");
+    }
+    expect((await h.call("PUT", `/api/nodes/${node.id}/schedule`)).status).toBe(400);
+    expect((await h.node(node.id)).cron).toBeNull();
+    expect(events(node.id, "schedule_changed")).toEqual([]);
+  });
+
+  it("is only allowed at scheduled", async () => {
+    const node = await h.create("work");
+    const res = await putSchedule(node.id, { time: "09:30", days: [1] });
+    expect(res.status).toBe(409);
+    expect(res.body.error.message).toContain("not scheduled");
+    expect((await putSchedule(node.id, null)).status).toBe(409);
+    expect((await putSchedule("missing", null)).status).toBe(404);
+    expect(events(node.id, "schedule_changed")).toEqual([]);
+  });
+
+  it("keeps the schedule through a block, and fires again after unblocking", async () => {
+    const node = await h.create("weekly");
+    await putSchedule(node.id, { time: "09:00", days: [1, 2, 3, 4, 5] });
+    await h.post(node.id, "block", { reason: "Waiting" });
+    expect((await putSchedule(node.id, null)).status).toBe(409);
+    expect((await h.post(node.id, "unblock")).body).toMatchObject({ stage: "scheduled", cron: "0 9 * * 1,2,3,4,5" });
+    atLocal(3, 9);
+    expect(scheduler.tick()).toEqual([expect.objectContaining({ fired: true })]);
   });
 });
 
