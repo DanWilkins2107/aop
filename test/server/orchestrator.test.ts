@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { HEADLESS_AGENT_FLAGS } from "../../src/server/agentOutput.js";
-import { isAlive, waitGone } from "../../src/server/processes.js";
+import { isAlive, waitGone } from "../../src/server/osProcesses.js";
 import { deleteProject } from "../../src/server/projects.js";
 import type { EventView, MessageRow, NodeView, RunView } from "../../src/shared/api.js";
 import { directives, settle, until, world, type World } from "./agents.helpers.js";

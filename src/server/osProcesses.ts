@@ -1,5 +1,5 @@
 // Operating system processes: start times, children, kills and the run-marker sweep. Knows nothing about
-// nodes or runs. Not to be confused with `process.ts`, which is about the process in `stages.yaml`.
+// nodes or runs. Not to be confused with `processView.ts`, which is about the process in `stages.yaml`.
 
 import { type ChildProcessWithoutNullStreams, execFile, spawn } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";

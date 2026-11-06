@@ -3,7 +3,7 @@
 `specs/` is the contract. Read the spec for the area you're changing before you change it, and update it in the same change when you change behaviour. `docs/` is written by humans: don't edit it.
 
 ## Layout
-- `src/server/`: one Node process. `api.ts` has every route and its zod request body. `nodes.ts` has the node and stage rules. `orchestrator.ts` launches agents, `scheduler.ts` fires cron nodes, `processes.ts` finds and kills process trees. `config.ts` and `stages.ts` load and validate `config.yaml` and `stages.yaml`. `context.ts` builds `aop context` and the agent prompt. `migrations.ts` holds the schema.
+- `src/server/`: one Node process. `api.ts` has every route; the paths are in `src/shared/paths.ts` and the zod request bodies in `src/shared/requests.ts`. `nodes.ts` has the node and stage rules. `orchestrator.ts` launches agents, `scheduler.ts` fires cron nodes, `osProcesses.ts` finds and kills process trees. `config.ts` and `stages.ts` load and validate `config.yaml` and `stages.yaml`. `context.ts` builds `aop context` and the agent prompt. `migrations.ts` holds the schema.
 - `src/shared/api.ts`: the response types shared by the server, the CLI and the web app. Types only, because the browser imports it.
 - `src/cli/`: the `aop` command. `main.ts` only talks HTTP. `init.ts` is `aop init`.
 - `web/src/`: the React UI. `lib/` holds the pure helpers, tested in `test/web/`. `styles.css` only imports `styles/*.css`, one file per part of the UI, and their order is the cascade order.

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { LinkRow } from "../../../src/shared/api.js";
+import { GLOBAL_STAGES } from "../../../src/shared/builtInStages.js";
 import { ClaimMark } from "../components/ClaimMark.js";
 import { CopyId } from "../components/CopyId.js";
 import { ErrorNotice } from "../components/ErrorNotice.js";
@@ -10,7 +11,7 @@ import { api, loadProjectGraph } from "../lib/api.js";
 import { humanize } from "../lib/format.js";
 import { useLiveData } from "../lib/live.js";
 import { originalStage } from "../lib/stageGraph.js";
-import { GLOBAL_STAGES, findType, stageBand } from "../lib/stageStyle.js";
+import { findType, stageBand } from "../lib/stageStyle.js";
 import { NodeControls } from "./node/Controls.js";
 import { Description } from "./node/Description.js";
 import { Details } from "./node/Details.js";

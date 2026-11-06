@@ -5,8 +5,8 @@ import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { EdgeRow, EventView, LinkRow, MessageRow } from "../../src/shared/api.js";
-import { directives, fakeCommand, nodeArgs, settle, until, world, type World } from "./agents.helpers.js";
-import { makeRepo } from "./helpers.js";
+import { directives, fakeCommand, nodeArgs, settle, until, world, type World } from "../server/agents.helpers.js";
+import { makeRepo } from "../server/helpers.js";
 
 const TIMEOUT = { timeout: 90_000 };
 let w: World;

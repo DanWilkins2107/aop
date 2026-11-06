@@ -17,9 +17,16 @@ import type {
   StageChangeVia,
   Turn,
 } from "../shared/api.js";
+import {
+  AGENT_TURN_STAGES,
+  FINISHED_STAGES,
+  HUMAN_TURN_STAGES,
+  isBuiltIn,
+  type OwnActionStage,
+} from "../shared/builtInStages.js";
 import { appendEvent, newId, now, type Actor } from "./records.js";
 import { cronProblem } from "./cron.js";
-import { isBuiltIn, type StageGraph } from "./stages.js";
+import type { StageGraph } from "./stages.js";
 
 export type { EdgeRow, EventView, LinkRow, MessageRow, NodeRow, NodeView };
 
@@ -41,8 +48,8 @@ function stageIsLive(graph: StageGraph, type: string, stage: string): boolean {
 }
 
 function turnOf(graph: StageGraph, node: NodeRow): Turn | null {
-  if (["ask_human_question", "failed", "externally_blocked"].includes(node.stage)) return "human";
-  if (node.stage === "splitting") return "agent";
+  if (HUMAN_TURN_STAGES.includes(node.stage)) return "human";
+  if (AGENT_TURN_STAGES.includes(node.stage)) return "agent";
   if (!stageIsLive(graph, node.type, node.stage)) return null;
   return graph.stages.get(node.stage)?.turn ?? null;
 }
@@ -148,13 +155,15 @@ function assertValidCron(cron: string): void {
 }
 
 /** Built-ins with state of their own, which their actions collect. Create and move can't land on them. */
-const OWN_ACTIONS = new Map([
-  ["invalidated", "Use the invalidate action, which requires a reason"],
-  ["ask_human_question", "Use the ask action, which requires a question"],
-  ["failed", "Use the fail action"],
-  ["externally_blocked", "Use the block action, which requires a reason"],
-  ["splitting", "Use split start, from an agent stage"],
-]);
+const OWN_ACTIONS = new Map<string, string>(
+  Object.entries({
+    invalidated: "Use the invalidate action, which requires a reason",
+    ask_human_question: "Use the ask action, which requires a question",
+    failed: "Use the fail action",
+    externally_blocked: "Use the block action, which requires a reason",
+    splitting: "Use split start, from an agent stage",
+  } satisfies Record<OwnActionStage, string>),
+);
 
 function assertNoOwnAction(stage: string): void {
   const action = OWN_ACTIONS.get(stage);
@@ -646,7 +655,7 @@ export function block(db: Db, nodeId: string, input: { reason: string; actor: Ac
   assertHuman(input.actor, "mark a node externally blocked");
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
-    if (["done", "broken_down", "invalidated", "externally_blocked"].includes(node.stage)) {
+    if (FINISHED_STAGES.includes(node.stage) || node.stage === "invalidated" || node.stage === "externally_blocked") {
       throw refused(`Can't block: the node is at "${node.stage}"`);
     }
     applyStageChange(db, node, {

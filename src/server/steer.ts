@@ -1,18 +1,10 @@
-import { statSync } from "node:fs";
 import type { SteerSession } from "../shared/api.js";
 import { loadConfig } from "./config.js";
 import type { Db } from "./db.js";
 import { refused } from "./errors.js";
+import { isFolder } from "./fsUtil.js";
 import { claim, getNodeRow } from "./nodes.js";
 import { agentStartPath, getProject } from "./projects.js";
-
-export function isFolder(path: string): boolean {
-  try {
-    return statSync(path).isDirectory();
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Claims a node for the human and says what to run. The CLI runs it, because the session belongs in

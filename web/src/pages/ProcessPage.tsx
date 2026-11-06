@@ -1,10 +1,10 @@
 import { Link } from "react-router-dom";
+import { GLOBAL_STAGES } from "../../../src/shared/builtInStages.js";
 import { ErrorNotice, ProblemBanner } from "../components/ErrorNotice.js";
 import { PipelineGraph } from "../components/PipelineGraph.js";
 import { api } from "../lib/api.js";
 import { humanize } from "../lib/format.js";
 import { useLiveData } from "../lib/live.js";
-import { GLOBAL_STAGES } from "../lib/stageStyle.js";
 
 const globalStageNames = GLOBAL_STAGES.map((stage) => humanize(stage)).join(", ");
 

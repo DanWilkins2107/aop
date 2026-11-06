@@ -1,8 +1,8 @@
 import { Graph, layout } from "@dagrejs/dagre";
 import type { EventView, NodeView, TypeView } from "../../../src/shared/api.js";
+import { GLOBAL_STAGES } from "../../../src/shared/builtInStages.js";
 import { humanize } from "./format.js";
 import type { Point } from "./layout.js";
-import { GLOBAL_STAGES } from "./stageStyle.js";
 
 /** `exit` is somewhere a type leads out to: a finish, or another type. */
 export type BoxKind = "stage" | "exit" | "current" | "return";

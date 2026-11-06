@@ -1,5 +1,5 @@
 // Decides which agents run and what each run's end means for its node. OS-level process handling is
-// in `processes.ts`, and the `runs` and `agent_processes` rows in `runs.ts`.
+// in `osProcesses.ts`, and the `runs` and `agent_processes` rows in `runs.ts`.
 
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import type { WriteStream } from "node:fs";
@@ -11,6 +11,7 @@ import { type AopConfig, loadConfig } from "./config.js";
 import { buildPrompt } from "./context.js";
 import type { Db } from "./db.js";
 import { ConfigError, refused } from "./errors.js";
+import { isFolder } from "./fsUtil.js";
 import { getNodeRow, holdersOf, markFailed, startableNodes, type NodeRow, type NodeView, getNode } from "./nodes.js";
 import {
   type Identity,
@@ -23,7 +24,7 @@ import {
   RUN_MARKER,
   sweepRuns,
   waitGone,
-} from "./processes.js";
+} from "./osProcesses.js";
 import { agentStartPath, getProject } from "./projects.js";
 import { newId } from "./records.js";
 import { appendToLog, logPathFor, openLog } from "./runLog.js";
@@ -43,7 +44,6 @@ import {
   type ProcessRow,
   type RunRow,
 } from "./runs.js";
-import { isFolder } from "./steer.js";
 
 /** How long an agent that reported `next`, `ask` or `split finish` gets to exit before it's stopped. */
 const DEFAULT_GRACE_MS = 15_000;
