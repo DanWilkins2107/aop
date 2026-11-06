@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import Database from "better-sqlite3";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { openDb } from "../../src/server/db.js";
 import { migrations } from "../../src/server/migrations.js";
 import { aopHome } from "../../src/server/paths.js";
@@ -14,7 +14,6 @@ let h: Harness;
 beforeEach(() => {
   h = harness();
 });
-afterEach(() => h.close());
 
 const find = async (query: string, project?: string) => {
   const params = new URLSearchParams({ q: query, ...(project ? { project } : {}) });

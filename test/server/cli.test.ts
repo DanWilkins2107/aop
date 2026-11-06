@@ -3,9 +3,9 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { EdgeRow, EventView, LinkRow, MessageRow } from "../../src/shared/api.js";
-import { directives, fakeCommand, nodeArgs, world, type World } from "./agents.helpers.js";
+import { directives, fakeCommand, nodeArgs, settle, world, type World } from "./agents.helpers.js";
 
 const TIMEOUT = { timeout: 90_000 };
 let w: World;
@@ -14,10 +14,6 @@ beforeEach(async () => {
   // A one-line script as the interactive session, so `steer` launches no agent tool.
   w = await world({ config: `out_of_sandbox_command: ${JSON.stringify(fakeCommand + " --out")}\n` });
 });
-afterEach(async () => {
-  await w.close();
-});
-
 interface Result {
   code: number | null;
   stdout: string;
@@ -137,7 +133,7 @@ describe("the agent commands", () => {
     await w.atStage(parent.id, "splitting");
     const made = await aop(["node", "create", "--title", "Held", "--type", "hotfix", "--parent", parent.id]);
     const id = /^Created (\S+)/.exec(made.stdout)?.[1] as string;
-    await new Promise((done) => setTimeout(done, 1_500));
+    await settle();
     expect(w.runs(id)).toEqual([]);
   });
 
@@ -289,7 +285,7 @@ describe("the human commands", () => {
       const node = await parked();
       await aop(["steer", node.id]);
       await w.call("POST", `/nodes/${node.id}/move`, { stage: "implement", type: "hotfix" });
-      await new Promise((done) => setTimeout(done, 1_000));
+      await settle(1_000);
       expect(w.runs(node.id)).toEqual([]);
       writeFileSync(join(w.home, "config.yaml"), `agent_session_command: ${JSON.stringify(fakeCommand)}\nstages: ./stages.yaml\n`);
       await w.call("PATCH", `/nodes/${node.id}`, { body: directives('aop ["next","fixed"]') });

@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { delimiter, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { expect } from "vitest";
+import { expect, onTestFinished } from "vitest";
 import { ChangeFeed } from "../../src/server/changes.js";
 import { openDb, type Db } from "../../src/server/db.js";
 import { Orchestrator } from "../../src/server/orchestrator.js";
@@ -39,6 +39,23 @@ export function fakeConfig(extra = ""): string {
 
 export const directives = (...lines: string[]) => lines.map((line) => `@@${line}`).join("\n");
 
+/**
+ * Gives the system time to do something it mustn't, before checking that it didn't. Only for that: wait
+ * for something that should happen with `until` or `expect.poll`, which wait no longer than they need.
+ */
+export const settle = (ms = 1_500) => new Promise((done) => setTimeout(done, ms));
+
+/** Waits for the process ID that a fake agent's `@@pid` or `@@child` writes to a file. */
+export function pidIn(file: string): Promise<number> {
+  return until(`a process ID in ${file}`, () => {
+    try {
+      return Number(readFileSync(file, "utf8")) || null;
+    } catch {
+      return null;
+    }
+  });
+}
+
 export async function until<T>(what: string, check: () => T | undefined | null | false, timeoutMs = 30_000): Promise<T> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
@@ -69,12 +86,17 @@ export interface World {
   /** Records a process ID the test will check, and clear up if the code under test leaves it. */
   pidFrom(name: string): Promise<number>;
   restartOrchestrator(options?: { graceMs?: number }): Promise<void>;
+  /** Happens by itself when the test finishes. Calling it again does nothing. */
   close(): Promise<void>;
 }
 
+/** Stopping agents and the server is slow on Windows, where each process lookup is a PowerShell call. */
+const CLOSE_TIMEOUT_MS = 60_000;
+
 /**
  * A real server and orchestrator on a free port, in a throwaway AOP_HOME, launching fake agents that
- * use the real CLI. Only ever launches `fakeCommand`.
+ * use the real CLI. Only ever launches `fakeCommand`. Call it inside a test or `beforeEach`: it closes
+ * itself when the test finishes, pass or fail, and puts the environment back even if it fails to start.
  */
 export async function world(options: { config?: string; graceMs?: number; home?: Record<string, string> } = {}): Promise<World> {
   const outer = { home: process.env["AOP_HOME"], path: process.env["PATH"], url: process.env["AOP_URL"] };
@@ -82,10 +104,35 @@ export async function world(options: { config?: string; graceMs?: number; home?:
   const home = makeHome({ "config.yaml": fakeConfig(options.config), ...options.home });
   expect(readFileSync(join(home, "config.yaml"), "utf8")).toContain(FAKE_AGENT.replaceAll("\\", "\\\\"));
 
+  // What to undo, filled in as each part starts so that a failed start is undone too. Run in reverse,
+  // every step even if one throws, and only once.
+  const undo: (() => unknown)[] = [];
+  let closing: Promise<void> | undefined;
+  const close = () =>
+    (closing ??= (async () => {
+      const errors: unknown[] = [];
+      for (const step of undo.reverse()) await Promise.resolve().then(step).catch((error: unknown) => errors.push(error));
+      if (errors.length > 0) throw errors[0];
+    })());
+  onTestFinished(close, CLOSE_TIMEOUT_MS);
+
   process.env["AOP_HOME"] = home;
   process.env["PATH"] = `${shim}${delimiter}${outer.path}`;
+  undo.push(() => {
+    process.env["AOP_HOME"] = outer.home;
+    process.env["PATH"] = outer.path;
+    if (outer.url === undefined) delete process.env["AOP_URL"];
+    else process.env["AOP_URL"] = outer.url;
+  });
+
+  const pids = new Set<number>();
+  // Only ever process IDs that a fake agent reported in this test.
+  undo.push(async () => {
+    for (const pid of pids) if (isAlive(pid)) await killTree(pid);
+  });
 
   const db = openDb();
+  undo.push(() => db.close());
   const repo = makeRepo();
   const project = addProject(db, { repo_path: repo });
   const changes = new ChangeFeed();
@@ -102,11 +149,11 @@ export async function world(options: { config?: string; graceMs?: number; home?:
     },
   });
   const server: RunningServer = await startServer(db, 0, { changes, orchestrator: proxy });
+  undo.push(() => server.close());
   const url = `http://127.0.0.1:${server.port}`;
   process.env["AOP_URL"] = url;
+  undo.push(() => holder.current.shutdown());
   await holder.current.start(url);
-
-  const pids = new Set<number>();
 
   const self: World = {
     home,
@@ -164,13 +211,7 @@ export async function world(options: { config?: string; graceMs?: number; home?:
       return self.node(nodeId);
     },
     async pidFrom(name) {
-      const pid = await until(`pid file ${name}`, () => {
-        try {
-          return Number(readFileSync(self.file(name), "utf8")) || null;
-        } catch {
-          return null;
-        }
-      });
+      const pid = await pidIn(self.file(name));
       pids.add(pid);
       return pid;
     },
@@ -179,17 +220,7 @@ export async function world(options: { config?: string; graceMs?: number; home?:
       holder.current = makeOrchestrator(graceMs);
       await holder.current.start(url);
     },
-    async close() {
-      await holder.current.shutdown();
-      await server.close();
-      db.close();
-      // Only ever process IDs that a fake agent reported in this test.
-      for (const pid of pids) if (isAlive(pid)) await killTree(pid);
-      process.env["AOP_HOME"] = outer.home;
-      process.env["PATH"] = outer.path;
-      if (outer.url === undefined) delete process.env["AOP_URL"];
-      else process.env["AOP_URL"] = outer.url;
-    },
+    close,
   };
   return self;
 }

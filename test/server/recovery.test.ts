@@ -1,12 +1,11 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished } from "vitest";
 import { openDb } from "../../src/server/db.js";
 import { isAlive, killTree, readProcessStarts, waitGone } from "../../src/server/processes.js";
 import { listProcesses, recordProcess } from "../../src/server/runs.js";
 import type { AgentProcessView, NodeView, ProjectRow, ReapResult } from "../../src/shared/api.js";
-import { aopShim, directives, fakeConfig, nodeArgs, until, world, type World } from "./agents.helpers.js";
+import { aopShim, directives, fakeConfig, nodeArgs, pidIn, settle, until, world, type World } from "./agents.helpers.js";
 import { makeHome, makeRepo } from "./helpers.js";
 
 const TIMEOUT = { timeout: 120_000 };
@@ -31,10 +30,7 @@ async function clearStrays(): Promise<void> {
 
 describe("recovery with the orchestrator restarted in place", () => {
   let w: World;
-  afterEach(async () => {
-    await w.close();
-    await clearStrays();
-  });
+  afterEach(clearStrays);
 
   it("a clean shutdown stops agents and returns nodes to the queue, not to failed", TIMEOUT, async () => {
     w = await world();
@@ -140,10 +136,7 @@ describe("recovery with the orchestrator restarted in place", () => {
 
 describe("reap and identity", () => {
   let w: World;
-  afterEach(async () => {
-    await w.close();
-    await clearStrays();
-  });
+  afterEach(clearStrays);
 
   async function onRecord(id: string, nodeId: string, process_: { pid: number }, start: string | null): Promise<void> {
     recordProcess(w.db, { id, node_id: nodeId }, process_.pid, "fake command");
@@ -182,7 +175,7 @@ describe("reap and identity", () => {
     const res = await w.call<ReapResult>("POST", "/agents/reap");
     expect(res.body.killed).toEqual([]);
     expect(res.body.skipped.map((s) => s.run_id)).toEqual(["old-run"]);
-    await new Promise((done) => setTimeout(done, 500));
+    await settle(500);
     expect(isAlive(innocent.pid)).toBe(true);
     // It isn't this record's process, so the record goes.
     expect(listProcesses(w.db)).toEqual([]);
@@ -282,6 +275,15 @@ describe("a real server process", () => {
     return { home, shim, first, url, post, project };
   }
 
+  /** A fake agent's process, killed when the test finishes if a failure left it running. */
+  async function agentPid(file: string): Promise<number> {
+    const pid = await pidIn(file);
+    onTestFinished(async () => {
+      if (isAlive(pid)) await killTree(pid);
+    });
+    return pid;
+  }
+
   function dbNode(home: string, id: string): NodeView {
     const db = openDb(join(home, "aop.db"));
     try {
@@ -300,14 +302,8 @@ describe("a real server process", () => {
       title: "t",
       body: directives(`pid ${pidFile}`, `child ${childFile}`, "hang"),
     });
-    const pid = await until("the agent's pid", () => {
-      try {
-        return Number(readFileSync(pidFile, "utf8")) && Number(readFileSync(childFile, "utf8")) ? Number(readFileSync(pidFile, "utf8")) : null;
-      } catch {
-        return null;
-      }
-    });
-    const child = Number(readFileSync(childFile, "utf8"));
+    const pid = await agentPid(pidFile);
+    const child = await agentPid(childFile);
     await until("the process record", () => {
       const db = openDb(join(home, "aop.db"));
       try {
@@ -332,8 +328,6 @@ describe("a real server process", () => {
     } finally {
       second.child.kill("SIGKILL");
       await second.exited;
-      if (isAlive(pid)) await killTree(pid);
-      if (isAlive(child)) await killTree(child);
     }
   });
 
@@ -440,13 +434,7 @@ describe("a real server process", () => {
       title: "t",
       body: directives(`pid ${pidFile}`, "hang"),
     });
-    const pid = await until("the agent's pid", () => {
-      try {
-        return Number(readFileSync(pidFile, "utf8")) || null;
-      } catch {
-        return null;
-      }
-    });
+    const pid = await agentPid(pidFile);
     first.child.kill("SIGKILL");
     await first.exited;
     await killTree(pid);
@@ -472,13 +460,7 @@ describe("a real server process", () => {
       title: "t",
       body: directives(`pid ${pidFile}`, "hang"),
     });
-    const pid = await until("the agent's pid", () => {
-      try {
-        return Number(readFileSync(pidFile, "utf8")) || null;
-      } catch {
-        return null;
-      }
-    });
+    const pid = await agentPid(pidFile);
     first.child.kill("SIGTERM");
     await first.exited;
     expect(isAlive(pid)).toBe(false);

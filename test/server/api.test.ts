@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { holdersOf, type EventView, type NodeView } from "../../src/server/nodes.js";
 import { harness, makeRepo, STAGES_YAML, type Harness } from "./helpers.js";
 
@@ -7,7 +7,6 @@ let h: Harness;
 beforeEach(() => {
   h = harness();
 });
-afterEach(() => h.close());
 
 function errorOf(res: { body: unknown }): { code: string; message: string; details?: unknown } {
   return (res.body as { error: { code: string; message: string; details?: unknown } }).error;

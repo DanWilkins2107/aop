@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { holdersOf, type EventView, type MessageRow, type NodeView } from "../../src/server/nodes.js";
 import { harness, STAGES_YAML, type Harness } from "./helpers.js";
 
@@ -7,7 +7,6 @@ let h: Harness;
 beforeEach(() => {
   h = harness();
 });
-afterEach(() => h.close());
 
 async function eventsOf(nodeId: string): Promise<EventView[]> {
   return (await h.call<EventView[]>("GET", `/api/nodes/${nodeId}/events`)).body;
