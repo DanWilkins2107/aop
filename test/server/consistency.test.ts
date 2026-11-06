@@ -106,6 +106,17 @@ describe("agent identity", () => {
   });
 });
 
+describe("an agent's own fail", () => {
+  it("is a report like next or ask: the agent gets its grace period to exit", TIMEOUT, async () => {
+    const w = await world({ graceMs: 5_000 });
+    const node = await w.create(directives('aop ["fail","The repo is gone"]', "sleep 1500"));
+    await w.atStage(node.id, "failed");
+    const [run] = await w.runsEnded(node.id);
+    expect(run).toMatchObject({ left_via: "fail", left_actor: "agent", end_reason: "reported" });
+    expect(await w.call<string>("GET", `/runs/${run!.id}/log`)).toMatchObject({ body: expect.stringContaining("exited, code 0") });
+  });
+});
+
 describe("shutdown", () => {
   it("during startup, starts no agents afterwards", TIMEOUT, async () => {
     const outer = process.env["AOP_HOME"];
