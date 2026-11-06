@@ -35,6 +35,7 @@ export interface Settings {
 export type Values = {
   yes?: boolean;
   "fill-missing"?: boolean;
+  "if-new"?: boolean;
   "agent-session-command"?: string;
   "out-of-sandbox-command"?: string;
   "open-from"?: string;
@@ -84,26 +85,27 @@ function stagesProblems(path: string): string[] {
 interface Sources {
   values: Values;
   ask: Ask | undefined;
-  /** A tool found on PATH, offered as the default command. */
-  suggested: string | undefined;
+  /** The first tool found on PATH, which picks the suggested commands. */
+  tool: "claude" | "copilot" | undefined;
   cwd: string;
   say: (text: string) => void;
 }
 
-async function sessionCommand({ values, ask, suggested, say }: Sources): Promise<string> {
-  let command = values["agent-session-command"]?.trim();
+/** Offered as the agent session command, unless only copilot is installed. */
+export const CLAUDE_AUTO_COMMAND = "claude --permission-mode auto";
+
+async function sessionCommand({ values, ask, tool, say }: Sources): Promise<string> {
+  const command = values["agent-session-command"]?.trim();
   if (command === "") throw new InitFailure("--agent-session-command can't be empty.");
   if (command !== undefined) return command;
   if (!ask) throw new InitFailure("--agent-session-command is required with --yes.");
+  const suggested = tool === "copilot" ? "copilot" : CLAUDE_AUTO_COMMAND;
   say(`\nAgent session command (required). ${ABOUT.agent_session_command}`);
-  while (command === undefined) {
-    command = (await ask(suggested ? `Command [${suggested}]: ` : "Command: ")) || suggested;
-    if (command === undefined) say("This one is required.");
-  }
-  return command;
+  say("Agents run headless, so they can't ask you to approve anything. Use Claude Code's auto mode, or an equivalent.");
+  return (await ask(`Command [${suggested}]: `)) || suggested;
 }
 
-async function outOfSandboxCommand({ values, ask, suggested, say }: Sources): Promise<string | undefined> {
+async function outOfSandboxCommand({ values, ask, tool: suggested, say }: Sources): Promise<string | undefined> {
   const flag = values["out-of-sandbox-command"];
   if (flag !== undefined || !ask) return flag?.trim() || undefined;
   say(`\nOut of sandbox command (optional). ${ABOUT.out_of_sandbox_command}`);

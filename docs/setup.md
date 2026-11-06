@@ -9,20 +9,19 @@ You need Node 22 or newer.
    cd aop
    npm run setup
    ```
-   This installs, builds and runs `npm link`, which puts `aop` on your PATH. Agents need it there too: they report back through the `aop` command.
-2. **Set up your machine.** Run `aop init` and answer its questions (see [aop init](#aop-init)).
-3. **Install the plugin** in your agent tool (see [The plugin](#the-plugin)).
-4. **Start the server.** Run `aop serve` and leave it running in its own terminal.
-5. **Open http://127.0.0.1:4317** and follow [Your first node](#your-first-node).
+   This installs, builds and runs `npm link`, which puts `aop` on your PATH. Agents need it there too: they report back through the `aop` command. It then runs `aop init`, so answer its questions (see [aop init](#aop-init)). Re-running it is safe: once you're set up, it skips `aop init`.
+2. **Install the plugin** in your agent tool (see [The plugin](#the-plugin)).
+3. **Start the server.** Run `aop serve` and leave it running in its own terminal.
+4. **Open http://127.0.0.1:4317** and follow [Your first node](#your-first-node).
 
 To update, run `git pull` in the clone and restart `aop serve`. It rebuilds itself when the sources have changed.
 
 ## aop init
 `aop init` creates `~/.aop`, which holds your config and database. Nothing is ever added to the repos you work in. It asks for:
 
-1. **Agent session command** (required). What AOP runs to start an agent, such as `claude`. AOP adds `-p` and sends the prompt on stdin.
+1. **Agent session command** (required). What AOP runs to start an agent. AOP adds `-p` and sends the prompt on stdin. Defaults to `claude --permission-mode auto`, or `copilot` if that's the only tool you have.
    - AOP doesn't ship a sandbox. Point this at your own sandboxed wrapper before you let agents run unattended.
-   - Agents run headless, so they can't ask you to approve commands or edits, and anything not already allowed is refused. Use Claude Code's auto mode, or an equivalent: add `--permission-mode auto` to this command, or set `"defaultMode": "auto"` under `permissions` in `~/.claude/settings.json`. Set it there, not in a repo. AOP adds no permission flags itself.
+   - Agents run headless, so they can't ask you to approve commands or edits, and anything not already allowed is refused. That's why the default uses Claude Code's auto mode. If you change the command, keep auto mode or an equivalent.
 2. **Out of sandbox command** (optional). Sometimes you may want to run an AOP-driven session outside a sandbox yourself. This is the command `aop steer <node> --no-sandbox` runs. Leave it blank if you don't sandbox.
 3. **Open from.** Where sessions start for projects with no path. Defaults to `~/code`, and offers to create it.
 4. **Agent timeout.** Minutes before a running agent is stopped and its node goes to `failed`. Defaults to 60.

@@ -77,7 +77,7 @@ export const AGENT_COMMANDS = {
 } as const;
 export const HUMAN_COMMANDS = {
   init: [
-    "aop init [--yes] [--fill-missing] [--agent-session-command <cmd>] [--out-of-sandbox-command <cmd>] [--open-from <dir>] [--create-open-from] [--agent-timeout-minutes <n>] [--stages <file>] [--improvements-path <dir>]",
+    "aop init [--yes] [--fill-missing] [--if-new] [--agent-session-command <cmd>] [--out-of-sandbox-command <cmd>] [--open-from <dir>] [--create-open-from] [--agent-timeout-minutes <n>] [--stages <file>] [--improvements-path <dir>]",
   ],
   project: ["aop project add <path>"],
   serve: ["aop serve [--port <port>]"],

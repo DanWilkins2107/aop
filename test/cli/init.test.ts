@@ -180,6 +180,24 @@ describe("existing config", () => {
     expect(readdirSync(box.home)).toEqual(["config.yaml"]);
   });
 
+  it("says it's already set up and succeeds with --if-new", async () => {
+    const box = sandbox();
+    mkdirSync(box.home);
+    writeFileSync(join(box.home, "config.yaml"), "mine: true\n");
+    const result = await init(box, ["--if-new"], []);
+    expect(result.err).toBe("");
+    expect(result.code).toBe(0);
+    expect(result.out).toBe(`AOP is already set up in ${box.home}. Edit ${join(box.home, "config.yaml")} to change it.\n`);
+    expect(readdirSync(box.home)).toEqual(["config.yaml"]);
+  });
+
+  it("sets up as usual with --if-new when there's no config", async () => {
+    const box = sandbox();
+    const result = await init(box, flags(box, "--if-new"));
+    expect(result.code).toBe(0);
+    expect(loadConfig(box.home).agent_session_command).toBe("sandboxed-claude --model x");
+  });
+
   it("only adds missing files with --fill-missing", async () => {
     const box = sandbox();
     expect((await init(box, flags(box))).code).toBe(0);
@@ -324,7 +342,8 @@ describe("asking", () => {
     expect(result.code).toBe(0);
     for (const prompt of [
       "Agent session command (required). This is the session your agents are starting in. Strongly consider having this command start sessions inside a sandbox.",
-      "Command [claude]: ",
+      "Agents run headless, so they can't ask you to approve anything. Use Claude Code's auto mode, or an equivalent.",
+      "Command [claude --permission-mode auto]: ",
       "Command, or blank to skip (e.g. claude): ",
       "Folder [~/code]: ",
       "doesn't exist. Create it? [y/N]: ",
@@ -335,14 +354,34 @@ describe("asking", () => {
       expect(result.out).toContain(prompt);
     }
     const config = loadConfig(box.home);
-    expect(config.agent_session_command).toBe("claude");
+    expect(config.agent_session_command).toBe("claude --permission-mode auto");
     expect(config.out_of_sandbox_command).toBeUndefined();
     expect(config.openFromPath).toBe(box.code);
     expect(config.agent_timeout_minutes).toBe(60);
     expect(existsSync(join(box.root, "missing"))).toBe(false);
     expect(result.out).toContain(`/plugin install aop@aop`);
-    expect(result.out).toContain("--permission-mode auto");
     expect(result.out).toContain(`copilot plugin install ${join(ROOT, "plugin")}`);
+    // The command already uses auto mode, so the closing tip about it is left out.
+    expect(result.out).not.toContain("Consider Claude Code's auto mode");
+  });
+
+  it("suggests copilot when it's the only tool found", async () => {
+    const box = sandbox();
+    fakeTool(box.bin, "copilot");
+    const result = await init(box, ["--open-from", box.code], ["", "", "", "", ""]);
+    expect(result.code).toBe(0);
+    expect(result.out).toContain("Command [copilot]: ");
+    expect(result.out).not.toContain("Command [claude");
+    expect(loadConfig(box.home).agent_session_command).toBe("copilot");
+    expect(result.out).toContain("Consider Claude Code's auto mode");
+  });
+
+  it("suggests claude in auto mode when no tool is found", async () => {
+    const box = sandbox();
+    const result = await init(box, ["--open-from", box.code], ["", "", "", "", ""]);
+    expect(result.code).toBe(0);
+    expect(result.out).toContain("Command [claude --permission-mode auto]: ");
+    expect(loadConfig(box.home).agent_session_command).toBe("claude --permission-mode auto");
   });
 
   it("skips prompts the flags answer", async () => {
@@ -479,6 +518,16 @@ describe("aop init from the CLI", () => {
     });
     expect(again.status).toBe(1);
     expect(again.stderr).toContain("already exists");
+
+    // What a second `npm run setup` runs.
+    const rerun = spawnSync(process.execPath, [...nodeArgs("src/cli/main.ts"), "init", "--if-new"], {
+      encoding: "utf8",
+      env: cliEnv(box),
+      input: "",
+    });
+    expect(rerun.stderr).toBe("");
+    expect(rerun.status).toBe(0);
+    expect(rerun.stdout).toContain("AOP is already set up");
   }, 60_000);
 
   it("shares its usage line with the CLI's help", () => {

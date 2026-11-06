@@ -15,6 +15,7 @@ import { ABOUT, expandPath, gatherSettings, InitFailure, lineReader, type Settin
 const FLAG_HELP = `Sets up AOP_HOME, or ~/.aop. Asks for each setting, unless a flag gives it.
   --yes                Don't ask. Settings not given by flags use their defaults.
   --fill-missing       Config exists: only add missing default files. Never overwrites.
+  --if-new             Config exists: say so and change nothing, without failing.
   --stages <file>      Use your own stages file instead of the default process.
   --create-open-from   Create the open_from folder if it doesn't exist.
   --improvements-path <dir>
@@ -248,6 +249,7 @@ async function init(argv: string[], io: InitIo): Promise<void> {
       options: {
         yes: { type: "boolean", short: "y" },
         "fill-missing": { type: "boolean" },
+        "if-new": { type: "boolean" },
         "agent-session-command": { type: "string" },
         "out-of-sandbox-command": { type: "string" },
         "open-from": { type: "string" },
@@ -274,6 +276,10 @@ async function init(argv: string[], io: InitIo): Promise<void> {
   }
   const configFile = configPath(home);
   const configExists = existsSync(configFile);
+  if (configExists && values["if-new"] === true) {
+    say(`AOP is already set up in ${home}. Edit ${configFile} to change it.`);
+    return;
+  }
   if (configExists && values["fill-missing"] !== true) {
     throw new InitFailure(
       `${configFile} already exists, so nothing was changed. Edit it by hand, or run \`aop init --fill-missing\` to add only missing files.`,
@@ -305,7 +311,7 @@ async function init(argv: string[], io: InitIo): Promise<void> {
     const reader = values.yes === true ? undefined : lineReader(io.input, io.output);
     let gathered: Awaited<ReturnType<typeof gatherSettings>>;
     try {
-      gathered = await gatherSettings({ values, ask: reader?.ask, suggested: [...found.keys()][0], cwd: io.cwd, say });
+      gathered = await gatherSettings({ values, ask: reader?.ask, tool: [...found.keys()][0], cwd: io.cwd, say });
     } finally {
       reader?.close();
     }
@@ -334,9 +340,11 @@ async function init(argv: string[], io: InitIo): Promise<void> {
   if (!existsSync(config.openFromPath)) say(`Note: open_from ${config.openFromPath} doesn't exist yet.`);
 
   say(`\n${pluginSteps(io, found)}`);
-  say(
-    "\nAgents run headless, so they can't ask you to approve commands or edits. Consider Claude Code's auto mode: add `--permission-mode auto` to agent_session_command, or set permissions.defaultMode to \"auto\" in ~/.claude/settings.json.",
-  );
+  if (!config.agent_session_command.includes("--permission-mode")) {
+    say(
+      "\nAgents run headless, so they can't ask you to approve commands or edits. Consider Claude Code's auto mode: add `--permission-mode auto` to agent_session_command, or set permissions.defaultMode to \"auto\" in ~/.claude/settings.json.",
+    );
+  }
   if (findOnPath("aop", io.env, io.platform) === undefined) {
     say("\nAgents also need `aop` on PATH. Run `npm link` in the AOP package, or install it globally.");
   }

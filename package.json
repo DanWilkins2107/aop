@@ -16,7 +16,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "setup": "npm install && npm run build && npm link",
+    "setup": "npm install && npm run build && npm link && node dist/cli/main.js init --if-new",
     "start": "node dist/server/main.js",
     "dev:web": "vite",
     "build": "vite build && tsc -p tsconfig.build.json",
