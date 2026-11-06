@@ -61,4 +61,4 @@ AOP won't start if the file is invalid. If it becomes invalid while running, the
 - a `next` target or `start` doesn't exist, or the top-level `start` is missing
 - `next` targets a built-in other than `done` or `broken_down`
 - a type uses a stage that isn't in the pool
-- an agent stage has no `prompt`
+- an agent stage has no `prompt`, or its prompt file is missing or outside the folder `stages.yaml` is in, following symlinks
