@@ -31,7 +31,12 @@ function renderBlock(block: Block, index: number): ReactNode {
     case "paragraph":
       return <p key={index}>{renderInline(block.children)}</p>;
     case "list": {
-      const items = block.items.map((item, itemIndex) => <li key={itemIndex}>{renderInline(item)}</li>);
+      const items = block.items.map((item, itemIndex) => (
+        <li key={itemIndex}>
+          {renderInline(item.children)}
+          {item.lists?.map(renderBlock)}
+        </li>
+      ));
       return block.ordered ? <ol key={index}>{items}</ol> : <ul key={index}>{items}</ul>;
     }
     case "code":

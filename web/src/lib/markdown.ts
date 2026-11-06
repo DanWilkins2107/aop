@@ -12,18 +12,29 @@ export type Inline =
   | { kind: "em"; children: Inline[] }
   | { kind: "link"; href: string; children: Inline[] };
 
+/** A list item, with any lists indented under it. */
+export interface ListItem {
+  children: Inline[];
+  lists?: ListBlock[];
+}
+
+export interface ListBlock {
+  kind: "list";
+  ordered: boolean;
+  items: ListItem[];
+}
+
 export type Block =
   | { kind: "heading"; level: 1 | 2 | 3 | 4 | 5 | 6; children: Inline[] }
   | { kind: "paragraph"; children: Inline[] }
-  | { kind: "list"; ordered: boolean; items: Inline[][] }
+  | ListBlock
   | { kind: "code"; text: string }
   | { kind: "rule" };
 
 const HEADING = /^(#{1,6})\s+(.*)$/;
 /** An optional closing run of `#`, which only counts after a space, so `# C#` keeps its `#`. */
 const CLOSING_HASHES = /(^|\s+)#+\s*$/;
-const BULLET = /^\s*[-*+]\s+(.*)$/;
-const NUMBERED = /^\s*\d+[.)]\s+(.*)$/;
+const LIST_ITEM = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
 const FENCE = /^\s*(```|~~~)/;
 const RULE = /^\s*([-*_])(\s*\1){2,}\s*$/;
 
@@ -58,33 +69,62 @@ export function parseMarkdown(source: string): Block[] {
       i++;
       continue;
     }
-    const ordered = NUMBERED.test(line);
-    if (ordered || BULLET.test(line)) {
-      const marker = ordered ? NUMBERED : BULLET;
-      const items: string[] = [];
-      while (i < lines.length) {
-        const current = lines[i] ?? "";
-        const item = marker.exec(current);
-        if (item) items.push(item[1] ?? "");
-        else if (current.trim() !== "" && /^\s+/.test(current) && items.length > 0) {
-          items[items.length - 1] += ` ${current.trim()}`;
-        } else break;
-        i++;
-      }
-      blocks.push({ kind: "list", ordered, items: items.map((item) => parseInline(item)) });
+    if (LIST_ITEM.test(line)) {
+      const list = readList(lines, i);
+      blocks.push(list.block);
+      i = list.next;
       continue;
     }
     const text: string[] = [];
     while (i < lines.length) {
       const current = lines[i] ?? "";
       if (current.trim() === "" || HEADING.test(current) || FENCE.test(current) || RULE.test(current)) break;
-      if (BULLET.test(current) || NUMBERED.test(current)) break;
+      if (LIST_ITEM.test(current)) break;
       text.push(current.trim());
       i++;
     }
     blocks.push({ kind: "paragraph", children: parseInline(text.join(" ")) });
   }
   return blocks;
+}
+
+const indentOf = (space: string) => space.replace(/\t/g, "    ").length;
+
+/**
+ * Reads the list whose first item is at `start`. An item indented further than that starts a list
+ * under the item before it; a less indented item, a different kind of marker or a blank line ends it.
+ */
+function readList(lines: string[], start: number): { block: ListBlock; next: number } {
+  const first = LIST_ITEM.exec(lines[start] ?? "");
+  const indent = indentOf(first?.[1] ?? "");
+  const ordered = /\d/.test(first?.[2] ?? "");
+  const items: { text: string; lists: ListBlock[] }[] = [];
+  let i = start;
+  while (i < lines.length) {
+    const line = lines[i] ?? "";
+    const item = LIST_ITEM.exec(line);
+    const last = items[items.length - 1];
+    if (item) {
+      const at = indentOf(item[1] ?? "");
+      if (at > indent && last) {
+        const nested = readList(lines, i);
+        last.lists.push(nested.block);
+        i = nested.next;
+        continue;
+      }
+      if (at < indent || /\d/.test(item[2] ?? "") !== ordered) break;
+      items.push({ text: item[3] ?? "", lists: [] });
+    } else if (line.trim() !== "" && /^\s+/.test(line) && last) {
+      last.text += ` ${line.trim()}`;
+    } else break;
+    i++;
+  }
+  const block: ListBlock = {
+    kind: "list",
+    ordered,
+    items: items.map(({ text, lists }) => ({ children: parseInline(text), ...(lists.length > 0 ? { lists } : {}) })),
+  };
+  return { block, next: i };
 }
 
 /** Only links that can't run script are kept; anything else stays as plain text. */
