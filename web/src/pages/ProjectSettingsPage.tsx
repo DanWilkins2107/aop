@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type { ProjectRow } from "../../../src/shared/api.js";
-import { ErrorNotice } from "../components/ErrorNotice.js";
 import { DeleteProjectDialog, RepoPathHint } from "../components/ProjectDialogs.js";
+import { SubPage } from "../components/SubPage.js";
 import { api } from "../lib/api.js";
 import { useLiveData } from "../lib/live.js";
 import { useAction } from "../lib/useAction.js";
@@ -98,18 +98,18 @@ export function ProjectSettingsPage() {
 
   const project = data?.project;
   return (
-    <div className="page page-narrow">
-      <nav className="breadcrumb">
-        <Link to="/">Projects</Link>
-        {project ? (
+    <SubPage
+      title="Project settings"
+      error={error}
+      trail={
+        project ? (
           <>
             <span className="crumb-sep">›</span>
             <Link to={`/p/${project.id}`}>{project.name}</Link>
           </>
-        ) : null}
-      </nav>
-      <h1 className="settings-title">Project settings</h1>
-      {error ? <ErrorNotice error={error} /> : null}
+        ) : null
+      }
+    >
       {data && !project ? <p className="muted">This project no longer exists.</p> : null}
       {project ? (
         <>
@@ -128,6 +128,6 @@ export function ProjectSettingsPage() {
           ) : null}
         </>
       ) : null}
-    </div>
+    </SubPage>
   );
 }
