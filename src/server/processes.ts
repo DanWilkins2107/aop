@@ -35,18 +35,17 @@ export function isAlive(pid: number): boolean {
  * or that this user can't read, has no entry: treat both as "not confirmed", never as a match.
  */
 export async function readProcessStarts(pids: number[]): Promise<Map<number, string>> {
-  const live = pids.filter(isAlive);
+  const live = [...new Set(pids.filter(isAlive))];
   const starts = new Map<number, string>();
   if (live.length === 0) return starts;
 
   if (IS_WINDOWS) {
-    const output = await powershell(
-      `Get-Process -Id ${live.join(",")} -ErrorAction SilentlyContinue | ForEach-Object { '{0} {1}' -f $_.Id, $_.StartTime.ToFileTimeUtc() }`,
-    );
-    for (const line of output.split(/\r?\n/)) {
-      const match = /^(\d+) (\d+)$/.exec(line.trim());
-      if (match) starts.set(Number(match[1]), match[2] as string);
-    }
+    const output =
+      (await windowsHelper().request(`starts ${live.join(",")}`)) ??
+      (await powershell(
+        `Get-Process -Id ${live.join(",")} -ErrorAction SilentlyContinue | ForEach-Object { '{0} {1}' -f $_.Id, $_.StartTime.ToFileTimeUtc() }`,
+      ));
+    for (const { pid, start } of parseIdentities(output)) if (live.includes(pid)) starts.set(pid, start);
     return starts;
   }
 
@@ -67,15 +66,36 @@ export interface Identity {
   start: string;
 }
 
-/** The processes a process started, by the operating system's parent link. */
-export async function readChildren(pid: number): Promise<number[]> {
-  const output = IS_WINDOWS
-    ? await powershell(`Get-CimInstance Win32_Process -Filter 'ParentProcessId=${pid}' | ForEach-Object { $_.ProcessId }`)
-    : await capture("pgrep", ["-P", String(pid)]);
-  return output
+/** Lines of `<pid> <start>`, as Windows lookups answer. */
+function parseIdentities(output: string): Identity[] {
+  const found: Identity[] = [];
+  for (const line of output.split(/\r?\n/)) {
+    const match = /^(\d+) (\d+)$/.exec(line.trim());
+    if (match) found.push({ pid: Number(match[1]), start: match[2] as string });
+  }
+  return found;
+}
+
+/**
+ * The live processes a process started, by the operating system's parent link, with their start
+ * times. A parent ID can outlive its process and be reused, so on Windows, where start times are
+ * comparable, callers can tell a real child by its being younger than the parent.
+ */
+export async function readChildStarts(pid: number): Promise<Identity[]> {
+  if (IS_WINDOWS) {
+    const output =
+      (await windowsHelper().request(`children ${pid}`)) ??
+      (await powershell(
+        `Get-CimInstance Win32_Process -Filter 'ParentProcessId=${pid}' | ForEach-Object { '{0} {1}' -f $_.ProcessId, $_.CreationDate.ToFileTimeUtc() }`,
+      ));
+    return parseIdentities(output);
+  }
+  const children = (await capture("pgrep", ["-P", String(pid)]))
     .split(/\r?\n/)
     .map((line) => Number(line.trim()))
     .filter((child) => Number.isInteger(child) && child > 0);
+  const starts = await readProcessStarts(children);
+  return [...starts].map(([child, start]) => ({ pid: child, start }));
 }
 
 function signalGroup(pid: number, signal: NodeJS.Signals | 0): boolean {
@@ -143,15 +163,9 @@ export async function killLeftovers(runId: string, leader: number, parents: Iden
     sweepRuns([runId], true),
     ...(IS_WINDOWS
       ? parents.map(async ({ pid, start }) => {
-          const output = await powershell(
-            `Get-CimInstance Win32_Process -Filter 'ParentProcessId=${pid}' | ForEach-Object { '{0} {1}' -f $_.ProcessId, $_.CreationDate.ToFileTimeUtc() }`,
-          );
-          const leftovers: number[] = [];
-          for (const line of output.split(/\r?\n/)) {
-            const match = /^(\d+) (\d+)$/.exec(line.trim());
-            if (match && BigInt(match[2] as string) >= BigInt(start)) leftovers.push(Number(match[1]));
-          }
-          await Promise.all(leftovers.map(killTree));
+          const children = await readChildStarts(pid);
+          const leftovers = children.filter((child) => BigInt(child.start) >= BigInt(start));
+          await Promise.all(leftovers.map((child) => killTree(child.pid)));
         })
       : []),
   ]);
@@ -229,10 +243,10 @@ function sweepLinux(ids: string[], kill: boolean): MarkedProcess[] | null {
   return found;
 }
 
-/** See `sweepRuns`. Compiled once per server, by `SweepHelper`. */
-const SWEEP_SOURCE = String.raw`
+/** Windows process lookups and `sweepRuns`. Compiled once per server, by `WindowsHelper`. */
+const HELPER_SOURCE = String.raw`
 using System; using System.Collections.Generic; using System.Runtime.InteropServices; using System.Text;
-public static class AopSweep {
+public static class AopProcesses {
   [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
   struct Entry { public uint size, usage, pid; public IntPtr heap; public uint module, threads, ppid; public int priority; public uint flags;
     [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string exe; }
@@ -272,15 +286,48 @@ public static class AopSweep {
     return null;
   }
 
-  public static string Run(string[] ids, bool kill, uint exclude) {
-    if (IntPtr.Size != 8) return "";
-    var wanted = new HashSet<string>(ids, StringComparer.OrdinalIgnoreCase);
+  /** Every live process, with its parent's ID. */
+  static Dictionary<uint, uint> Parents() {
     var parent = new Dictionary<uint, uint>();
     IntPtr snap = CreateToolhelp32Snapshot(2, 0);
-    if (snap == (IntPtr)(-1)) return "";
+    if (snap == (IntPtr)(-1)) throw new Exception("No process snapshot");
     var e = new Entry(); e.size = (uint)Marshal.SizeOf(typeof(Entry));
     for (bool more = Process32FirstW(snap, ref e); more; more = Process32NextW(snap, ref e)) parent[e.pid] = e.ppid;
     CloseHandle(snap);
+    return parent;
+  }
+
+  /** When a process was created, as a FILETIME, or -1 if it can't be read. */
+  static long Created(uint pid) {
+    IntPtr h = OpenProcess(0x1000, false, pid);
+    if (h == IntPtr.Zero) return -1;
+    try { long c, x, k, u; return GetProcessTimes(h, out c, out x, out k, out u) ? c : -1; }
+    finally { CloseHandle(h); }
+  }
+
+  static void Identify(StringBuilder output, uint pid) {
+    long c = Created(pid);
+    if (c > 0) output.Append(pid).Append(' ').Append(c).Append('\n');
+  }
+
+  /** See readProcessStarts. Only live processes, as Get-Process lists them. */
+  public static string Starts(uint[] pids) {
+    var live = Parents(); var output = new StringBuilder();
+    foreach (uint pid in pids) if (live.ContainsKey(pid)) Identify(output, pid);
+    return output.ToString();
+  }
+
+  /** See readChildStarts. */
+  public static string Children(uint ppid) {
+    var output = new StringBuilder();
+    foreach (var entry in Parents()) if (entry.Value == ppid && entry.Key != ppid) Identify(output, entry.Key);
+    return output.ToString();
+  }
+
+  public static string Run(string[] ids, bool kill, uint exclude) {
+    if (IntPtr.Size != 8) return "";
+    var wanted = new HashSet<string>(ids, StringComparer.OrdinalIgnoreCase);
+    var parent = Parents();
 
     uint self = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
     var handles = new Dictionary<uint, IntPtr>();
@@ -322,27 +369,42 @@ public static class AopSweep {
 }
 `;
 
-const SWEEP_DONE = "AOP-SWEEP-DONE";
-const SWEEP_FAILED = "AOP-SWEEP-FAILED";
+const HELPER_DONE = "AOP-HELPER-DONE";
+const HELPER_FAILED = "AOP-HELPER-FAILED";
 /** Allows for compiling on first use, on a busy machine. */
-const SWEEP_TIMEOUT_MS = 60_000;
+const HELPER_TIMEOUT_MS = 60_000;
+/** Helpers in a row that died before answering anything, after which nothing more asks one. */
+const HELPER_START_FAILURES = 2;
 
 /**
- * One PowerShell process that compiles the sweep once and then answers a request per line, because
- * compiling takes seconds and a sweep follows every agent's exit. It's a plain child of the server,
- * which Node on Windows puts in a job that ends it when the server ends, however that happens. It
- * doesn't keep the server running, and it's started again if it dies.
+ * One PowerShell process that compiles `HELPER_SOURCE` once and then answers a request per line,
+ * because starting PowerShell takes a second or more, compiling takes seconds more, and lookups and
+ * sweeps follow every agent's launch and exit. It's a plain child of the server, which Node on
+ * Windows puts in a job that ends it when the server ends, however that happens. It doesn't keep the
+ * server running, and it's started again if it dies.
+ *
+ * Requests are `starts <pid,...>`, `children <pid>`, and `find <run,...>` or `kill <run,...>` for
+ * sweeps. Each answers with lines of output, or null if the helper failed and nothing is known.
  */
-class SweepHelper {
+class WindowsHelper {
   private child: ChildProcessWithoutNullStreams | null = null;
+  private answered = false;
+  private startFailures = 0;
   private output = "";
   private waiting: ((output: string | null) => void) | null = null;
   private queue: Promise<unknown> = Promise.resolve();
-  /** Requests waiting their turn, merged into one, because several runs often end together. */
+  /** Sweeps waiting their turn, merged into one, because several runs often end together. */
   private batch: { ids: Set<string>; kill: boolean; answer: Promise<string | null> } | null = null;
 
+  /** Takes its turn after every request before it. */
+  request(line: string): Promise<string | null> {
+    const answer = this.queue.then(() => this.send(line));
+    this.queue = answer.catch(() => {});
+    return answer;
+  }
+
   /** Answers for every run in the batch it joins, not only these. */
-  request(ids: string[], kill: boolean): Promise<string | null> {
+  sweep(ids: string[], kill: boolean): Promise<string | null> {
     if (this.batch?.kill === kill) {
       for (const id of ids) this.batch.ids.add(id);
       return this.batch.answer;
@@ -350,7 +412,7 @@ class SweepHelper {
     const batch = { ids: new Set(ids), kill, answer: Promise.resolve<string | null>(null) };
     batch.answer = this.queue.then(() => {
       if (this.batch === batch) this.batch = null;
-      return this.send(`${kill ? "kill" : "find"} ${[...batch.ids].join(",")}\n`);
+      return this.send(`${kill ? "kill" : "find"} ${[...batch.ids].join(",")}`);
     });
     this.batch = batch;
     this.queue = batch.answer.catch(() => {});
@@ -359,17 +421,23 @@ class SweepHelper {
 
   /** Starts compiling now, so that the first real request doesn't wait for it. */
   warm(): void {
-    this.child ??= this.start();
+    if (this.startFailures < HELPER_START_FAILURES) this.child ??= this.start();
   }
 
   private start(): ChildProcessWithoutNullStreams {
     const script = [
       "$ErrorActionPreference = 'Stop'",
-      `Add-Type -TypeDefinition @'\n${SWEEP_SOURCE}\n'@`,
+      `Add-Type -TypeDefinition @'\n${HELPER_SOURCE}\n'@`,
       "while ($null -ne ($line = [Console]::In.ReadLine())) {",
       "  $parts = $line.Split(' ')",
-      `  try { [Console]::Out.Write([AopSweep]::Run($parts[1].Split(','), $parts[0] -eq 'kill', ${process.pid})); [Console]::Out.WriteLine('${SWEEP_DONE}') }`,
-      `  catch { [Console]::Out.WriteLine('${SWEEP_FAILED}') }`,
+      "  try {",
+      "    $result = switch ($parts[0]) {",
+      "      'starts' { [AopProcesses]::Starts([uint32[]]$parts[1].Split(',')) }",
+      "      'children' { [AopProcesses]::Children([uint32]$parts[1]) }",
+      `      default { [AopProcesses]::Run($parts[1].Split(','), $parts[0] -eq 'kill', ${process.pid}) }`,
+      "    }",
+      `    [Console]::Out.Write($result); [Console]::Out.WriteLine('${HELPER_DONE}')`,
+      `  } catch { [Console]::Out.WriteLine('${HELPER_FAILED}') }`,
       "  [Console]::Out.Flush()",
       "}",
     ].join("\n");
@@ -378,25 +446,29 @@ class SweepHelper {
       stdio: "pipe",
       windowsHide: true,
     });
+    this.answered = false;
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
       this.output += chunk;
-      const end = /^(AOP-SWEEP-DONE|AOP-SWEEP-FAILED)\r?$/m.exec(this.output);
+      const end = /^(AOP-HELPER-DONE|AOP-HELPER-FAILED)\r?$/m.exec(this.output);
       if (!end) return;
-      const answer = end[1] === SWEEP_DONE ? this.output.slice(0, end.index) : null;
+      this.answered = true;
+      this.startFailures = 0;
+      const answer = end[1] === HELPER_DONE ? this.output.slice(0, end.index) : null;
       this.output = this.output.slice(end.index + end[0].length).replace(/^\n/, "");
       this.answer(answer);
     });
     child.stderr.resume();
     child.stdin.on("error", () => {});
-    child.once("exit", () => {
-      if (this.child === child) this.child = null;
+    const gone = () => {
+      if (this.child !== child) return;
+      this.child = null;
+      // Such as PowerShell refusing to compile: no use starting another for every lookup.
+      if (!this.answered) this.startFailures++;
       this.answer(null);
-    });
-    child.once("error", () => {
-      if (this.child === child) this.child = null;
-      this.answer(null);
-    });
+    };
+    child.once("exit", gone);
+    child.once("error", gone);
     for (const stream of [child, child.stdin, child.stdout, child.stderr] as unknown as { unref?: () => void }[]) stream.unref?.();
     return child;
   }
@@ -408,37 +480,39 @@ class SweepHelper {
   }
 
   private send(line: string): Promise<string | null> {
-    this.child ??= this.start();
+    this.warm();
     const child = this.child;
+    if (child === null) return Promise.resolve(null);
     this.output = "";
     return new Promise((done) => {
       const timer = setTimeout(() => {
         // Stuck: start afresh next time, and know nothing this time.
         child.kill();
         this.answer(null);
-      }, SWEEP_TIMEOUT_MS);
+      }, HELPER_TIMEOUT_MS);
       timer.unref();
       this.waiting = (output) => {
         clearTimeout(timer);
         done(output);
       };
-      child.stdin.write(line);
+      child.stdin.write(`${line}\n`);
     });
   }
 }
 
-let sweepHelper: SweepHelper | null = null;
+let helper: WindowsHelper | null = null;
 
-/** Gets sweeps ready ahead of the first one, where that takes time. */
+function windowsHelper(): WindowsHelper {
+  return (helper ??= new WindowsHelper());
+}
+
+/** Gets process lookups and sweeps ready ahead of the first one, where that takes time. */
 export function prepareSweeps(): void {
-  if (!IS_WINDOWS) return;
-  sweepHelper ??= new SweepHelper();
-  sweepHelper.warm();
+  if (IS_WINDOWS) windowsHelper().warm();
 }
 
 async function sweepWindows(ids: string[], kill: boolean): Promise<MarkedProcess[] | null> {
-  sweepHelper ??= new SweepHelper();
-  const output = await sweepHelper.request(ids, kill);
+  const output = await windowsHelper().sweep(ids, kill);
   // PowerShell or the compiler failed, and nothing is known.
   if (output === null) return null;
   const found: MarkedProcess[] = [];

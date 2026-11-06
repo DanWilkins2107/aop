@@ -14,7 +14,7 @@ import {
   killLeftovers,
   killTree,
   prepareSweeps,
-  readChildren,
+  readChildStarts,
   readProcessStarts,
   RUN_MARKER,
   sweepRuns,
@@ -57,7 +57,7 @@ const OUTPUT_DRAIN_MS = 1_000;
 /** The longest a Node timer can wait. Anything above it fires at once. */
 const MAX_TIMER_MS = 2 ** 31 - 1;
 /** How long to look for what the launched shell started, and how often. */
-const CHILD_LOOKUPS = 10;
+const CHILD_LOOKUP_MS = 10_000;
 const CHILD_LOOKUP_GAP_MS = 300;
 
 type StopReason = "human" | "timeout" | "held" | "moved_on" | "shutdown" | "project_deleted";
@@ -311,10 +311,9 @@ export class Orchestrator {
     active.processStart = start;
     this.db.prepare("UPDATE agent_processes SET process_start = ? WHERE id = ?").run(start, active.id);
 
-    for (let attempt = 0; attempt < CHILD_LOOKUPS && this.active.has(active.id); attempt++) {
-      const pids = await readChildren(pid);
-      const starts = await readProcessStarts(pids);
-      active.children = [...starts].map(([child, childStart]) => ({ pid: child, start: childStart }));
+    const deadline = Date.now() + CHILD_LOOKUP_MS;
+    while (Date.now() < deadline && this.active.has(active.id)) {
+      active.children = await readChildStarts(pid);
       if (active.children.length > 0) {
         if (this.db.open) {
           this.db.prepare("UPDATE agent_processes SET children = ? WHERE id = ?").run(JSON.stringify(active.children), active.id);
