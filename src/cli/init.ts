@@ -419,6 +419,9 @@ async function init(argv: string[], io: InitIo): Promise<void> {
   if (!existsSync(config.openFromPath)) say(`Note: open_from ${config.openFromPath} doesn't exist yet.`);
 
   say(`\n${pluginSteps(io, found)}`);
+  say(
+    "\nAgents run headless, so they can't ask you to approve commands or edits. Consider Claude Code's auto mode: add `--permission-mode auto` to agent_session_command, or set permissions.defaultMode to \"auto\" in ~/.claude/settings.json.",
+  );
   if (findOnPath("aop", io.env, io.platform) === undefined) {
     say("\nAgents also need `aop` on PATH. Run `npm link` in the AOP package, or install it globally.");
   }

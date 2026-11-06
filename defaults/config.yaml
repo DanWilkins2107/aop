@@ -3,7 +3,9 @@
 
 # Required. The command that starts an agent session. AOP appends `-p` and sends the
 # prompt on stdin. AOP doesn't ship or check a sandbox, so point this at your own
-# sandboxed wrapper before letting agents run unattended.
+# sandboxed wrapper before letting agents run unattended. Agents can't ask you to
+# approve tool use, so consider auto mode: add `--permission-mode auto` here, or set
+# permissions.defaultMode to "auto" in ~/.claude/settings.json.
 agent_session_command: claude
 
 # Optional. Used only by `aop steer <node> --no-sandbox`.
