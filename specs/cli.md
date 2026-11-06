@@ -33,7 +33,7 @@ aop apply [--into <checkout>]
 ```
 aop init                        # one-time machine setup: commands, sandbox, plugin, ~/.aop, improvements
 aop project add <path>
-aop serve
+aop serve                       # runs the server, rebuilding first if the checkout changed
 aop steer <node>                # runs agent_session_command
 aop steer <node> --no-sandbox   # runs out_of_sandbox_command
 aop ps                          # lists agent processes, see orchestrator.md
@@ -43,6 +43,8 @@ aop release <node>              # releases your claim, like the UI
 aop logs <node> [--lines N]     # the end of the latest run's log as the node page shows it, 50 lines by default, at most 200
 ```
 
+- Setup is `npm run setup` in a clone: `npm install`, `npm run build` and `npm link`.
+- `aop serve` from a git checkout's `dist/` checks the build first, so updating is `git pull` and a restart. If anything in `src/`, `web/`, `package.json`, `package-lock.json`, the tsconfigs, `vite.config.ts` or `docs/roadmap.md` is newer than the oldest of `dist/cli/main.js`, `dist/server/main.js` and `dist/web/index.html`, it prints `Building AOP (sources changed)…`, runs `npm install` if `node_modules/.package-lock.json` lacks a package or version `package-lock.json` asks for, runs `npm run build`, then re-runs itself on the new build with `AOP_SELF_BUILT` set. A failed install or build exits 1 instead of serving the old build. An installed package has no `src/`, and skips all of this.
 - `aop steer` opens your own session on a node, in the project's path or `open_from`, with `AOP_NODE_ID` set so the commands above work. It claims the node for you, and errors if an agent run holds it. See claims in [orchestrator.md](orchestrator.md).
 - `aop stop`, `aop release` and `aop logs` act as the human and always take a node ID, never `AOP_NODE_ID`. `aop stop` leaves the node on its stage, claimed by the human, as the UI does. They're for humans only, so the plugin's skills don't mention them.
 - Human stages can only be passed from the UI. `aop next` is refused on them, including in a steered session.
