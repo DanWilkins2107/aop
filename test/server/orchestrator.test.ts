@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { HEADLESS_AGENT_FLAGS } from "../../src/server/agentOutput.js";
 import { isAlive, waitGone } from "../../src/server/processes.js";
+import { deleteProject } from "../../src/server/projects.js";
 import type { EventView, MessageRow, NodeView, RunView } from "../../src/shared/api.js";
 import { directives, settle, until, world, type World } from "./agents.helpers.js";
 import { makeRepo, STAGES_YAML } from "./helpers.js";
@@ -346,6 +347,24 @@ describe("stopping", () => {
     // The record goes once the clear-up of anything left behind has finished.
     await until("the record to go", () => (w.db.prepare("SELECT count(*) AS n FROM agent_processes WHERE node_id = ?").get(doomed.body.id) as { n: number }).n === 0);
     expect(w.runs(safe.id)[0]?.status).toBe("running");
+  });
+
+  it("an agent that outlives its project's deletion doesn't stop another project being deleted", TIMEOUT, async () => {
+    w = await world();
+    const gone = await w.call<{ id: string }>("POST", "/projects", { name: "Gone", repo_path: makeRepo() });
+    const next = await w.call<{ id: string }>("POST", "/projects", { name: "Next", repo_path: makeRepo() });
+    const lingering = await w.call<NodeView>("POST", `/projects/${gone.body.id}/nodes`, {
+      type: "hotfix",
+      title: "lingering",
+      body: directives(`pid ${w.file("lingering.pid")}`, "hang"),
+    });
+    await w.pidFrom("lingering.pid");
+    await w.runStarted(lingering.body.id);
+
+    // As if its agent hadn't exited within the wait: the project and its nodes go while it runs.
+    deleteProject(w.db, gone.body.id);
+    const release = await w.orchestrator.stopProjectAgents(next.body.id);
+    release();
   });
 
   it("deleting a project deletes its run logs once its agents have stopped, and no other project's", TIMEOUT, async () => {

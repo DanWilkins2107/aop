@@ -18,7 +18,7 @@ import {
   killLeftovers,
   killTree,
   prepareSweeps,
-  readChildren,
+  readChildStarts,
   readProcessStarts,
   RUN_MARKER,
   sweepRuns,
@@ -56,7 +56,7 @@ const OUTPUT_DRAIN_MS = 1_000;
 /** The longest a Node timer can wait. Anything above it fires at once. */
 const MAX_TIMER_MS = 2 ** 31 - 1;
 /** How long to look for what the launched shell started, and how often. */
-const CHILD_LOOKUPS = 10;
+const CHILD_LOOKUP_MS = 10_000;
 const CHILD_LOOKUP_GAP_MS = 300;
 
 type StopReason = "human" | "timeout" | "held" | "moved_on" | "shutdown" | "project_deleted";
@@ -65,6 +65,8 @@ type StopReason = "human" | "timeout" | "held" | "moved_on" | "shutdown" | "proj
 interface ActiveRun {
   id: string;
   nodeId: string;
+  /** Kept here because the node can be deleted, with its project, before its process exits. */
+  projectId: string;
   pid: number | undefined;
   /** Null until read. See `readProcessStarts`. */
   processStart: string | null;
@@ -230,7 +232,7 @@ export class Orchestrator {
       this.failBeforeLaunch(run, (error as Error).message);
       return;
     }
-    this.track(run, child, command, prompt, config.agent_timeout_minutes, format);
+    this.track(run, node.project_id, child, command, prompt, config.agent_timeout_minutes, format);
     this.changes.notify();
   }
 
@@ -245,6 +247,7 @@ export class Orchestrator {
 
   private track(
     run: RunRow,
+    projectId: string,
     child: ChildProcessWithoutNullStreams,
     command: string,
     prompt: string,
@@ -263,6 +266,7 @@ export class Orchestrator {
     const active: ActiveRun = {
       id: run.id,
       nodeId: run.node_id,
+      projectId,
       pid: child.pid,
       processStart: null,
       children: [],
@@ -341,10 +345,9 @@ export class Orchestrator {
     active.processStart = start;
     this.db.prepare("UPDATE agent_processes SET process_start = ? WHERE id = ?").run(start, active.id);
 
-    for (let attempt = 0; attempt < CHILD_LOOKUPS && this.active.has(active.id); attempt++) {
-      const pids = await readChildren(pid);
-      const starts = await readProcessStarts(pids);
-      active.children = [...starts].map(([child, childStart]) => ({ pid: child, start: childStart }));
+    const deadline = Date.now() + CHILD_LOOKUP_MS;
+    while (Date.now() < deadline && this.active.has(active.id)) {
+      active.children = await readChildStarts(pid);
       if (active.children.length > 0) {
         if (this.db.open) {
           this.db.prepare("UPDATE agent_processes SET children = ? WHERE id = ?").run(JSON.stringify(active.children), active.id);
@@ -432,7 +435,8 @@ export class Orchestrator {
    */
   async stopProjectAgents(projectId: string): Promise<() => void> {
     this.closingProjects.add(projectId);
-    const inProject = [...this.active.values()].filter((run) => getNodeRow(this.db, run.nodeId).project_id === projectId);
+    // Not from the node: one whose project was deleted while it outlived the wait has none.
+    const inProject = [...this.active.values()].filter((run) => run.projectId === projectId);
     await Promise.all(inProject.map((run) => this.stop(run, "project_deleted")));
     return () => {
       this.closingProjects.delete(projectId);
@@ -515,38 +519,40 @@ export class Orchestrator {
         }
         continue;
       }
-
       const marked = swept.filter((found) => found.runId === row.id).map(({ pid }) => pid);
-      const confirmed = identitiesOf(row).filter(({ pid, start }) => starts.get(pid) === start && !marked.includes(pid));
-      if (marked.length > 0) {
-        const pid = marked.includes(row.pid) ? row.pid : (marked[0] as number);
-        result.killed.push({ run_id: row.id, pid, reason: this.whyCondemned(row) ?? "this server didn't start it" });
-        if (confirmed.length > 0) await killConfirmed(row.pid, confirmed);
-        const gone = await Promise.all([...marked, ...confirmed.map(({ pid }) => pid)].map((pid) => waitGone(pid, STOP_WAIT_MS)));
-        if (gone.every(Boolean)) forgetProcess(this.db, row.id);
-        continue;
-      }
-      if (confirmed.length === 0) {
-        if (row.process_start === null && starts.has(row.pid)) {
-          // It stays on record until it's gone, because nothing can show it's safe to kill.
-          result.skipped.push({ run_id: row.id, pid: row.pid, reason: "AOP never recorded its start time" });
-          continue;
-        }
-        if (starts.has(row.pid)) {
-          result.skipped.push({ run_id: row.id, pid: row.pid, reason: "its process ID now belongs to another process" });
-        }
-        forgetProcess(this.db, row.id);
-        continue;
-      }
-
-      result.killed.push({ run_id: row.id, pid: row.pid, reason: this.whyCondemned(row) ?? "this server didn't start it" });
-      await killConfirmed(row.pid, confirmed);
-      const gone = await Promise.all(confirmed.map(({ pid }) => waitGone(pid, STOP_WAIT_MS)));
-      if (gone.every(Boolean)) forgetProcess(this.db, row.id);
+      await this.reapLost(row, starts, marked, result);
     }
 
     if (this.db.open) this.closeDeadRuns();
     return result;
+  }
+
+  /**
+   * Deals with a recorded process this server isn't tracking. The sweep has already killed whatever
+   * carried its run's marker, so this kills what's left that its record confirms, waits for all of it
+   * to go, and only then forgets the record.
+   */
+  private async reapLost(row: ProcessRow, starts: Map<number, string>, marked: number[], result: ReapResult): Promise<void> {
+    const confirmed = identitiesOf(row).filter(({ pid, start }) => starts.get(pid) === start && !marked.includes(pid));
+    if (marked.length === 0 && confirmed.length === 0) {
+      if (row.process_start === null && starts.has(row.pid)) {
+        // It stays on record until it's gone, because nothing can show it's safe to kill.
+        result.skipped.push({ run_id: row.id, pid: row.pid, reason: "AOP never recorded its start time" });
+        return;
+      }
+      if (starts.has(row.pid)) {
+        result.skipped.push({ run_id: row.id, pid: row.pid, reason: "its process ID now belongs to another process" });
+      }
+      forgetProcess(this.db, row.id);
+      return;
+    }
+
+    // The launched shell's ID where it's among them, which is the one on record.
+    const pid = marked.length === 0 || marked.includes(row.pid) ? row.pid : (marked[0] as number);
+    result.killed.push({ run_id: row.id, pid, reason: this.whyCondemned(row) ?? "this server didn't start it" });
+    if (confirmed.length > 0) await killConfirmed(row.pid, confirmed);
+    const gone = await Promise.all([...marked, ...confirmed.map(({ pid }) => pid)].map((pid) => waitGone(pid, STOP_WAIT_MS)));
+    if (gone.every(Boolean) && this.db.open) forgetProcess(this.db, row.id);
   }
 
   /** Reads every process on record, the launched shells and what they started. */
