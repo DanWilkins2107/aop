@@ -12,7 +12,7 @@ Where each part of the specs lives in the code, and how one request moves throug
 | `plugin/` | The skills agents load. See [plugin.md](plugin.md) |
 | `defaults/` | The `config.yaml`, `stages.yaml` and prompts `aop init` copies into `~/.aop` |
 | `demo/` | A throwaway server with seeded data and no agents |
-| `test/` | Vitest. `test/server/` covers the server and CLI, `test/web/` the browser's `lib/` |
+| `test/` | Vitest. `test/server/` covers the server, `test/cli/` the `aop` command, `test/shared/` `src/shared/`, `test/web/` the browser's `lib/` |
 
 ## Server modules
 `src/server/` is flat. Grouped by job:
@@ -27,7 +27,7 @@ Where each part of the specs lives in the code, and how one request moves throug
 | Agents | `orchestrator.ts` decides what runs and handles each run's end. `runs.ts` holds the `runs` and `agent_processes` rows. `osProcesses.ts` is OS process handling: start times, children, killing. `runLog.ts` writes logs |
 | Scheduling | `scheduler.ts` fires `scheduled` nodes. `cron.ts` parses cron |
 | Humans | `steer.ts` (`aop steer`), `projects.ts`, `search.ts` |
-| Storage | `db.ts` opens SQLite and runs `migrations.ts`. `records.ts` makes IDs, timestamps and events. `paths.ts` finds `~/.aop` |
+| Storage | `db.ts` opens SQLite and runs `migrations.ts`. `records.ts` makes IDs, timestamps and events. `paths.ts` finds `~/.aop`. `fsUtil.ts` has small file checks |
 | Errors | `errors.ts`: `ApiError` for refusals, `ConfigError` for a bad config |
 
 ## One request

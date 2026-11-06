@@ -10,6 +10,7 @@ import { type AopConfig, loadConfig } from "./config.js";
 import { buildPrompt } from "./context.js";
 import type { Db } from "./db.js";
 import { ConfigError, refused } from "./errors.js";
+import { isFolder } from "./fsUtil.js";
 import { getNodeRow, holdersOf, markFailed, startableNodes, type NodeRow, type NodeView, getNode } from "./nodes.js";
 import {
   type Identity,
@@ -41,7 +42,6 @@ import {
   type ProcessRow,
   type RunRow,
 } from "./runs.js";
-import { isFolder } from "./steer.js";
 
 /**
  * What AOP adds to `agent_session_command` so that an agent runs without a terminal, with its prompt
