@@ -7,7 +7,7 @@ Where each part of the specs lives in the code, and how one request moves throug
 |---|---|
 | `src/server/` | The one server process: HTTP API, state machine, agents, scheduler, SQLite |
 | `src/shared/` | What the server and clients share, so nothing that needs Node. `api.ts`: types for everything the API returns and accepts, and plain constants such as `RUN_ID_HEADER`. `requests.ts`: the zod schemas for request bodies, which the browser only imports types from. `paths.ts`: every API path, for the router and the clients. `builtInStages.ts`: the built-in stage names and sets |
-| `src/cli/` | `aop`: `cli.ts` turns commands into HTTP calls, `main.ts` runs it on the real process, `init.ts` is `aop init` |
+| `src/cli/` | `aop`: `cli.ts` turns commands into HTTP calls, `main.ts` runs it on the real process, `init.ts` is `aop init`, `selfBuild.ts` rebuilds a stale checkout before `aop serve` |
 | `web/src/` | The React app. `pages/` per route, `components/` shared UI, `lib/` data and maths, `styles/` one stylesheet per part of the UI |
 | `plugin/` | The skills agents load. See [plugin.md](plugin.md) |
 | `defaults/` | The `config.yaml`, `stages.yaml` and prompts `aop init` copies into `~/.aop` |

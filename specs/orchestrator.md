@@ -24,7 +24,7 @@ Launched agents run `agent_session_command`, and AOP adds what it needs to run w
 5. Exiting without either, or running past `agent_timeout_minutes`, moves the node to `failed`. Nothing retries automatically.
 
 ## Server lifecycle
-- `aop serve` runs in the foreground in a terminal and only uses build files, so it can be closed to update AOP.
+- `aop serve` runs in the foreground in a terminal and only uses build files. To update AOP, `git pull` and restart it: see [cli.md](cli.md).
 - Closing it cleanly stops all agents and puts their nodes back in the queue, and they start again on the next `aop serve`. Only a crash leads to `failed`.
 
 ## Claims
