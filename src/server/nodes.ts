@@ -5,7 +5,18 @@
 import { loadConfig } from "./config.js";
 import type { Db } from "./db.js";
 import { badRequest, notFound, refused } from "./errors.js";
-import type { EdgeRow, EventView, LinkRow, MessageRow, NodeRow, NodeView, Turn } from "../shared/api.js";
+import type {
+  EdgeRow,
+  EventDataByKind,
+  EventView,
+  HolderVia,
+  LinkRow,
+  MessageRow,
+  NodeRow,
+  NodeView,
+  StageChangeVia,
+  Turn,
+} from "../shared/api.js";
 import { appendEvent, newId, now, type Actor } from "./records.js";
 import { cronProblem } from "./cron.js";
 import { isBuiltIn, type StageGraph } from "./stages.js";
@@ -63,7 +74,7 @@ export function invalidatedAncestors(db: Db, nodeId: string): string[] {
 export interface Holder {
   id: string;
   stage: string;
-  via: "blocks" | "split" | "invalidated_parent";
+  via: HolderVia;
 }
 
 /**
@@ -232,10 +243,10 @@ interface StageChange {
   returnStage?: string | null;
   reason?: string | null;
   cron?: string;
-  via: string;
+  via: StageChangeVia;
   actor: Actor;
   /** Extra fields for the event's data. */
-  detail?: Record<string, unknown>;
+  detail?: Pick<EventDataByKind["stage_changed"], "outcome" | "reason" | "run_id">;
   /** The agent carries on working through this change, so it keeps its claim. */
   keepsAgentClaim?: boolean;
 }
@@ -367,14 +378,10 @@ function assertCanReturn(graph: StageGraph, type: string, stage: string, returnS
   }
 }
 
-interface StageEntry {
-  from_stage: string;
-  from_type: string;
-  from_return_stage: string | null;
-}
+type StageEntry = Pick<EventDataByKind["stage_changed"], "from_stage" | "from_type" | "from_return_stage">;
 
 /** What the latest stage change made through `via` left behind, read from its event. */
-function lastEntry(db: Db, nodeId: string, via: string): StageEntry | undefined {
+function lastEntry(db: Db, nodeId: string, via: StageChangeVia): StageEntry | undefined {
   const event = db
     .prepare(
       `SELECT data FROM events
