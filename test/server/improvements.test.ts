@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../../src/server/config.js";
@@ -327,6 +327,22 @@ describe("applying", () => {
     writeFiles(aopHome(), { "stages.yaml": readFileSync(join(aopHome(), "stages.yaml"), "utf8").replace("./prompts/implement.md", "./prompts/write_spec.md") });
     expect((await apply(node.id)).status).toBe(400);
     expect(readFileSync(skill(), "utf8")).toBe("Old skill.\n");
+  });
+
+  it("leaves every real file as it was when one of them can't be written", async () => {
+    // A file where the second proposal needs a folder, so only writing it can find the problem.
+    writeFiles(aopHome(), { "skills/zz": "In the way.\n" });
+    const { node } = await capture({ body: "x" });
+    await propose(node.id, skill(), "New.\n");
+    await propose(node.id, join(skills(), "zz", "SKILL.md"), "Blocked.\n");
+    await reviewAndChoose(node.id, "save_locally");
+
+    const res = await apply(node.id);
+    expect(res.status, JSON.stringify(res.body)).toBe(409);
+    expect(readFileSync(skill(), "utf8")).toBe("Old skill.\n");
+    expect(readdirSync(join(skills(), "write-tests"))).toEqual(["SKILL.md"]);
+    const events = (await h.call<{ kind: string }[]>("GET", `/api/nodes/${node.id}/events`)).body;
+    expect(events.map((e) => e.kind)).not.toContain("proposals_applied");
   });
 
   it("exports into another checkout at raise_pr, skipping files outside the repo", async () => {

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative } from "node:path";
 import type { ApplyResult } from "../shared/api.js";
 import { type AopConfig, loadConfig } from "./config.js";
@@ -7,7 +7,7 @@ import { badRequest, refused } from "./errors.js";
 import { allowedTarget, assertNotAopState, canonicalPath, notAllowed, proposalRows } from "./improvements.js";
 import { getNodeRow, RAISE_PR_STAGE } from "./nodes.js";
 import { isWithin } from "./paths.js";
-import { appendEvent, type Actor } from "./records.js";
+import { appendEvent, newId, type Actor } from "./records.js";
 
 /**
  * Checks a file in the other checkout. That checkout is the agent's to set up, so a symlink or
@@ -71,13 +71,54 @@ export function applyProposals(
     }
   }
 
-  for (const { target, content } of plan) {
-    mkdirSync(dirname(target), { recursive: true });
-    writeFileSync(target, content);
-  }
-  const written = plan.map(({ target }) => target);
-  db.transaction(() =>
-    appendEvent(db, nodeId, input.actor, "proposals_applied", { written, skipped, into: input.into ?? null }),
-  )();
+  const record = (written: string[]) =>
+    db.transaction(() =>
+      appendEvent(db, nodeId, input.actor, "proposals_applied", { written, skipped, into: input.into ?? null }),
+    )();
+  const written = writeAll(plan, record);
   return { written, skipped };
+}
+
+const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+/**
+ * Writes every file in the plan. Each is written beside its target first, so a failure there, such
+ * as a file where a folder should be, a full disk or no permission, leaves every real file as it
+ * was. Only the renames after that can fail part way, and then what they did write is still
+ * recorded before the failure is reported.
+ */
+function writeAll(plan: { target: string; content: string }[], record: (written: string[]) => void): string[] {
+  const staged: { temp: string; target: string }[] = [];
+  const discard = () => {
+    for (const { temp } of staged) rmSync(temp, { force: true });
+  };
+  for (const { target, content } of plan) {
+    const temp = `${target}.aop-${newId()}.tmp`;
+    try {
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(temp, content, { flag: "wx" });
+    } catch (error) {
+      rmSync(temp, { force: true });
+      discard();
+      throw refused(`Couldn't write ${target}: ${errorText(error)}. Nothing was written`);
+    }
+    staged.push({ temp, target });
+  }
+
+  const written: string[] = [];
+  for (const [i, { temp, target }] of staged.entries()) {
+    try {
+      renameSync(temp, target);
+    } catch (error) {
+      staged.splice(0, i);
+      discard();
+      if (written.length > 0) record(written);
+      throw refused(`Couldn't write ${target}: ${errorText(error)}. Written before it: ${written.join(", ") || "nothing"}`, {
+        written,
+      });
+    }
+    written.push(target);
+  }
+  record(written);
+  return written;
 }
