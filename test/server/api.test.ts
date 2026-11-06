@@ -447,6 +447,12 @@ describe("fail and retry", () => {
     expect((await h.post(node.id, "fail")).status).toBe(409);
   });
 
+  it("refuses a human marking a node failed, which only AOP does", async () => {
+    const node = await h.create("dev");
+    expect((await h.post(node.id, "fail", { actor: "human" })).status).toBe(409);
+    expect((await h.node(node.id)).stage).toBe("write_spec");
+  });
+
   it("refuses next while failed", async () => {
     const node = await h.create("dev");
     await h.post(node.id, "fail");
@@ -459,6 +465,13 @@ describe("invalidate and restore", () => {
     const node = await h.create("dev");
     expect((await h.post(node.id, "invalidate", {})).status).toBe(400);
     expect((await h.post(node.id, "invalidate", { reason: " " })).status).toBe(400);
+    expect((await h.node(node.id)).stage).toBe("write_spec");
+  });
+
+  it("is human-only, so an agent can't invalidate", async () => {
+    const node = await h.create("dev");
+    expect((await h.post(node.id, "invalidate", { reason: "x", actor: "agent" })).status).toBe(409);
+    expect((await h.post(node.id, "invalidate", { reason: "x", actor: "system" })).status).toBe(409);
     expect((await h.node(node.id)).stage).toBe("write_spec");
   });
 
