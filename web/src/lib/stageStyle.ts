@@ -1,24 +1,19 @@
 import type { NodeView, StagesView, TypeView } from "../../../src/shared/api.js";
+import { type BuiltInStage, FINISHED_STAGES, GLOBAL_STAGES, isBuiltIn } from "../../../src/shared/builtInStages.js";
 import { mix, parseHex, readableText, visibleOn } from "./color.js";
-import { humanize } from "./format.js";
-
-/** The built-in stages that finish a node. */
-export const FINISHED_STAGES: readonly string[] = ["done", "broken_down"];
-
-/** Reachable from anywhere, so they live outside every type's pipeline. */
-export const GLOBAL_STAGES: readonly string[] = ["invalidated", "externally_blocked", "ask_human_question", "failed"];
+import { claimLabel, humanize } from "./format.js";
 
 /** Built-ins have no config of their own, so their colours live here. */
-const BUILT_IN_COLORS = new Map([
-  ["done", "#57b56f"],
-  ["broken_down", "#96a0d4"],
-  ["invalidated", "#8f969d"],
-  ["scheduled", "#4fbfc4"],
-  ["ask_human_question", "#eba23f"],
-  ["failed", "#e06666"],
-  ["externally_blocked", "#d98050"],
-  ["splitting", "#62aee3"],
-]);
+const BUILT_IN_COLORS: Record<BuiltInStage, string> = {
+  done: "#57b56f",
+  broken_down: "#96a0d4",
+  invalidated: "#8f969d",
+  scheduled: "#4fbfc4",
+  ask_human_question: "#eba23f",
+  failed: "#e06666",
+  externally_blocked: "#d98050",
+  splitting: "#62aee3",
+};
 
 /** `color` is optional in `stages.yaml`. */
 const UNSET_COLOR = "#adb5bd";
@@ -26,7 +21,7 @@ export const MISSING_STAGE_COLOR = "#e06666";
 
 export function stageColor(stage: string, stages: StagesView | null): string {
   const configured = stages?.stages.find((s) => s.name === stage)?.color;
-  const color = configured ?? BUILT_IN_COLORS.get(stage) ?? UNSET_COLOR;
+  const color = configured ?? (isBuiltIn(stage) ? BUILT_IN_COLORS[stage] : undefined) ?? UNSET_COLOR;
   return parseHex(color) ? color : UNSET_COLOR;
 }
 
@@ -126,4 +121,20 @@ export function stageLabel(node: NodeView): string {
 /** The type shown on a card. Global stages don't show one. */
 export function cardType(node: NodeView): string | null {
   return GLOBAL_STAGES.includes(node.stage) ? null : node.type;
+}
+
+/**
+ * What a graph card's link reads out. The canvas is an application region, so a screen reader hears
+ * only this, and it has to carry what sighted users get from the card's fill: that a human needs to
+ * act. Blocked and held cards are greyed for reasons the card doesn't spell out either.
+ */
+export function cardName(node: NodeView): string {
+  const type = cardType(node);
+  const parts = [node.title, type ? `${stageLabel(node)}, ${humanize(type)}` : stageLabel(node)];
+  if (cardKind(node) === "human") parts.push("Needs a human");
+  if (!isInvalidated(node) && node.blocked_by.length > 0) parts.push("Blocked");
+  if (!isInvalidated(node) && node.held) parts.push("Held until a split finishes");
+  const claim = claimLabel(node);
+  if (claim) parts.push(claim.title);
+  return parts.join(". ");
 }

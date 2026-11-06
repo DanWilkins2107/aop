@@ -1,6 +1,8 @@
 import type { Cron } from "croner";
 import { type ChangeFeed, nodesNotice } from "./changes.js";
 import { loadConfig, withConfigSnapshot } from "./config.js";
+import type { EventKind, ScheduleSkip } from "../shared/api.js";
+import { FINISHED_STAGES } from "../shared/builtInStages.js";
 import { parseCron } from "./cron.js";
 import type { Db } from "./db.js";
 import { ConfigError } from "./errors.js";
@@ -9,13 +11,13 @@ import { appendEvent } from "./records.js";
 import type { StageGraph } from "./stages.js";
 
 /** Stages a previous child can be at for the next run to go ahead. */
-const FINISHED_STAGES = ["done", "broken_down", "invalidated"];
+const PREVIOUS_DONE_STAGES: readonly string[] = [...FINISHED_STAGES, "invalidated"];
 
 /** The longest the scheduler sleeps, so a missed change can't leave a node unscheduled for long. */
 const MAX_SLEEP_MS = 60_000;
 
-export const RUN_EVENT = "scheduled_run";
-export const SKIP_EVENT = "scheduled_run_skipped";
+export const RUN_EVENT = "scheduled_run" satisfies EventKind;
+export const SKIP_EVENT = "scheduled_run_skipped" satisfies EventKind;
 
 export interface SchedulerOptions {
   changes: ChangeFeed;
@@ -26,7 +28,7 @@ export interface SchedulerOptions {
 
 export type TickResult = { nodeId: string; dueAt: string } & (
   | { fired: true; childId: string }
-  | { fired: false; reason: string }
+  | { fired: false; reason: ScheduleSkip["reason"] }
 );
 
 /**
@@ -190,9 +192,9 @@ export class Scheduler {
     const node = getNodeRow(this.db, nodeId);
     if (node.stage !== "scheduled") return null;
     const dueAt = due.toISOString();
-    const skip = (reason: string, detail: Record<string, unknown> = {}): TickResult => {
-      appendEvent(this.db, node.id, "system", SKIP_EVENT, { due_at: dueAt, reason, ...detail });
-      return { nodeId: node.id, dueAt, fired: false, reason };
+    const skip = (detail: ScheduleSkip): TickResult => {
+      appendEvent(this.db, node.id, "system", SKIP_EVENT, { due_at: dueAt, ...detail });
+      return { nodeId: node.id, dueAt, fired: false, reason: detail.reason };
     };
 
     const outcomes = graph.types.get(node.type)?.stages.get("scheduled");
@@ -200,13 +202,13 @@ export class Scheduler {
     if (outcomes === undefined) return null;
 
     const holders = holdersOf(this.db, node.id);
-    if (holders.length > 0) return skip(holders[0]!.via, { holder_id: holders[0]!.id });
+    if (holders.length > 0) return skip({ reason: holders[0]!.via, holder_id: holders[0]!.id });
 
     const previous = this.db
       .prepare("SELECT id, stage FROM nodes WHERE spawned_by = ? ORDER BY rowid DESC LIMIT 1")
       .get(node.id) as { id: string; stage: string } | undefined;
-    if (previous !== undefined && !FINISHED_STAGES.includes(previous.stage)) {
-      return skip("previous_unfinished", { previous_child_id: previous.id });
+    if (previous !== undefined && !PREVIOUS_DONE_STAGES.includes(previous.stage)) {
+      return skip({ reason: "previous_unfinished", previous_child_id: previous.id });
     }
 
     const [target] = [...outcomes.values()];
@@ -227,7 +229,7 @@ export class Scheduler {
         actor: "system",
       }).id;
     } catch (error) {
-      return skip("child_refused", { message: (error as Error).message });
+      return skip({ reason: "child_refused", message: (error as Error).message });
     }
     this.db.prepare("UPDATE nodes SET spawned_by = ? WHERE id = ?").run(node.id, childId);
     appendEvent(this.db, node.id, "system", RUN_EVENT, { due_at: dueAt, child_id: childId });

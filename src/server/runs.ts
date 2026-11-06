@@ -1,13 +1,14 @@
 // Reads and writes the `runs` and `agent_processes` tables. The orchestrator decides when.
 
-import type { RunView } from "../shared/api.js";
+import type { EventDataByKind, RunEndReason, RunView } from "../shared/api.js";
 import type { OutputFormat, Usage } from "./agentOutput.js";
 import type { Db } from "./db.js";
+import { refused } from "./errors.js";
 import type { NodeRow } from "./nodes.js";
-import type { Identity } from "./processes.js";
+import type { Identity } from "./osProcesses.js";
 import { appendEvent, now, type Actor } from "./records.js";
 
-export type EndReason = "reported" | "failed" | "stopped" | "held" | "shutdown";
+export type EndReason = RunEndReason;
 
 export interface RunRow {
   id: string;
@@ -30,6 +31,8 @@ export interface RunRow {
   output_tokens: number | null;
   /** 1 for a `failed` run that ran past agent_timeout_minutes. */
   timed_out: 0 | 1;
+  /** 1 once a clean shutdown has begun stopping the run. See `markShuttingDown`. */
+  shutting_down: 0 | 1;
 }
 
 /** A process AOP started. Stays until AOP knows the process is gone, whatever happens to its run. */
@@ -63,13 +66,104 @@ export function runningRuns(db: Db): RunRow[] {
 
 /** Whether the agent itself finished the stage, which earns it a moment to exit, or someone moved it off. */
 export function agentReported(run: RunRow): boolean {
-  return run.left_actor === "agent" && ["next", "ask", "split_finish"].includes(run.left_via ?? "");
+  return run.left_actor === "agent" && ["next", "ask", "fail", "split_finish"].includes(run.left_via ?? "");
 }
 
-/** Takes the node's claim and opens its run, together, so that nothing else can start on it. */
+/** Why AOP stopped a run's process, if it did. */
+export type StopReason = "human" | "timeout" | "held" | "moved_on" | "shutdown" | "project_deleted";
+
+/** How a run's process ended, as far as AOP knows. */
+export type RunEnding =
+  | {
+      kind: "exited";
+      /** Why this server stopped it, or null if it ended by itself. */
+      stopReason: StopReason | null;
+      exitCode: number | null;
+      signal: string | null;
+      /** Why the process never started, if it didn't. */
+      launchError: string | null;
+      timeoutMinutes: number;
+    }
+  /** A `running` row found with no process this server is tracking: the last server went down. */
+  | { kind: "lost" };
+
+/** What a run's end does to its node, besides closing the run. */
+export type RunEndAction =
+  | { kind: "none" }
+  | { kind: "release_claim"; via: NonNullable<EventDataByKind["claim_released"]["via"]> }
+  | { kind: "hand_to_human" }
+  | { kind: "mark_failed"; reason: string };
+
+export interface RunEndDecision {
+  outcome: EndReason;
+  timedOut: boolean;
+  then: RunEndAction;
+}
+
+export interface RunEndInput {
+  /** The run as it is now, or undefined if it's gone with its project. */
+  run: Pick<RunRow, "status" | "left_via" | "shutting_down"> | undefined;
+  ending: RunEnding;
+  /** See `agentReported`. */
+  reported: boolean;
+  nodeExists: boolean;
+}
+
+export const LOST_RUN_REASON =
+  "The agent's process died, or was stopped, when the AOP server went down without closing cleanly.";
+
+/**
+ * What a run's end means: the outcome to record and what happens to its node. Null when there's
+ * nothing left to decide, because the run or its node has gone, or the run has already been closed.
+ */
+export function decideRunEnd({ run, ending, reported, nodeExists }: RunEndInput): RunEndDecision | null {
+  if (!run || !nodeExists || run.status !== "running") return null;
+  const decision = (outcome: EndReason, then: RunEndAction, timedOut = false): RunEndDecision => ({ outcome, timedOut, then });
+
+  // The node moved on while the run was going, so whoever moved it has dealt with the claim.
+  if (run.left_via !== null) return decision(reported ? "reported" : "stopped", { kind: "none" });
+
+  // A clean shutdown began stopping it, so whether or not its process outlived the shutdown's wait,
+  // it wasn't a crash, and the node goes back in the queue. A stop already under way says more.
+  const shutdown = run.shutting_down === 1 && (ending.kind === "lost" || ending.stopReason === null);
+  if (shutdown) return decision("shutdown", { kind: "release_claim", via: "shutdown" });
+
+  if (ending.kind === "lost") return decision("failed", { kind: "mark_failed", reason: LOST_RUN_REASON });
+
+  switch (ending.stopReason) {
+    case "human":
+      return decision("stopped", { kind: "hand_to_human" });
+    case "held":
+      return decision("held", { kind: "release_claim", via: "held" });
+    case "shutdown":
+      return decision("shutdown", { kind: "release_claim", via: "shutdown" });
+    case "moved_on":
+    case "project_deleted":
+      return decision("stopped", { kind: "release_claim", via: "stop" });
+    case "timeout":
+      return decision(
+        "failed",
+        { kind: "mark_failed", reason: `The agent ran past agent_timeout_minutes (${ending.timeoutMinutes}).` },
+        true,
+      );
+    case null: {
+      const reason =
+        ending.launchError !== null
+          ? `The agent couldn't be launched: ${ending.launchError}`
+          : `The agent exited without reporting an outcome (${ending.exitCode === null ? `signal ${ending.signal}` : `exit code ${ending.exitCode}`}).`;
+      return decision("failed", { kind: "mark_failed", reason });
+    }
+  }
+}
+
+/**
+ * Takes the node's claim and opens its run, together, so that nothing else can start on it. Refused,
+ * with nothing written, if anything holds the claim already.
+ */
 export function beginRun(db: Db, node: NodeRow, id: string, logPath: string, format: OutputFormat = "text"): RunRow {
   db.transaction(() => {
-    db.prepare("UPDATE nodes SET claimed_by = 'agent' WHERE id = ?").run(node.id);
+    const claimed = db.prepare("UPDATE nodes SET claimed_by = 'agent' WHERE id = ? AND claimed_by IS NULL").run(node.id);
+    if (claimed.changes !== 1) throw refused(`Node ${node.id} is already claimed, so no run can start on it`);
     appendEvent(db, node.id, "system", "claim_taken", { holder: "agent", run_id: id });
     db.prepare(
       "INSERT INTO runs (id, created_at, node_id, stage, status, log_path, output_format) VALUES (?, ?, ?, ?, 'running', ?, ?)",
@@ -77,6 +171,17 @@ export function beginRun(db: Db, node: NodeRow, id: string, logPath: string, for
     appendEvent(db, node.id, "system", "run_started", { run_id: id, stage: node.stage });
   })();
   return getRun(db, id) as RunRow;
+}
+
+/**
+ * Notes that a clean shutdown is stopping these runs, before it kills them, so that a run whose
+ * process outlives the shutdown is put back in the queue by the next start, not failed.
+ */
+export function markShuttingDown(db: Db, runIds: string[]): void {
+  const mark = db.prepare("UPDATE runs SET shutting_down = 1 WHERE id = ? AND status = 'running'");
+  db.transaction(() => {
+    for (const id of runIds) mark.run(id);
+  })();
 }
 
 /** Call inside the transaction that decides what the run's end means for its node. */
@@ -92,7 +197,11 @@ export function closeRun(db: Db, run: RunRow, reason: EndReason, exitCode: numbe
 }
 
 /** Gives up an agent's claim, leaving the node where it is. */
-export function releaseAgentClaim(db: Db, nodeId: string, via: string): void {
+export function releaseAgentClaim(
+  db: Db,
+  nodeId: string,
+  via: NonNullable<EventDataByKind["claim_released"]["via"]>,
+): void {
   const released = db.prepare("UPDATE nodes SET claimed_by = NULL WHERE id = ? AND claimed_by = 'agent'").run(nodeId);
   if (released.changes > 0) appendEvent(db, nodeId, "system", "claim_released", { holder: "agent", via });
 }

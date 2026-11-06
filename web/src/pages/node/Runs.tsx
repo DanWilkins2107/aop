@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { LogTail, NodeView, RunView } from "../../../../src/shared/api.js";
-import { api, failureText } from "../../lib/api.js";
+import { api, failureText, urls } from "../../lib/api.js";
 import { formatDuration, formatStart, formatTokens, humanize, runEnding, shortRunId } from "../../lib/format.js";
 
 /** How often a running run's row and log tail are read again. Its output doesn't go through the change feed. */
@@ -109,7 +109,7 @@ export function Runs({ node }: { node: NodeView }) {
       </div>
       <div className="log-tail-head">
         <h3>Latest log, run {shortRunId(latest.id)}</h3>
-        <a href={`/api/runs/${encodeURIComponent(latest.id)}/log`} target="_blank" rel="noreferrer" className="muted">
+        <a href={urls.runLog(latest.id)} target="_blank" rel="noreferrer" className="muted">
           Full log
         </a>
       </div>

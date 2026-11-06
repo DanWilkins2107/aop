@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { EventView, MessageRow, NodeView, StagesView } from "../../../../src/shared/api.js";
 import { api } from "../../lib/api.js";
+import { FormError, useFormError } from "../../components/FormError.js";
 import { messageVisits } from "../../lib/messageVisits.js";
 import { humanize, timeAgo, toTarget } from "../../lib/format.js";
 import { accentOf, stageColor } from "../../lib/stageStyle.js";
@@ -10,6 +11,7 @@ import { useAction } from "../../lib/useAction.js";
 function MessageBox({ node, asking, reload }: { node: NodeView; asking: boolean; reload: () => Promise<void> }) {
   const [body, setBody] = useState("");
   const { busy, error, run } = useAction(reload);
+  const { errorId, describedBy } = useFormError(error);
 
   async function send() {
     if (body.trim() === "" || busy) return;
@@ -26,13 +28,13 @@ function MessageBox({ node, asking, reload }: { node: NodeView; asking: boolean;
         void send();
       }}
     >
-      <textarea rows={asking ? 3 : 2} value={body} onChange={(e) => setBody(e.target.value)} placeholder={label} aria-label={label} />
+      <textarea rows={asking ? 3 : 2} value={body} onChange={(e) => setBody(e.target.value)} placeholder={label} aria-label={label} aria-describedby={describedBy} />
       <div className="action-row">
         <button type="submit" className="btn-small" disabled={busy || body.trim() === ""}>
           {asking ? toTarget("Answer", node.return_stage) : "Send"}
         </button>
       </div>
-      {error ? <div className="form-error">{error}</div> : null}
+      <FormError error={error} id={errorId} />
     </form>
   );
 }

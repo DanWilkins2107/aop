@@ -1,6 +1,6 @@
-import { mkdtempSync, rmSync, statSync, utimesSync } from "node:fs";
+import { mkdtempSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { loadConfig, withConfigSnapshot } from "../../src/server/config.js";
 import { ConfigError } from "../../src/server/errors.js";
@@ -275,6 +275,34 @@ types:
     expect(missing.join()).toContain("prompt file not found");
     const directory = stagesProblems(`stages: { a: { turn: agent, prompt: ./prompts } }\ntypes: {}\n`);
     expect(directory.join()).toContain("prompt file not found");
+  });
+
+  it("refuses a prompt outside the stages file's folder, however it gets there", () => {
+    const outside = mkdtempSync(join(tmpdir(), "aop-secret-"));
+    writeFileSync(join(outside, "id_rsa"), "secret");
+    const absolute = stagesProblems(`stages: { a: { turn: agent, prompt: ${JSON.stringify(join(outside, "id_rsa"))} } }\ntypes: {}\n`);
+    expect(absolute.join()).toContain("prompt must be in the stages file's folder");
+    const home = makeHome();
+    const climbing = relative(home, join(outside, "id_rsa"));
+    expect(stagesProblems(`stages: { a: { turn: agent, prompt: ${JSON.stringify(climbing)} } }\ntypes: {}\n`).join()).toContain(
+      "prompt must be in the stages file's folder",
+    );
+    // A symlink inside the folder, as a downloaded process could ship, is followed before checking.
+    const linked = makeHome();
+    let canLink = true;
+    try {
+      symlinkSync(join(outside, "id_rsa"), join(linked, "prompts", "link.md"), "file");
+    } catch {
+      canLink = false; // Windows without symlink rights.
+    }
+    if (canLink) {
+      writeFiles(linked, { "stages.yaml": `stages: { a: { turn: agent, prompt: ./prompts/link.md } }\ntypes: {}\n` });
+      expect(problemsOf(linked).join()).toContain("prompt must be in the stages file's folder");
+    }
+    // A prompt in a subfolder whose name starts with dots is still inside.
+    expect(stagesProblems(`stages: { a: { turn: agent, prompt: ./..notes.md } }\ntypes: {}\n`, { "..notes.md": "x" }).join()).not.toContain(
+      "must be in",
+    );
   });
 
   it("ignores a prompt on a human stage", () => {

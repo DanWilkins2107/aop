@@ -1,7 +1,9 @@
 import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { EdgeRow, EventView, LinkRow, MessageRow, NodeView, ProjectRow, StagesView } from "../../../src/shared/api.js";
+import { GLOBAL_STAGES } from "../../../src/shared/builtInStages.js";
 import { ClaimMark } from "../components/ClaimMark.js";
+import { CopyId } from "../components/CopyId.js";
 import { ErrorNotice } from "../components/ErrorNotice.js";
 import { PipelineGraph } from "../components/PipelineGraph.js";
 import { ancestorsOf } from "../lib/ancestry.js";
@@ -10,7 +12,7 @@ import { humanize } from "../lib/format.js";
 import { touchesNode, touchesProject } from "../lib/changes.js";
 import { type Refresh, useLiveData } from "../lib/live.js";
 import { originalStage } from "../lib/stageGraph.js";
-import { GLOBAL_STAGES, findType, stageBand } from "../lib/stageStyle.js";
+import { findType, stageBand } from "../lib/stageStyle.js";
 import { NodeControls } from "./node/Controls.js";
 import { Description } from "./node/Description.js";
 import { Details } from "./node/Details.js";
@@ -125,7 +127,10 @@ export function NodePage() {
             <span>{humanize(node.stage)}</span>
             <ClaimMark node={node} />
           </p>
-          <h1 className={node.stage === "invalidated" || byParent ? "title-dead" : undefined}>{node.title}</h1>
+          <div className="node-title-row">
+            <h1 className={node.stage === "invalidated" || byParent ? "title-dead" : undefined}>{node.title}</h1>
+            <CopyId id={node.id} />
+          </div>
           {!node.stage_exists ? (
             <p className="meta-note meta-note-alert" role="alert">
               This node's stage is gone. <code>{node.stage}</code> is no longer in type <code>{node.type}</code> in

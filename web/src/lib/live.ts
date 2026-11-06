@@ -3,48 +3,13 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ApiFailure } from "./api.js";
-import { type ChangeNotice, mergeNotices, readNotice } from "./changes.js";
-
-type Status = "connecting" | "live" | "offline";
+import { type ChangeNotice, mergeNotices } from "./changes.js";
+import { liveStatus, subscribeChanges, subscribeLiveStatus, type Status } from "./liveStream.js";
 
 const REFETCH_DELAY_MS = 80;
 
-/** Each hears a change notice, or null on connecting, when anything may have changed. */
-const changeListeners = new Set<(notice: ChangeNotice | null) => void>();
-const statusListeners = new Set<() => void>();
-let status: Status = "connecting";
-let source: EventSource | null = null;
-
-function setStatus(next: Status): void {
-  status = next;
-  for (const listener of statusListeners) listener();
-}
-
-/** One stream for the whole page. EventSource reconnects by itself after a server restart. */
-function ensureConnected(): void {
-  if (source) return;
-  source = new EventSource("/api/events");
-  const fire = (notice: ChangeNotice | null) => {
-    for (const listener of changeListeners) listener(notice);
-  };
-  // Changes may have been missed while away, so every page reloads in full.
-  source.addEventListener("ready", () => {
-    setStatus("live");
-    fire(null);
-  });
-  source.addEventListener("change", (event) => fire(readNotice((event as MessageEvent).data)));
-  source.onerror = () => setStatus("offline");
-}
-
 export function useLiveStatus(): Status {
-  return useSyncExternalStore(
-    (listener) => {
-      ensureConnected();
-      statusListeners.add(listener);
-      return () => statusListeners.delete(listener);
-    },
-    () => status,
-  );
+  return useSyncExternalStore(subscribeLiveStatus, liveStatus);
 }
 
 export interface Loaded<T> {
@@ -149,12 +114,11 @@ export function useLiveData<T>(
       if (notice === null || affects.current === undefined || affects.current(notice, shown.current)) soon(notice);
     };
     const onFocus = () => soon(null);
-    ensureConnected();
-    changeListeners.add(onChange);
+    const unsubscribe = subscribeChanges(onChange);
     window.addEventListener("focus", onFocus);
     return () => {
       clearTimeout(timer);
-      changeListeners.delete(onChange);
+      unsubscribe();
       window.removeEventListener("focus", onFocus);
     };
   }, [fetchData]);

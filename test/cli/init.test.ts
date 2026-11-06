@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, relative, sep } from "node:path";
 import { Readable, Writable } from "node:stream";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { findOnPath, runInit, type InitIo } from "../../src/cli/init.js";
@@ -32,12 +32,14 @@ interface Sandbox {
   home: string;
   bin: string;
   code: string;
+  /** A fake Claude Code config folder, never the real one. Not created until a test wants it. */
+  claude: string;
 }
 
-/** A throwaway AOP home, PATH folder and open_from folder, all under the test AOP_HOME. */
+/** A throwaway AOP home, PATH folder, open_from folder and Claude config folder, all under the test AOP_HOME. */
 function sandbox(): Sandbox {
   const root = mkdtempSync(join(aopHome(), "init-"));
-  const box = { root, home: join(root, "aop-home"), bin: join(root, "bin"), code: join(root, "code") };
+  const box = { root, home: join(root, "aop-home"), bin: join(root, "bin"), code: join(root, "code"), claude: join(root, "claude-config") };
   mkdirSync(box.bin);
   mkdirSync(box.code);
   return box;
@@ -60,14 +62,14 @@ function collector() {
   return { stream, text: () => text };
 }
 
-async function init(box: Sandbox, argv: string[], answers?: string[]) {
+async function init(box: Sandbox, argv: string[], answers?: string[], extraEnv: NodeJS.ProcessEnv = {}) {
   const out = collector();
   const err = collector();
   const io: Partial<InitIo> = {
     input: Readable.from(answers === undefined ? [] : [answers.map((a) => `${a}\n`).join("")]),
     output: out.stream,
     errors: err.stream,
-    env: { AOP_HOME: box.home, PATH: box.bin, PATHEXT: ".EXE;.CMD" },
+    env: { AOP_HOME: box.home, PATH: box.bin, PATHEXT: ".EXE;.CMD", CLAUDE_CONFIG_DIR: box.claude, ...extraEnv },
     cwd: box.root,
   };
   const code = await runInit(argv, io);
@@ -197,6 +199,19 @@ describe("existing config", () => {
     );
   });
 
+  // Needs the sandbox under the user's home to write a `~` path to it. It only reads from there.
+  const underHome = !relative(homedir(), aopHome()).startsWith("..") && !isAbsolute(relative(homedir(), aopHome()));
+  it.runIf(underHome)("reads a `~` stages path in an existing config, as the loader does", async () => {
+    const box = sandbox();
+    mkdirSync(box.home);
+    const fromHome = relative(homedir(), join(box.home, "stages.yaml")).split(sep).join("/");
+    writeFileSync(join(box.home, "config.yaml"), `agent_session_command: c\nopen_from: ${box.code}\nstages: ~/${fromHome}\n`);
+    const result = await init(box, ["--fill-missing"]);
+    expect(result.err).toBe("");
+    expect(result.code).toBe(0);
+    expect(result.out).toContain(`Wrote ${join(box.home, "stages.yaml")}`);
+  });
+
   it("reports an invalid existing config with --fill-missing", async () => {
     const box = sandbox();
     mkdirSync(box.home);
@@ -242,6 +257,17 @@ describe("open_from", () => {
     expect(statSync(join(box.root, "new", "code")).isDirectory()).toBe(true);
     expect(loadConfig(box.home).open_from).toBe(join(box.root, "new", "code"));
   });
+
+  it("isn't created when a later setting stops setup", async () => {
+    const box = sandbox();
+    const flagged = await init(box, ["--yes", "--agent-session-command", "c", "--open-from", "new", "--create-open-from", "--stages", "nope.yaml"]);
+    expect(flagged.code).toBe(1);
+    expect(existsSync(join(box.root, "new"))).toBe(false);
+
+    const asked = await init(box, ["--agent-session-command", "c", "--out-of-sandbox-command", ""], ["asked", "y"]);
+    expect(asked.err).toContain("Nothing was written");
+    expect(existsSync(join(box.root, "asked"))).toBe(false);
+  });
 });
 
 describe("asking", () => {
@@ -271,6 +297,7 @@ describe("asking", () => {
     expect(config.agent_timeout_minutes).toBe(60);
     expect(existsSync(join(box.root, "missing"))).toBe(false);
     expect(result.out).toContain(`/plugin install aop@aop`);
+    expect(result.out).toContain("--permission-mode auto");
     expect(result.out).toContain(`copilot plugin install ${join(ROOT, "plugin")}`);
   });
 
@@ -325,10 +352,69 @@ describe("finding tools", () => {
   });
 });
 
+describe("checking the plugin is installed", () => {
+  /** Writes Claude Code's install records in the fake config folder, as `/plugin install` leaves them. */
+  const records = (folder: string, text: string) => {
+    mkdirSync(join(folder, "plugins"), { recursive: true });
+    writeFileSync(join(folder, "plugins", "installed_plugins.json"), text);
+  };
+  const installed = (id: string) =>
+    JSON.stringify({ version: 2, plugins: { [id]: [{ scope: "user", installPath: join(ROOT, "plugin"), version: "0.0.0" }] } });
+
+  it("says Claude Code has it, with no install steps, when its records list aop", async () => {
+    const box = sandbox();
+    fakeTool(box.bin, "claude");
+    records(box.claude, installed("aop@aop"));
+    const result = await init(box, flags(box));
+    expect(result.code).toBe(0);
+    expect(result.out).toContain("Claude Code: the AOP plugin is installed (aop@aop");
+    expect(result.out).not.toContain("/plugin marketplace add");
+  });
+
+  it("says it's not installed yet, with the steps, when the records don't list it or don't exist", async () => {
+    const box = sandbox();
+    fakeTool(box.bin, "claude");
+    const none = await init(box, flags(box));
+    expect(none.out).toContain("Claude Code: the AOP plugin is not installed yet.");
+    expect(none.out).toContain(`/plugin marketplace add ${join(ROOT, "plugin")}`);
+
+    records(box.claude, installed("other@aop"));
+    const other = await init(box, flags(box, "--fill-missing"));
+    expect(other.out).toContain("not installed yet");
+    expect(other.out).toContain("/plugin install aop@aop");
+  });
+
+  it("never fails init over records it can't read", async () => {
+    const box = sandbox();
+    fakeTool(box.bin, "claude");
+    records(box.claude, "{ not json");
+    const result = await init(box, flags(box));
+    expect(result.code).toBe(0);
+    expect(result.err).toBe("");
+    expect(result.out).toContain("couldn't tell whether the AOP plugin is installed");
+    expect(result.out).toContain("/plugin install aop@aop");
+  });
+
+  it("follows CLAUDE_CODE_PLUGIN_CACHE_DIR, and marks copilot's steps untested", async () => {
+    const box = sandbox();
+    fakeTool(box.bin, "claude");
+    fakeTool(box.bin, "copilot");
+    const pluginsRoot = join(box.root, "elsewhere");
+    mkdirSync(pluginsRoot);
+    writeFileSync(join(pluginsRoot, "installed_plugins.json"), installed("aop@my-marketplace"));
+    const result = await init(box, flags(box), undefined, { CLAUDE_CODE_PLUGIN_CACHE_DIR: pluginsRoot });
+    expect(result.out).toContain("the AOP plugin is installed (aop@my-marketplace");
+    expect(result.out).toContain("GitHub Copilot CLI (untested");
+    expect(result.out).toContain(`copilot plugin install ${join(ROOT, "plugin")}`);
+  });
+});
+
 /** The test's environment, with PATH swapped for the fake one. */
 function cliEnv(box: Sandbox): NodeJS.ProcessEnv {
-  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => key.toUpperCase() !== "PATH"));
-  return { ...env, AOP_HOME: box.home, PATH: box.bin };
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !["PATH", "CLAUDE_CONFIG_DIR", "CLAUDE_CODE_PLUGIN_CACHE_DIR"].includes(key.toUpperCase())),
+  );
+  return { ...env, AOP_HOME: box.home, PATH: box.bin, CLAUDE_CONFIG_DIR: box.claude };
 }
 
 describe("aop init from the CLI", () => {

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { afterEach, describe, expect, it, onTestFinished } from "vitest";
 import { openDb } from "../../src/server/db.js";
-import { isAlive, killTree, readProcessStarts, waitGone } from "../../src/server/processes.js";
+import { isAlive, killTree, readProcessStarts, waitGone } from "../../src/server/osProcesses.js";
 import { listProcesses, recordProcess } from "../../src/server/runs.js";
 import type { AgentProcessView, NodeView, ProjectRow, ReapResult } from "../../src/shared/api.js";
 import { aopShim, directives, fakeConfig, nodeArgs, pidIn, settle, until, world, type World } from "./agents.helpers.js";
@@ -50,6 +50,33 @@ describe("recovery with the orchestrator restarted in place", () => {
     const second = await w.runStarted(node.id, 2);
     expect(second.status).toBe("running");
     expect(w.node(node.id).stage).toBe("implement");
+  });
+
+  it("a clean shutdown marks each run before killing it, so one that outlives the shutdown is requeued, not failed", TIMEOUT, async () => {
+    w = await world();
+    const node = await w.create(directives(`pid ${w.file("agent.pid")}`, "hang"));
+    await w.pidFrom("agent.pid");
+    await w.runStarted(node.id);
+
+    const shuttingDown = w.orchestrator.shutdown();
+    // Nothing has been killed yet: the kill can't come before this test yields.
+    expect(w.runs(node.id)[0]).toMatchObject({ status: "running", shutting_down: 1 });
+    await shuttingDown;
+    expect(w.runs(node.id)[0]).toMatchObject({ status: "exited", end_reason: "shutdown" });
+
+    // As a run whose process took longer to die than the shutdown waited leaves things: still
+    // `running` and claimed, with nothing this server is tracking.
+    const stuck = await w.create("", { stage: "pr_review", type: "dev" });
+    w.db
+      .prepare("INSERT INTO runs (id, created_at, node_id, stage, status, log_path, shutting_down) VALUES ('stuck-run', 'now', ?, 'pr_review', 'running', '/none', 1)")
+      .run(stuck.id);
+    w.db.prepare("UPDATE nodes SET claimed_by = 'agent' WHERE id = ?").run(stuck.id);
+
+    await w.restartOrchestrator();
+    expect(w.node(stuck.id)).toMatchObject({ stage: "pr_review", claimed_by: null });
+    expect(w.runs(stuck.id)[0]).toMatchObject({ status: "exited", end_reason: "shutdown" });
+    // And the node that was cleanly stopped starts again.
+    await w.runStarted(node.id, 2);
   });
 
   it("a shutdown during a split keeps the split, and its children held", TIMEOUT, async () => {
@@ -166,6 +193,24 @@ describe("reap and identity", () => {
     expect(isAlive(unrelated.pid)).toBe(true);
     expect(w.runs(legit.id)[0]).toMatchObject({ id: legitRun.id, status: "running" });
     expect(listProcesses(w.db).map((row) => row.id)).toEqual([legitRun.id]);
+  });
+
+  it("an agent it reaps because a parent was invalidated is held, not stopped", TIMEOUT, async () => {
+    // No reconcile on a timer, so the reap is the one to find it.
+    w = await world({ reconcileIntervalMs: 600_000 });
+    const parent = await w.create("", { stage: "pr_review", type: "dev" });
+    const child = await w.create(directives(`pid ${w.file("child.pid")}`, "hang"), { parent_id: parent.id });
+    const pid = await w.pidFrom("child.pid");
+    await w.runStarted(child.id);
+    // Behind the orchestrator's back, so that only the reap sees it.
+    w.db.prepare("UPDATE nodes SET stage = 'invalidated', invalidation_reason = 'Not wanted' WHERE id = ?").run(parent.id);
+
+    const res = await w.call<ReapResult>("POST", "/agents/reap");
+    expect(res.body.killed.map((k) => k.reason)).toEqual(["its node is invalidated by a parent"]);
+    expect(await waitGone(pid, 10_000)).toBe(true);
+    const [run] = await w.runsEnded(child.id);
+    expect(run).toMatchObject({ end_reason: "held" });
+    expect(w.node(child.id)).toMatchObject({ stage: "implement", claimed_by: null });
   });
 
   it("won't kill a reused process ID: the start time has to match", TIMEOUT, async () => {

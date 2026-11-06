@@ -34,7 +34,11 @@ aop steer <node>                # runs agent_session_command
 aop steer <node> --no-sandbox   # runs out_of_sandbox_command
 aop ps                          # lists agent processes, see orchestrator.md
 aop reap                        # kills agent processes that shouldn't exist
+aop stop <node>                 # stops the running agent, like the UI's Stop run
+aop release <node>              # releases your claim, like the UI
+aop logs <node> [--lines N]     # the end of the latest run's log as the node page shows it, 50 lines by default, at most 200
 ```
 
 - `aop steer` opens your own session on a node, in the project's path or `open_from`, with `AOP_NODE_ID` set so the commands above work. It claims the node for you, and errors if an agent run holds it. See claims in [orchestrator.md](orchestrator.md).
+- `aop stop`, `aop release` and `aop logs` act as the human and always take a node ID, never `AOP_NODE_ID`. `aop stop` leaves the node on its stage, claimed by the human, as the UI does. They're for humans only, so the plugin's skills don't mention them.
 - Human stages can only be passed from the UI. `aop next` is refused on them, including in a steered session.

@@ -1,8 +1,9 @@
 import { useState } from "react";
 import type { NodeView, StagesView } from "../../../../src/shared/api.js";
+import { FINISHED_STAGES } from "../../../../src/shared/builtInStages.js";
 import { api } from "../../lib/api.js";
+import { FormError, useFormError } from "../../components/FormError.js";
 import { humanize, stageOptionGroups } from "../../lib/format.js";
-import { FINISHED_STAGES } from "../../lib/stageStyle.js";
 import { useAction } from "../../lib/useAction.js";
 
 /** The stages a human can send a node to. Other built-ins have their own actions. */
@@ -28,6 +29,7 @@ export function MoveForm({
   const [choice, setChoice] = useState("");
   const [cron, setCron] = useState("");
   const { busy, error, run } = useAction(reload);
+  const { errorId, describedBy } = useFormError(error);
   const parsed = choice ? (JSON.parse(choice) as { stage: string; type?: string }) : null;
   const toScheduled = parsed?.stage === "scheduled";
   const needsCron = toScheduled && node.cron === null;
@@ -48,7 +50,7 @@ export function MoveForm({
           });
         }}
       >
-        <select value={choice} onChange={(e) => setChoice(e.target.value)} aria-label="Stage to move to">
+        <select value={choice} onChange={(e) => setChoice(e.target.value)} aria-label="Stage to move to" aria-describedby={describedBy}>
           <option value="">Choose a stage…</option>
           {moveChoices(stages).map(({ group, options }) => (
             <optgroup key={group} label={group}>
@@ -67,13 +69,14 @@ export function MoveForm({
             onChange={(e) => setCron(e.target.value)}
             placeholder={node.cron ?? "0 3 * * *"}
             aria-label="Cron schedule"
+            aria-describedby={describedBy}
           />
         ) : null}
         <button type="submit" className="btn-small" disabled={busy || !parsed || (needsCron && cron.trim() === "")}>
           Move
         </button>
       </form>
-      {error ? <div className="form-error">{error}</div> : null}
+      <FormError error={error} id={errorId} />
     </>
   );
 }

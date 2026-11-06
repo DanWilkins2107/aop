@@ -10,9 +10,8 @@ import { Orchestrator } from "./orchestrator.js";
 import { configPath, dbPath } from "./paths.js";
 import { Scheduler } from "./scheduler.js";
 import { HOSTNAME, startServer } from "./server.js";
+import { DEFAULT_PORT } from "../shared/port.js";
 import { acquireServerLock, ServerAlreadyRunning, type ServerLock } from "./serverLock.js";
-
-const DEFAULT_PORT = 4317;
 
 /** Runs the server and its agents in the foreground until it's told to stop. */
 export async function runServer(argv: string[], usage: string): Promise<void> {

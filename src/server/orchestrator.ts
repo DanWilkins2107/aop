@@ -1,5 +1,5 @@
 // Decides which agents run and what each run's end means for its node. OS-level process handling is
-// in `processes.ts`, and the `runs` and `agent_processes` rows in `runs.ts`.
+// in `osProcesses.ts`, and the `runs` and `agent_processes` rows in `runs.ts`.
 
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import type { WriteStream } from "node:fs";
@@ -11,6 +11,7 @@ import { type AopConfig, loadConfig, withConfigSnapshot } from "./config.js";
 import { buildPrompt } from "./context.js";
 import type { Db } from "./db.js";
 import { ConfigError, refused } from "./errors.js";
+import { isFolder } from "./fsUtil.js";
 import { getNodeRow, holdersOf, markFailed, startableNodes, type NodeRow, type NodeView, getNode } from "./nodes.js";
 import {
   type Identity,
@@ -18,12 +19,12 @@ import {
   killLeftovers,
   killTree,
   prepareSweeps,
-  readChildren,
+  readChildStarts,
   readProcessStarts,
   RUN_MARKER,
   sweepRuns,
   waitGone,
-} from "./processes.js";
+} from "./osProcesses.js";
 import { agentStartPath, getProject } from "./projects.js";
 import { newId } from "./records.js";
 import { appendToLog, logPathFor, openLog } from "./runLog.js";
@@ -31,19 +32,22 @@ import {
   agentReported,
   beginRun,
   closeRun,
+  decideRunEnd,
   forgetProcess,
   getRun,
   handClaimToHuman,
   identitiesOf,
   listProcesses,
+  markShuttingDown,
   recordProcess,
   recordUsage,
   releaseAgentClaim,
   runningRuns,
   type ProcessRow,
+  type RunEnding,
   type RunRow,
+  type StopReason,
 } from "./runs.js";
-import { isFolder } from "./steer.js";
 
 /** How long an agent that reported `next`, `ask` or `split finish` gets to exit before it's stopped. */
 const DEFAULT_GRACE_MS = 15_000;
@@ -56,15 +60,15 @@ const OUTPUT_DRAIN_MS = 1_000;
 /** The longest a Node timer can wait. Anything above it fires at once. */
 const MAX_TIMER_MS = 2 ** 31 - 1;
 /** How long to look for what the launched shell started, and how often. */
-const CHILD_LOOKUPS = 10;
+const CHILD_LOOKUP_MS = 10_000;
 const CHILD_LOOKUP_GAP_MS = 300;
-
-type StopReason = "human" | "timeout" | "held" | "moved_on" | "shutdown" | "project_deleted";
 
 /** A run this server launched and whose process hasn't yet been seen to exit. */
 interface ActiveRun {
   id: string;
   nodeId: string;
+  /** Kept here because the node can be deleted, with its project, before its process exits. */
+  projectId: string;
   pid: number | undefined;
   /** Null until read. See `readProcessStarts`. */
   processStart: string | null;
@@ -102,6 +106,8 @@ export class Orchestrator {
   private readonly background = new Set<Promise<unknown>>();
   private url = "";
   private running = false;
+  /** Set for good by `shutdown`, which can come while `start` is still waiting on its first sweep. */
+  private shutDown = false;
   private kicked = false;
   private reaping: Promise<ReapResult> | null = null;
   private timers: NodeJS.Timeout[] = [];
@@ -123,6 +129,8 @@ export class Orchestrator {
     this.url = url;
     prepareSweeps();
     await this.reap();
+    // Shut down while the sweep above ran, such as Ctrl+C during a slow startup: start nothing.
+    if (this.shutDown) return;
     this.releaseStrandedClaims();
     this.running = true;
     this.unsubscribe = this.changes.subscribeBursts(() => this.kick());
@@ -137,9 +145,13 @@ export class Orchestrator {
 
   /** Stops every agent and puts its node back in the queue for the next start. */
   async shutdown(): Promise<void> {
+    this.shutDown = true;
     this.running = false;
     this.unsubscribe?.();
     for (const timer of this.timers) clearInterval(timer);
+    // Before anything is killed, and before this yields, so that a run whose process outlives the
+    // wait below is put back in the queue by the next start rather than failed.
+    if (this.db.open) markShuttingDown(this.db, [...this.active.keys()]);
     await this.reaping?.catch(logFailure);
     await Promise.all([...this.active.values()].map((run) => this.stop(run, "shutdown")));
     await Promise.all(this.background);
@@ -203,15 +215,22 @@ export class Orchestrator {
 
   private launch(node: NodeRow, config: AopConfig): void {
     const id = newId();
-    const logPath = logPathFor(id);
     const { command, format } = headlessCommand(config.agent_session_command);
-    const run = beginRun(this.db, node, id, logPath, format);
-    const cwd = agentStartPath(getProject(this.db, node.project_id), config);
-    appendToLog(logPath, `[aop] run ${id} on node ${node.id}, stage ${node.stage}, at ${run.created_at}\n[aop] ${command}\n[aop] in ${cwd}\n`);
+    let run: RunRow;
+    try {
+      run = beginRun(this.db, node, id, logPathFor(id), format);
+    } catch (error) {
+      // Nothing was written, so the node is as it was. Other launches carry on.
+      logFailure(error);
+      return;
+    }
 
+    // From here the run is open and holds the claim, so anything that goes wrong has to close it.
     let prompt: string;
     let child: ChildProcessWithoutNullStreams;
     try {
+      const cwd = agentStartPath(getProject(this.db, node.project_id), config);
+      appendToLog(run.log_path, `[aop] run ${id} on node ${node.id}, stage ${node.stage}, at ${run.created_at}\n[aop] ${command}\n[aop] in ${cwd}\n`);
       if (!isFolder(cwd)) throw new Error(`The start folder doesn't exist: ${cwd}`);
       prompt = buildPrompt(this.db, config, node);
       // The command is the user's own string, so it may need a shell. Nothing from a node goes in
@@ -232,12 +251,17 @@ export class Orchestrator {
       this.failBeforeLaunch(run, (error as Error).message);
       return;
     }
-    this.track(run, child, command, prompt, config.agent_timeout_minutes, format);
+    this.track(run, node.project_id, child, command, prompt, config.agent_timeout_minutes, format);
     this.changes.notify(nodesNotice(this.db, node.id));
   }
 
   private failBeforeLaunch(run: RunRow, reason: string): void {
-    appendToLog(run.log_path, `[aop] ${reason}\n`);
+    try {
+      appendToLog(run.log_path, `[aop] ${reason}\n`);
+    } catch (error) {
+      // The reason is posted to the node either way, and the log may be what failed.
+      logFailure(error);
+    }
     this.db.transaction(() => {
       closeRun(this.db, run, "failed", null);
       markFailed(this.db, getNodeRow(this.db, run.node_id), { reason, runId: run.id });
@@ -247,6 +271,7 @@ export class Orchestrator {
 
   private track(
     run: RunRow,
+    projectId: string,
     child: ChildProcessWithoutNullStreams,
     command: string,
     prompt: string,
@@ -265,6 +290,7 @@ export class Orchestrator {
     const active: ActiveRun = {
       id: run.id,
       nodeId: run.node_id,
+      projectId,
       pid: child.pid,
       processStart: null,
       children: [],
@@ -343,10 +369,9 @@ export class Orchestrator {
     active.processStart = start;
     this.db.prepare("UPDATE agent_processes SET process_start = ? WHERE id = ?").run(start, active.id);
 
-    for (let attempt = 0; attempt < CHILD_LOOKUPS && this.active.has(active.id); attempt++) {
-      const pids = await readChildren(pid);
-      const starts = await readProcessStarts(pids);
-      active.children = [...starts].map(([child, childStart]) => ({ pid: child, start: childStart }));
+    const deadline = Date.now() + CHILD_LOOKUP_MS;
+    while (Date.now() < deadline && this.active.has(active.id)) {
+      active.children = await readChildStarts(pid);
       if (active.children.length > 0) {
         if (this.db.open) {
           this.db.prepare("UPDATE agent_processes SET children = ? WHERE id = ?").run(JSON.stringify(active.children), active.id);
@@ -372,40 +397,37 @@ export class Orchestrator {
     this.db.transaction(() => {
       // Without a process ID nothing ran, so there's nothing left to clear up.
       if (active.pid === undefined) forgetProcess(this.db, active.id);
-      const run = getRun(this.db, active.id);
-      if (!run) return; // Its project has been deleted.
-
-      if (run.left_via !== null) {
-        closeRun(this.db, run, agentReported(run) ? "reported" : "stopped", exitCode);
-        return;
-      }
-      switch (active.stopReason) {
-        case "human":
-          closeRun(this.db, run, "stopped", exitCode);
-          handClaimToHuman(this.db, run.node_id);
-          return;
-        case "held":
-          closeRun(this.db, run, "held", exitCode);
-          releaseAgentClaim(this.db, run.node_id, "held");
-          return;
-        case "shutdown":
-          closeRun(this.db, run, "shutdown", exitCode);
-          releaseAgentClaim(this.db, run.node_id, "shutdown");
-          return;
-        case "moved_on":
-        case "project_deleted":
-          closeRun(this.db, run, "stopped", exitCode);
-          releaseAgentClaim(this.db, run.node_id, "stop");
-          return;
-        case "timeout":
-        case null: {
-          const reason = failureReason(active, exitCode, signal, launchError);
-          closeRun(this.db, run, "failed", exitCode, active.stopReason === "timeout");
-          markFailed(this.db, getNodeRow(this.db, run.node_id), { reason, runId: run.id });
-        }
-      }
+      this.endRun(getRun(this.db, active.id), exitCode, {
+        kind: "exited",
+        stopReason: active.stopReason,
+        exitCode,
+        signal,
+        launchError,
+        timeoutMinutes: active.timeoutMinutes,
+      });
     })();
     this.changes.notify(nodesNotice(this.db, active.nodeId));
+  }
+
+  /** Records a run's end as `decideRunEnd` says. Call inside a transaction. */
+  private endRun(run: RunRow | undefined, exitCode: number | null, ending: RunEnding): void {
+    const nodeExists = run !== undefined && this.db.prepare("SELECT 1 FROM nodes WHERE id = ?").get(run.node_id) !== undefined;
+    const decision = decideRunEnd({ run, ending, reported: run !== undefined && agentReported(run), nodeExists });
+    if (!run || !decision) return;
+    closeRun(this.db, run, decision.outcome, exitCode, decision.timedOut);
+    const then = decision.then;
+    switch (then.kind) {
+      case "none":
+        return;
+      case "release_claim":
+        releaseAgentClaim(this.db, run.node_id, then.via);
+        return;
+      case "hand_to_human":
+        handClaimToHuman(this.db, run.node_id);
+        return;
+      case "mark_failed":
+        markFailed(this.db, getNodeRow(this.db, run.node_id), { reason: then.reason, runId: run.id });
+    }
   }
 
   /**
@@ -434,7 +456,8 @@ export class Orchestrator {
    */
   async stopProjectAgents(projectId: string): Promise<() => void> {
     this.closingProjects.add(projectId);
-    const inProject = [...this.active.values()].filter((run) => getNodeRow(this.db, run.nodeId).project_id === projectId);
+    // Not from the node: one whose project was deleted while it outlived the wait has none.
+    const inProject = [...this.active.values()].filter((run) => run.projectId === projectId);
     await Promise.all(inProject.map((run) => this.stop(run, "project_deleted")));
     return () => {
       this.closingProjects.delete(projectId);
@@ -444,13 +467,21 @@ export class Orchestrator {
 
   /** Why a process shouldn't exist, or null if it should. */
   private whyCondemned(process: ProcessRow): string | null {
+    return this.condemnation(process)?.why ?? null;
+  }
+
+  /** Why a process shouldn't exist, and what stopping its run counts as, or null if it should exist. */
+  private condemnation(process: ProcessRow): { why: string; stop: StopReason } | null {
     const run = getRun(this.db, process.id);
-    if (!run) return "it has no run: its node was deleted";
-    if (run.status !== "running") return "its run has ended";
-    if (!this.active.has(run.id)) return "this server didn't start it";
-    if (run.left_at !== null && Date.now() - new Date(run.left_at).getTime() >= this.graceMs) return "its node moved on";
+    if (!run) return { why: "it has no run: its node was deleted", stop: "moved_on" };
+    if (run.status !== "running") return { why: "its run has ended", stop: "moved_on" };
+    if (!this.active.has(run.id)) return { why: "this server didn't start it", stop: "moved_on" };
+    if (run.left_at !== null && Date.now() - new Date(run.left_at).getTime() >= this.graceMs) {
+      return { why: "its node moved on", stop: "moved_on" };
+    }
     if (holdersOf(this.db, run.node_id).some((holder) => holder.via === "invalidated_parent")) {
-      return "its node is invalidated by a parent";
+      // Held, not stopped: restoring the parent lets the node carry on.
+      return { why: "its node is invalidated by a parent", stop: "held" };
     }
     return null;
   }
@@ -503,52 +534,66 @@ export class Orchestrator {
     // carrying its marker is killed straight away. That reaches what the record doesn't: a child
     // started after it was written, or a crash before the start times were read.
     const lost = rows.filter((row) => !this.active.has(row.id)).map((row) => row.id);
-    const swept = lost.length === 0 ? [] : ((await sweepRuns(lost, true)) ?? []);
+    // A crash between opening a run and recording its process leaves a `running` row with no process
+    // on record, but whatever was launched still carries the run's marker.
+    const recorded = new Set(rows.map((row) => row.id));
+    const unrecorded = runningRuns(this.db)
+      .filter((run) => !this.active.has(run.id) && !recorded.has(run.id))
+      .map((run) => run.id);
+    const targets = [...lost, ...unrecorded];
+    const swept = targets.length === 0 ? [] : ((await sweepRuns(targets, true)) ?? []);
+    for (const found of swept) {
+      if (unrecorded.includes(found.runId)) {
+        result.killed.push({ run_id: found.runId, pid: found.pid, reason: "AOP never recorded its process" });
+      }
+    }
 
     for (const row of rows) {
       if (!this.db.open) return result;
       const active = this.active.get(row.id);
       if (active) {
         // Its open handle vouches for it, so it only needs to be one that shouldn't be running.
-        const reason = this.whyCondemned(row);
-        if (reason !== null) {
-          result.killed.push({ run_id: row.id, pid: row.pid, reason });
-          await this.stop(active, "moved_on");
+        const condemned = this.condemnation(row);
+        if (condemned !== null) {
+          result.killed.push({ run_id: row.id, pid: row.pid, reason: condemned.why });
+          await this.stop(active, condemned.stop);
         }
         continue;
       }
-
       const marked = swept.filter((found) => found.runId === row.id).map(({ pid }) => pid);
-      const confirmed = identitiesOf(row).filter(({ pid, start }) => starts.get(pid) === start && !marked.includes(pid));
-      if (marked.length > 0) {
-        const pid = marked.includes(row.pid) ? row.pid : (marked[0] as number);
-        result.killed.push({ run_id: row.id, pid, reason: this.whyCondemned(row) ?? "this server didn't start it" });
-        if (confirmed.length > 0) await killConfirmed(row.pid, confirmed);
-        const gone = await Promise.all([...marked, ...confirmed.map(({ pid }) => pid)].map((pid) => waitGone(pid, STOP_WAIT_MS)));
-        if (gone.every(Boolean)) forgetProcess(this.db, row.id);
-        continue;
-      }
-      if (confirmed.length === 0) {
-        if (row.process_start === null && starts.has(row.pid)) {
-          // It stays on record until it's gone, because nothing can show it's safe to kill.
-          result.skipped.push({ run_id: row.id, pid: row.pid, reason: "AOP never recorded its start time" });
-          continue;
-        }
-        if (starts.has(row.pid)) {
-          result.skipped.push({ run_id: row.id, pid: row.pid, reason: "its process ID now belongs to another process" });
-        }
-        forgetProcess(this.db, row.id);
-        continue;
-      }
-
-      result.killed.push({ run_id: row.id, pid: row.pid, reason: this.whyCondemned(row) ?? "this server didn't start it" });
-      await killConfirmed(row.pid, confirmed);
-      const gone = await Promise.all(confirmed.map(({ pid }) => waitGone(pid, STOP_WAIT_MS)));
-      if (gone.every(Boolean)) forgetProcess(this.db, row.id);
+      await this.reapLost(row, starts, marked, result);
     }
 
     if (this.db.open) this.closeDeadRuns();
     return result;
+  }
+
+  /**
+   * Deals with a recorded process this server isn't tracking. The sweep has already killed whatever
+   * carried its run's marker, so this kills what's left that its record confirms, waits for all of it
+   * to go, and only then forgets the record.
+   */
+  private async reapLost(row: ProcessRow, starts: Map<number, string>, marked: number[], result: ReapResult): Promise<void> {
+    const confirmed = identitiesOf(row).filter(({ pid, start }) => starts.get(pid) === start && !marked.includes(pid));
+    if (marked.length === 0 && confirmed.length === 0) {
+      if (row.process_start === null && starts.has(row.pid)) {
+        // It stays on record until it's gone, because nothing can show it's safe to kill.
+        result.skipped.push({ run_id: row.id, pid: row.pid, reason: "AOP never recorded its start time" });
+        return;
+      }
+      if (starts.has(row.pid)) {
+        result.skipped.push({ run_id: row.id, pid: row.pid, reason: "its process ID now belongs to another process" });
+      }
+      forgetProcess(this.db, row.id);
+      return;
+    }
+
+    // The launched shell's ID where it's among them, which is the one on record.
+    const pid = marked.length === 0 || marked.includes(row.pid) ? row.pid : (marked[0] as number);
+    result.killed.push({ run_id: row.id, pid, reason: this.whyCondemned(row) ?? "this server didn't start it" });
+    if (confirmed.length > 0) await killConfirmed(row.pid, confirmed);
+    const gone = await Promise.all([...marked, ...confirmed.map(({ pid }) => pid)].map((pid) => waitGone(pid, STOP_WAIT_MS)));
+    if (gone.every(Boolean) && this.db.open) forgetProcess(this.db, row.id);
   }
 
   /** Reads every process on record, the launched shells and what they started. */
@@ -562,15 +607,7 @@ export class Orchestrator {
     for (const run of runningRuns(this.db)) {
       if (this.active.has(run.id)) continue;
       closed = true;
-      this.db.transaction(() => {
-        if (run.left_via !== null) {
-          closeRun(this.db, run, agentReported(run) ? "reported" : "stopped", null);
-        } else {
-          closeRun(this.db, run, "failed", null);
-          const reason = "The agent's process died, or was stopped, when the AOP server went down without closing cleanly.";
-          markFailed(this.db, getNodeRow(this.db, run.node_id), { reason, runId: run.id });
-        }
-      })();
+      this.db.transaction(() => this.endRun(getRun(this.db, run.id), null, { kind: "lost" }))();
     }
     if (closed) this.changes.notify();
   }
@@ -587,12 +624,6 @@ export class Orchestrator {
       this.db.transaction(() => releaseAgentClaim(this.db, id, "restart"))();
     }
   }
-}
-
-function failureReason(active: ActiveRun, exitCode: number | null, signal: string | null, launchError: string | null): string {
-  if (launchError !== null) return `The agent couldn't be launched: ${launchError}`;
-  if (active.stopReason === "timeout") return `The agent ran past agent_timeout_minutes (${active.timeoutMinutes}).`;
-  return `The agent exited without reporting an outcome (${exitCode === null ? `signal ${signal}` : `exit code ${exitCode}`}).`;
 }
 
 /** Resolves when the output has ended, or soon after exit if a leftover child is holding it open. */

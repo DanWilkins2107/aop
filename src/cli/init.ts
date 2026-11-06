@@ -1,14 +1,14 @@
-import { accessSync, constants, copyFileSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { accessSync, constants, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { stringify } from "yaml";
 import { loadConfig } from "../server/config.js";
 import { ConfigError } from "../server/errors.js";
-import { loadStagesFile } from "../server/stages.js";
+import { aopHome, configPath, resolveConfigPath } from "../server/paths.js";
 import { parseYamlFile } from "../server/yamlFile.js";
+import { ABOUT, gatherSettings, InitFailure, lineReader, type Settings, type Values } from "./initSettings.js";
 
 /** What `aop init --help` adds under the CLI's usage line. */
 const FLAG_HELP = `Sets up AOP_HOME, or ~/.aop. Asks for each setting, unless a flag gives it.
@@ -34,20 +34,9 @@ export interface InitIo {
 
 const PACKAGE_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
-const ABOUT = {
-  agent_session_command:
-    "This is the session your agents are starting in. Strongly consider having this command start sessions inside a sandbox.",
-  out_of_sandbox_command:
-    "Sometimes you may need to run and supervise a session that runs outside of a sandbox (using `aop steer --no-sandbox`). Not needed if you're not running sessions sandboxed.",
-  open_from: "Where sessions start for projects with no path.",
-  agent_timeout_minutes: "How long an agent can run before it's stopped and its node goes to `failed`.",
-  stages: "The file that defines your process.",
-};
-
 const TOOLS = ["claude", "copilot"] as const;
 type Tool = (typeof TOOLS)[number];
 
-class InitFailure extends Error {}
 class UsageFailure extends Error {}
 
 function envValue(env: NodeJS.ProcessEnv, name: string): string | undefined {
@@ -76,17 +65,6 @@ export function findOnPath(name: string, env: NodeJS.ProcessEnv, platform: NodeJ
   return undefined;
 }
 
-function aopHomeFor(io: InitIo): string {
-  const fromEnv = io.env["AOP_HOME"];
-  return fromEnv ? resolve(io.cwd, fromEnv) : join(homedir(), ".aop");
-}
-
-/** `~` and `~/x` are the user's home; anything else relative is from where `aop init` runs. */
-function expandPath(path: string, cwd: string): string {
-  const fromHome = /^~(?:[\\/](.*))?$/.exec(path);
-  return fromHome ? resolve(join(homedir(), fromHome[1] ?? "")) : resolve(cwd, path);
-}
-
 /** The git repo holding `path`, if any. AOP's state must stay out of repos. */
 function repoAround(path: string): string | undefined {
   for (let dir = resolve(path); ; dir = dirname(dir)) {
@@ -109,15 +87,6 @@ function comment(text: string): string {
     line += ` ${word}`;
   }
   return [...lines, line].join("\n");
-}
-
-interface Settings {
-  agent_session_command: string;
-  out_of_sandbox_command: string | undefined;
-  open_from: string;
-  agent_timeout_minutes: number;
-  /** As written in config.yaml. */
-  stages: string;
 }
 
 export function configText(settings: Settings): string {
@@ -147,161 +116,6 @@ stages: ${yamlScalar(settings.stages)}
 `;
 }
 
-/** Reads answers line by line. Buffers lines that arrive early, so piped answers work too. */
-function lineReader(io: InitIo) {
-  const rl = createInterface({ input: io.input, terminal: false });
-  const lines = rl[Symbol.asyncIterator]();
-  return {
-    async ask(question: string): Promise<string> {
-      io.output.write(question);
-      const next = await lines.next();
-      if (next.done) throw new InitFailure("\nInput ended before setup finished. Nothing was written.");
-      return next.value.trim();
-    },
-    close: () => rl.close(),
-  };
-}
-
-type Ask = (question: string) => Promise<string>;
-
-function parseTimeout(text: string): number | undefined {
-  const value = Number(text);
-  return text !== "" && Number.isFinite(value) && value > 0 ? value : undefined;
-}
-
-function openFromProblem(path: string): string | undefined {
-  if (!existsSync(path)) return "doesn't exist";
-  if (!statSync(path).isDirectory()) return "isn't a folder";
-  return undefined;
-}
-
-function stagesProblems(path: string): string[] {
-  if (!existsSync(path)) return [`${path}: file not found`];
-  return loadStagesFile(path).problems;
-}
-
-type Values = {
-  yes?: boolean;
-  "fill-missing"?: boolean;
-  "agent-session-command"?: string;
-  "out-of-sandbox-command"?: string;
-  "open-from"?: string;
-  "create-open-from"?: boolean;
-  "agent-timeout-minutes"?: string;
-  stages?: string;
-};
-
-/** Gets every setting, from flags first, then by asking, or from defaults with --yes. */
-async function gatherSettings(io: InitIo, values: Values, ask: Ask | undefined, found: Map<Tool, string>): Promise<Settings> {
-  const say = (text: string) => io.output.write(`${text}\n`);
-  const suggested = [...found.keys()][0];
-
-  // agent_session_command
-  let sessionCommand = values["agent-session-command"]?.trim();
-  if (sessionCommand === "") throw new InitFailure("--agent-session-command can't be empty.");
-  if (sessionCommand === undefined) {
-    if (!ask) throw new InitFailure("--agent-session-command is required with --yes.");
-    say(`\nAgent session command (required). ${ABOUT.agent_session_command}`);
-    while (sessionCommand === undefined) {
-      const answer = await ask(suggested ? `Command [${suggested}]: ` : "Command: ");
-      sessionCommand = answer || suggested;
-      if (sessionCommand === undefined) say("This one is required.");
-    }
-  }
-
-  // out_of_sandbox_command
-  let outOfSandbox = values["out-of-sandbox-command"]?.trim() || undefined;
-  if (values["out-of-sandbox-command"] === undefined && ask) {
-    say(`\nOut of sandbox command (optional). ${ABOUT.out_of_sandbox_command}`);
-    outOfSandbox = (await ask(suggested ? `Command, or blank to skip (e.g. ${suggested}): ` : "Command, or blank to skip: ")) || undefined;
-  }
-
-  // open_from
-  const openFromFlag = values["open-from"]?.trim();
-  if (openFromFlag === "") throw new InitFailure("--open-from can't be empty.");
-  let openFrom: string;
-  if (openFromFlag !== undefined || !ask) {
-    openFrom = openFromFlag ?? "~/code";
-    const path = expandPath(openFrom, io.cwd);
-    let problem = openFromProblem(path);
-    if (problem === "doesn't exist" && values["create-open-from"] === true) {
-      mkdirSync(path, { recursive: true });
-      say(`Created ${path}`);
-      problem = undefined;
-    }
-    if (problem !== undefined) {
-      const hint = problem === "doesn't exist" ? " Create it, pass --create-open-from, or pick another with --open-from." : "";
-      throw new InitFailure(`open_from ${path} ${problem}.${hint}`);
-    }
-  } else {
-    say(`
-Open from. ${ABOUT.open_from}`);
-    for (;;) {
-      openFrom = (await ask("Folder [~/code]: ")) || "~/code";
-      const path = expandPath(openFrom, io.cwd);
-      const problem = openFromProblem(path);
-      if (problem === undefined) break;
-      if (problem !== "doesn't exist") {
-        say(`${path} ${problem}.`);
-        continue;
-      }
-      if (values["create-open-from"] === true || /^y(es)?$/i.test(await ask(`${path} doesn't exist. Create it? [y/N]: `))) {
-        mkdirSync(path, { recursive: true });
-        say(`Created ${path}`);
-        break;
-      }
-    }
-  }
-  // Keep `~` forms as typed. Other paths are stored absolute, since config paths are relative to AOP_HOME.
-  const openFromSetting = /^~(?:[\\/]|$)/.test(openFrom) ? openFrom : expandPath(openFrom, io.cwd);
-
-  // agent_timeout_minutes
-  let timeout: number | undefined;
-  const timeoutFlag = values["agent-timeout-minutes"];
-  if (timeoutFlag !== undefined) {
-    timeout = parseTimeout(timeoutFlag.trim());
-    if (timeout === undefined) throw new InitFailure("--agent-timeout-minutes must be a positive number.");
-  } else if (ask) {
-    say(`\nAgent timeout. ${ABOUT.agent_timeout_minutes}`);
-    while (timeout === undefined) {
-      const answer = await ask("Minutes [60]: ");
-      timeout = answer === "" ? 60 : parseTimeout(answer);
-      if (timeout === undefined) say("Enter a positive number of minutes.");
-    }
-  } else {
-    timeout = 60;
-  }
-
-  // stages: the default process, or the user's own file
-  let stages = "./stages.yaml";
-  let ownStages = values.stages?.trim() || undefined;
-  if (values.stages === undefined && ask) {
-    say(`\nProcess. The default: an agent triages each task and may split it, then an agent implements it and raises a PR for your review.`);
-    const useDefault = !/^n(o)?$/i.test(await ask("Use the default process? [Y/n]: "));
-    while (!useDefault && ownStages === undefined) {
-      const answer = await ask("Path to your stages.yaml: ");
-      if (answer === "") continue;
-      const problems = stagesProblems(expandPath(answer, io.cwd));
-      if (problems.length === 0) ownStages = answer;
-      else for (const p of problems) say(`  ${p}`);
-    }
-  }
-  if (ownStages !== undefined) {
-    const path = expandPath(ownStages, io.cwd);
-    const problems = stagesProblems(path);
-    if (problems.length > 0) throw new InitFailure(`The stages file has problems:\n${problems.map((p) => `  ${p}`).join("\n")}`);
-    stages = path;
-  }
-
-  return {
-    agent_session_command: sessionCommand,
-    out_of_sandbox_command: outOfSandbox,
-    open_from: openFromSetting,
-    agent_timeout_minutes: timeout,
-    stages,
-  };
-}
-
 /** Copies the default process into `home`, skipping any file already there. */
 function copyDefaults(io: InitIo, home: string, say: (text: string) => void): void {
   const defaults = join(io.packageRoot, "defaults");
@@ -320,23 +134,68 @@ function copyDefaults(io: InitIo, home: string, say: (text: string) => void): vo
 
 /** Whether the config at `home` uses `home/stages.yaml`, so the default process belongs there. */
 function usesHomeStages(home: string): boolean {
-  const parsed = parseYamlFile(join(home, "config.yaml"));
+  const parsed = parseYamlFile(configPath(home));
   if (!parsed.ok || typeof parsed.value !== "object" || parsed.value === null) return false;
   const stages = (parsed.value as Record<string, unknown>)["stages"];
-  return typeof stages === "string" && resolve(home, stages) === join(home, "stages.yaml");
+  return typeof stages === "string" && resolveConfigPath(home, stages) === join(home, "stages.yaml");
 }
 
 const quoted = (path: string) => (/\s/.test(path) ? `"${path}"` : path);
 
+/** The plugin's name in its marketplace, which is how Claude Code keys an install: `aop@<marketplace>`. */
+const PLUGIN_NAME = "aop";
+
+export type PluginCheck =
+  | { state: "installed"; file: string; id: string }
+  | { state: "missing"; file: string }
+  | { state: "unknown"; file: string; why: string };
+
+/**
+ * Whether Claude Code has the AOP plugin installed, from its own install records. It never runs
+ * `claude`. The records are `installed_plugins.json` in Claude Code's plugins root, which is
+ * CLAUDE_CODE_PLUGIN_CACHE_DIR, or else `plugins` in CLAUDE_CONFIG_DIR, or else `~/.claude/plugins`.
+ */
+export function checkClaudePlugin(env: NodeJS.ProcessEnv, cwd: string, home = homedir()): PluginCheck {
+  const configDir = envValue(env, "CLAUDE_CONFIG_DIR") || join(home, ".claude");
+  const root = envValue(env, "CLAUDE_CODE_PLUGIN_CACHE_DIR") || join(configDir, "plugins");
+  const file = resolve(cwd, root, "installed_plugins.json");
+  if (!existsSync(file)) return { state: "missing", file };
+  let records: unknown;
+  try {
+    records = JSON.parse(readFileSync(file, "utf8"));
+  } catch (error) {
+    return { state: "unknown", file, why: `couldn't read it: ${(error as Error).message}` };
+  }
+  if (typeof records !== "object" || records === null) return { state: "unknown", file, why: "it isn't in a form AOP knows" };
+  // Version 2 keeps installs under `plugins`, keyed `name@marketplace`, each a list of installs by scope.
+  const plugins = (records as { plugins?: unknown }).plugins ?? records;
+  if (typeof plugins !== "object" || plugins === null) return { state: "unknown", file, why: "it isn't in a form AOP knows" };
+  const id = Object.entries(plugins).find(
+    ([key, installs]) => key.startsWith(`${PLUGIN_NAME}@`) && installs !== null && (!Array.isArray(installs) || installs.length > 0),
+  )?.[0];
+  return id === undefined ? { state: "missing", file } : { state: "installed", file, id };
+}
+
+function claudePluginSection(io: InitIo, plugin: string): string {
+  const steps = `Inside a claude session:\n  /plugin marketplace add ${plugin}\n  /plugin install aop@aop\nOr for one session: claude --plugin-dir ${quoted(plugin)}`;
+  const check = checkClaudePlugin(io.env, io.cwd);
+  if (check.state === "installed") return `Claude Code: the AOP plugin is installed (${check.id}, in ${check.file}).`;
+  if (check.state === "missing") return `Claude Code: the AOP plugin is not installed yet.\n${steps}`;
+  return `Claude Code: couldn't tell whether the AOP plugin is installed, from ${check.file}: ${check.why}.\n${steps}`;
+}
+
 function pluginSteps(io: InitIo, found: Map<Tool, string>): string {
   const plugin = join(io.packageRoot, "plugin");
-  const steps: Record<Tool, string> = {
-    claude: `Claude Code, inside a claude session:\n  /plugin marketplace add ${plugin}\n  /plugin install aop@aop\nOr for one session: claude --plugin-dir ${quoted(plugin)}`,
-    copilot: `GitHub Copilot CLI (untested):\n  copilot plugin install ${quoted(plugin)}`,
+  const sections: Record<Tool, () => string> = {
+    claude: () => claudePluginSection(io, plugin),
+    copilot: () => `GitHub Copilot CLI (untested, and AOP can't check whether it's installed):\n  copilot plugin install ${quoted(plugin)}`,
   };
   const tools = found.size > 0 ? [...found.keys()] : [...TOOLS];
-  const intro = found.size > 0 ? "Install the AOP plugin, which teaches agents how to work on AOP stages:" : "Didn't find claude or copilot on PATH. To install the AOP plugin later:";
-  return [intro, ...tools.map((tool) => steps[tool])].join("\n\n");
+  const intro =
+    found.size > 0
+      ? "The AOP plugin teaches agents how to work on AOP stages."
+      : "Didn't find claude or copilot on PATH. The AOP plugin teaches agents how to work on AOP stages. To install it later:";
+  return [intro, ...tools.map((tool) => sections[tool]())].join("\n\n");
 }
 
 async function init(argv: string[], io: InitIo): Promise<void> {
@@ -367,12 +226,12 @@ async function init(argv: string[], io: InitIo): Promise<void> {
   }
 
   const say = (text: string) => io.output.write(`${text}\n`);
-  const home = aopHomeFor(io);
+  const home = aopHome(io.env, io.cwd);
   const repo = repoAround(home);
   if (repo !== undefined) {
     throw new InitFailure(`${home} is inside the git repo ${repo}. AOP never writes to repos. Set AOP_HOME to a folder outside it.`);
   }
-  const configFile = join(home, "config.yaml");
+  const configFile = configPath(home);
   const configExists = existsSync(configFile);
   if (configExists && values["fill-missing"] !== true) {
     throw new InitFailure(
@@ -394,14 +253,19 @@ async function init(argv: string[], io: InitIo): Promise<void> {
     say(`Keeping ${configFile}. Only adding missing files.`);
     if (usesHomeStages(home)) copyDefaults(io, home, say);
   } else {
-    const reader = values.yes === true ? undefined : lineReader(io);
-    let settings: Settings;
+    const reader = values.yes === true ? undefined : lineReader(io.input, io.output);
+    let gathered: Awaited<ReturnType<typeof gatherSettings>>;
     try {
-      settings = await gatherSettings(io, values, reader?.ask, found);
+      gathered = await gatherSettings({ values, ask: reader?.ask, suggested: [...found.keys()][0], cwd: io.cwd, say });
     } finally {
       reader?.close();
     }
+    const { settings, createOpenFrom } = gathered;
     say("");
+    if (createOpenFrom !== undefined) {
+      mkdirSync(createOpenFrom, { recursive: true });
+      say(`Created ${createOpenFrom}`);
+    }
     mkdirSync(home, { recursive: true });
     if (settings.stages === "./stages.yaml") copyDefaults(io, home, say);
     writeFileSync(configFile, configText(settings), { flag: "wx" });
@@ -419,12 +283,14 @@ async function init(argv: string[], io: InitIo): Promise<void> {
   if (!existsSync(config.openFromPath)) say(`Note: open_from ${config.openFromPath} doesn't exist yet.`);
 
   say(`\n${pluginSteps(io, found)}`);
+  say(
+    "\nAgents run headless, so they can't ask you to approve commands or edits. Consider Claude Code's auto mode: add `--permission-mode auto` to agent_session_command, or set permissions.defaultMode to \"auto\" in ~/.claude/settings.json.",
+  );
   if (findOnPath("aop", io.env, io.platform) === undefined) {
     say("\nAgents also need `aop` on PATH. Run `npm link` in the AOP package, or install it globally.");
   }
   say("\nNext:\n  aop serve\n  Then add a project in the UI, or with: aop project add <path>");
 }
-
 
 /** Runs `aop init`. Returns the exit code: 0 done, 1 stopped, 2 bad usage. */
 export async function runInit(argv: string[], partial: Partial<InitIo> = {}): Promise<number> {

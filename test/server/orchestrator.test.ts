@@ -1,8 +1,10 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { HEADLESS_AGENT_FLAGS } from "../../src/server/agentOutput.js";
-import { isAlive, waitGone } from "../../src/server/processes.js";
+import { isAlive, waitGone } from "../../src/server/osProcesses.js";
+import { deleteProject } from "../../src/server/projects.js";
+import { listProcesses } from "../../src/server/runs.js";
 import type { EventView, MessageRow, NodeView, RunView } from "../../src/shared/api.js";
 import { directives, settle, until, world, type World } from "./agents.helpers.js";
 import { makeRepo, STAGES_YAML } from "./helpers.js";
@@ -210,6 +212,22 @@ describe("how a run ends", () => {
     expect(JSON.stringify(failure?.data)).toContain("start folder doesn't exist");
   });
 
+  it("a logs folder that can't be written fails each run cleanly, and doesn't hold up the others", TIMEOUT, async () => {
+    w = await world();
+    const logs = join(w.home, "logs");
+    rmSync(logs, { recursive: true, force: true });
+    // A file where the folder should be, which makes every log write fail, on any platform.
+    writeFileSync(logs, "not a folder");
+    const nodes = [await w.create(""), await w.create("")];
+    for (const node of nodes) {
+      await w.atStage(node.id, "failed");
+      const [run] = await w.runsEnded(node.id);
+      expect(run).toMatchObject({ end_reason: "failed", pid: null });
+      expect(w.node(node.id).claimed_by).toBeNull();
+    }
+    expect(listProcesses(w.db)).toEqual([]);
+  });
+
   it("running past the timeout: failed, and the process is gone", TIMEOUT, async () => {
     w = await world();
     writeFileSync(join(w.home, "config.yaml"), readFileSync(join(w.home, "config.yaml"), "utf8").replace("agent_timeout_minutes: 5", "agent_timeout_minutes: 0.03"));
@@ -346,6 +364,24 @@ describe("stopping", () => {
     // The record goes once the clear-up of anything left behind has finished.
     await until("the record to go", () => (w.db.prepare("SELECT count(*) AS n FROM agent_processes WHERE node_id = ?").get(doomed.body.id) as { n: number }).n === 0);
     expect(w.runs(safe.id)[0]?.status).toBe("running");
+  });
+
+  it("an agent that outlives its project's deletion doesn't stop another project being deleted", TIMEOUT, async () => {
+    w = await world();
+    const gone = await w.call<{ id: string }>("POST", "/projects", { name: "Gone", repo_path: makeRepo() });
+    const next = await w.call<{ id: string }>("POST", "/projects", { name: "Next", repo_path: makeRepo() });
+    const lingering = await w.call<NodeView>("POST", `/projects/${gone.body.id}/nodes`, {
+      type: "hotfix",
+      title: "lingering",
+      body: directives(`pid ${w.file("lingering.pid")}`, "hang"),
+    });
+    await w.pidFrom("lingering.pid");
+    await w.runStarted(lingering.body.id);
+
+    // As if its agent hadn't exited within the wait: the project and its nodes go while it runs.
+    deleteProject(w.db, gone.body.id);
+    const release = await w.orchestrator.stopProjectAgents(next.body.id);
+    release();
   });
 
   it("deleting a project deletes its run logs once its agents have stopped, and no other project's", TIMEOUT, async () => {

@@ -2,9 +2,10 @@ import { useState } from "react";
 import type { NodeView, StagesView } from "../../../../src/shared/api.js";
 import { ClaimMark } from "../../components/ClaimMark.js";
 import { Dialog } from "../../components/Dialog.js";
+import { FormError } from "../../components/FormError.js";
 import { api } from "../../lib/api.js";
 import { humanize } from "../../lib/format.js";
-import { FINISHED_STAGES } from "../../lib/stageStyle.js";
+import { FINISHED_STAGES } from "../../../../src/shared/builtInStages.js";
 import { useAction } from "../../lib/useAction.js";
 import { MoveForm } from "./MoveForm.js";
 import { Part } from "./Part.js";
@@ -88,7 +89,7 @@ function ClaimControls({ node, reload }: { node: NodeView; reload: Reload }) {
       {node.run_id ? (
         <p className="field-hint">The node stays on this stage, claimed by you. Release the claim to start the stage again.</p>
       ) : null}
-      {error ? <div className="form-error">{error}</div> : null}
+      <FormError error={error} />
     </>
   );
 }

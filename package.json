@@ -24,8 +24,9 @@
     "test": "vitest run",
     "test:server": "vitest run test/server",
     "test:web": "vitest run test/web",
-    "test:cli": "vitest run test/cli test/server/cli.test.ts test/defaults",
-    "test:fast": "vitest run --exclude test/server/orchestrator.test.ts --exclude test/server/recovery.test.ts --exclude test/server/startup.test.ts --exclude test/server/cli.test.ts --exclude test/cli/init.test.ts"
+    "test:cli": "vitest run test/cli test/defaults",
+    "test:fast": "vitest run --project unit",
+    "test:integration": "vitest run --project integration"
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.1.3",

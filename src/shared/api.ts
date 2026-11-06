@@ -1,4 +1,53 @@
-/** The shapes the HTTP API returns. Types only, so that the browser can import this file. */
+/** The shapes the HTTP API accepts and returns. Types and plain constants only, so that the browser can import this file. */
+import type { z } from "zod";
+import type * as requests from "./requests.js";
+
+/** What a client may send. Defaulted fields, such as `actor`, are optional. */
+type RequestOf<S extends z.ZodType> = z.input<S>;
+export type AddProjectRequest = RequestOf<typeof requests.addProjectBody>;
+export type UpdateProjectRequest = RequestOf<typeof requests.updateProjectBody>;
+export type CreateNodeRequest = RequestOf<typeof requests.createNodeBody>;
+export type EditNodeRequest = RequestOf<typeof requests.editNodeBody>;
+export type NextRequest = RequestOf<typeof requests.nextBody>;
+export type MoveRequest = RequestOf<typeof requests.moveBody>;
+export type AskRequest = RequestOf<typeof requests.askBody>;
+export type AnswerRequest = RequestOf<typeof requests.answerBody>;
+export type FailRequest = RequestOf<typeof requests.failBody>;
+export type InvalidateRequest = RequestOf<typeof requests.invalidateBody>;
+export type ActorRequest = RequestOf<typeof requests.actorBody>;
+export type SteerRequest = RequestOf<typeof requests.steerBody>;
+export type BlockRequest = RequestOf<typeof requests.blockBody>;
+export type UnblockRequest = RequestOf<typeof requests.unblockBody>;
+export type ClaimRequest = RequestOf<typeof requests.claimBody>;
+export type MessageRequest = RequestOf<typeof requests.messageBody>;
+export type LinkRequest = RequestOf<typeof requests.linkBody>;
+export type EdgeRequest = RequestOf<typeof requests.edgeBody>;
+
+/** Every `code` the API refuses a request with. */
+export type ApiErrorCode =
+  | "bad_request"
+  | "not_found"
+  | "refused"
+  | "repo_path_not_absolute"
+  | "repo_path_not_found"
+  | "repo_path_taken"
+  | "config_invalid"
+  | "constraint_violation"
+  | "forbidden_host"
+  | "forbidden_origin"
+  | "payload_too_large"
+  | "internal_error";
+
+/** The body of every error response. `config_invalid` carries the problems, as strings, in `details`. */
+export interface ApiErrorBody {
+  error: { code: ApiErrorCode; message: string; details?: unknown };
+}
+
+/**
+ * The header a launched agent's CLI sends with its run's ID, from `AOP_RUN_ID`. The server refuses a
+ * write from a run that has ended, and a stage change from any run but the one on that node.
+ */
+export const RUN_ID_HEADER = "x-aop-run-id";
 
 export type Actor = "human" | "agent" | "system";
 export type Turn = "agent" | "human";
@@ -86,6 +135,80 @@ export interface EdgeRow {
   removed_at: string | null;
 }
 
+/** How a node's stage changed: the action that moved it. Also a run's `left_via`. */
+export type StageChangeVia =
+  | "next"
+  | "move"
+  | "ask"
+  | "answer"
+  | "fail"
+  | "retry"
+  | "invalidate"
+  | "restore"
+  | "block"
+  | "unblock"
+  | "split_start"
+  | "split_finish";
+
+/** Why an agent run ended, stored on the run as `end_reason`. */
+export type RunEndReason = "reported" | "failed" | "stopped" | "held" | "shutdown";
+
+/** What holds a node back, so that it can't start or its schedule can't fire. */
+export type HolderVia = "blocks" | "split" | "invalidated_parent";
+
+/** Why a scheduled node didn't fire for a slot, with what it names. */
+export type ScheduleSkip =
+  | { reason: HolderVia; holder_id: string }
+  | { reason: "previous_unfinished"; previous_child_id: string }
+  | { reason: "child_refused"; message: string };
+
+/**
+ * Each event kind the server records, mapped to its `data`. The stored JSON is exactly this, so
+ * changing a shape here changes what new rows hold, while old rows keep what they were written with.
+ */
+export interface EventDataByKind {
+  node_created: { type: string; stage: string; title: string };
+  title_edited: { previous: string };
+  description_edited: { previous: string };
+  stage_changed: {
+    via: StageChangeVia;
+    from_stage: string;
+    from_type: string;
+    from_return_stage: string | null;
+    to_stage: string;
+    to_type: string;
+    /** `next`: the outcome taken. */
+    outcome?: string;
+    /** `fail`, `invalidate` and `block`: the reason given. */
+    reason?: string;
+    /** AOP's own `fail`: the run that ended without reporting. */
+    run_id?: string;
+  };
+  message_added: { message_id: string; stage: string };
+  /** `run_id` when a run takes it; `via: "stop"` when stopping a run hands it to a human. */
+  claim_taken: { holder: "human" | "agent"; run_id?: string; via?: "stop" };
+  /** `via` is set when AOP drops an agent's claim, rather than its holder releasing it. */
+  claim_released: { holder: "human" | "agent"; via?: StageChangeVia | "held" | "shutdown" | "stop" | "restart" };
+  run_started: { run_id: string; stage: string };
+  run_ended: { run_id: string; reason: RunEndReason; exit_code: number | null };
+  link_added: { link_id: string; kind: LinkRow["kind"]; url: string };
+  edge_added: { edge_id: string; target_id: string; kind: EdgeRow["kind"] };
+  edge_removed: { edge_id: string; target_id: string; kind: EdgeRow["kind"] };
+  scheduled_run: { due_at: string; child_id: string };
+  scheduled_run_skipped: { due_at: string } & ScheduleSkip;
+}
+
+export type EventKind = keyof EventDataByKind;
+
+/** An event of a kind this version knows, narrowed by `kind`. */
+export type NodeEvent = {
+  [K in EventKind]: { id: string; created_at: string; node_id: string; actor: Actor; kind: K; data: EventDataByKind[K] };
+}[EventKind];
+
+/**
+ * An event as the API returns it. Older databases can hold kinds this version no longer writes, so
+ * `kind` stays a string and `data` unknown: narrow to `NodeEvent` before reading `data`.
+ */
 export interface EventView {
   id: string;
   created_at: string;

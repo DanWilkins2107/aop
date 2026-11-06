@@ -1,6 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { existsSync, statSync } from "node:fs";
-import { resolve } from "node:path";
 import { z } from "zod";
 import type { ConfigView } from "../shared/api.js";
 import { ConfigError } from "./errors.js";
@@ -164,7 +163,7 @@ function readConfig(home: string, watch: (path: string) => void): AopConfig {
   // Still check stages.yaml when another setting is bad, so one run reports everything.
   const stagesSetting = raw["stages"];
   if (typeof stagesSetting !== "string" || stagesSetting.length === 0) throw new ConfigError(problems);
-  const stagesPath = resolve(home, stagesSetting);
+  const stagesPath = resolveConfigPath(home, stagesSetting);
   watch(stagesPath);
   if (!existsSync(stagesPath)) {
     problems.push(`${stagesPath}: file not found. Create it, or point "stages" in ${file} at your stages file.`);

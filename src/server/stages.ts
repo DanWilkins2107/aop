@@ -1,31 +1,12 @@
-// Parses and validates `stages.yaml` into a `StageGraph`, and names the built-in stages.
-// What each built-in does is in `nodes.ts`, and `scheduled` in `scheduler.ts`.
+// Parses and validates `stages.yaml` into a `StageGraph`. The built-in stages are named in
+// `src/shared/builtInStages.ts`.
 
-import { existsSync, statSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { existsSync, realpathSync, statSync } from "node:fs";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import type { StagesView, Turn } from "../shared/api.js";
+import { FINISHED_STAGES, isBuiltIn } from "../shared/builtInStages.js";
 import { parseYamlFile } from "./yamlFile.js";
-
-export const BUILT_IN_STAGES = [
-  "done",
-  "broken_down",
-  "invalidated",
-  "scheduled",
-  "ask_human_question",
-  "failed",
-  "externally_blocked",
-  "splitting",
-] as const;
-
-export type BuiltInStage = (typeof BUILT_IN_STAGES)[number];
-
-export function isBuiltIn(name: string): name is BuiltInStage {
-  return (BUILT_IN_STAGES as readonly string[]).includes(name);
-}
-
-/** The only built-ins `next` can target. The others are entered through their own actions. */
-const NEXT_TARGET_BUILT_INS: readonly string[] = ["done", "broken_down"];
 
 export type { Turn };
 
@@ -126,6 +107,10 @@ export function validateStages(
         const promptPath = resolve(baseDir, stage.data.prompt);
         if (!existsSync(promptPath) || !statSync(promptPath).isFile()) {
           problems.push(`${label}: prompt file not found: ${promptPath}`);
+        } else if (!isInside(baseDir, promptPath)) {
+          // A prompt goes straight to an agent, so a shared process file mustn't be able to point
+          // it at the user's own files, such as keys or credentials.
+          problems.push(`${label}: prompt must be in the stages file's folder: ${stage.data.prompt}`);
         }
         def.prompt = promptPath;
       }
@@ -163,7 +148,7 @@ export function validateStages(
       const next = new Map(Object.entries(typeStage.data.next));
       for (const [outcome, target] of next) {
         if (isBuiltIn(target)) {
-          if (!NEXT_TARGET_BUILT_INS.includes(target)) {
+          if (!FINISHED_STAGES.includes(target)) {
             problems.push(
               `${stageLabel}: outcome "${outcome}" targets "${target}", but done and broken_down are the only built-ins next can target`,
             );
@@ -183,6 +168,12 @@ export function validateStages(
   }
 
   return { graph, problems };
+}
+
+/** Whether `path` is inside `folder`, once symlinks are followed on both. Both must exist. */
+function isInside(folder: string, path: string): boolean {
+  const rel = relative(realpathSync.native(folder), realpathSync.native(path));
+  return rel !== "" && rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
 }
 
 /** What the UI needs to draw a process. Leaves out prompt paths, which are the server's business. */

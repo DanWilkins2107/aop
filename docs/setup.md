@@ -17,7 +17,7 @@ To update later, stop `aop serve`, then `git pull`, `npm install` and `npm run b
 Then run `aop init` once to set up aop on your machine. This creates a `.aop` folder in your home directory holding your config and database. Nothing is ever added to the repos you work in.
 
 It asks for:
-1. **Agent session command** (required). What AOP runs to start an agent, such as `claude`. AOP adds `-p` and sends the prompt on stdin. AOP doesn't ship a sandbox, so point this at your own sandboxed wrapper before letting agents run unattended. Agents run headless, so the command must let them run `aop`, `git` and your tests without asking for permission.
+1. **Agent session command** (required). What AOP runs to start an agent, such as `claude`. AOP adds `-p` and sends the prompt on stdin. AOP doesn't ship a sandbox, so point this at your own sandboxed wrapper before letting agents run unattended. Agents run headless, so they can't ask you to approve commands or edits, and anything not already allowed is refused. Run them in Claude Code's auto mode, or an equivalent permission setting: add `--permission-mode auto` to this command, or set `"defaultMode": "auto"` under `permissions` in `~/.claude/settings.json`. Set it there rather than in a repo. AOP adds no permission flags itself.
 2. **Out of sandbox command** (optional). Only used by `aop steer <node> --no-sandbox`. Leave it blank if you don't sandbox.
 3. **Open from.** Where sessions start for projects with no path. Defaults to `~/code`, and offers to create it.
 4. **Agent timeout.** Minutes before a running agent is stopped and its node goes to `failed`. Defaults to 60.
@@ -65,21 +65,21 @@ copilot plugin install /path/to/aop/plugin
 6. At `second_human_review`, merge the PR and click **Merged**. The node is `done`.
 
 ### Taking over a session
-To work on a node yourself, take its ID from the node page's address (`/n/<id>`) and run:
+To work on a node yourself, click **Copy ID** next to its title on the node page (it's also in the address, `/n/<id>`) and run:
 ```
 aop steer <node>
 ```
-This claims the node and opens your agent session command in the project's folder, with the node set so `aop` commands work inside it. Use `--no-sandbox` to use your out of sandbox command instead. It's refused while an agent run holds the node, so stop the run first. Your claim stays until you click **Release claim** on the node page, and no agent starts on the node until then.
+This claims the node and opens your agent session command in the project's folder, with the node set so `aop` commands work inside it. Use `--no-sandbox` to use your out of sandbox command instead. It's refused while an agent run holds the node, so stop the run first. Your claim stays until you click **Release claim** on the node page or run `aop release <node>`, and no agent starts on the node until then.
 
 ### Seeing and stopping agents
 - `aop ps` lists every running agent and its node.
-- To stop one, open its node and click **Stop run** under **Details**. The node stays on its stage, claimed by you. Release the claim to start the stage again.
+- To stop one, open its node and click **Stop run** under **Details**, or run `aop stop <node>`. The node stays on its stage, claimed by you. Release the claim to start the stage again.
 - To stop working on a node for good, use **Invalidate or block** at the top of the node page. Invalidating stops agents on it and everything under it.
 - Stopping `aop serve` with Ctrl+C stops every agent and queues their nodes. They start again on the next `aop serve`.
 - `aop reap` kills any agent process that shouldn't still be running.
 
 ### Logs and settings
-- Each run's log is in `~/.aop/logs`. The node page shows the latest run's log, and a failed node links to its full log. Click **Retry** to run the stage again.
+- Each run's log is in `~/.aop/logs`. The node page shows the latest run's log, and a failed node links to its full log. `aop logs <node> [--lines N]` prints the end of the latest run's log in the terminal. Click **Retry** to run the stage again.
 - The **AOP settings** page shows your config. It's read-only: edit `~/.aop/config.yaml` to change it. Changes apply to the next agent that starts.
 
 ## Customising your process

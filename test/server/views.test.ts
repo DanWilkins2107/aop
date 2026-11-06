@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { loadConfig } from "../../src/server/config.js";
 import { getNode, holdersOf, listNodes, startableNodes, type NodeView } from "../../src/server/nodes.js";
 import { addProject } from "../../src/server/projects.js";
-import { beginRun, closeRun } from "../../src/server/runs.js";
+import { beginRun, closeRun, releaseAgentClaim } from "../../src/server/runs.js";
 import { harness, makeRepo, STAGES_YAML, type Harness } from "./helpers.js";
 
 /** A graph with every kind of holder, and the near misses that aren't holders. */
@@ -81,8 +81,12 @@ async function variedGraph(h: Harness) {
   const again = await make("again", "hotfix");
   const nodeRow = (id: string) => h.db.prepare("SELECT * FROM nodes WHERE id = ?").get(id) as never;
   beginRun(h.db, nodeRow(running), "run-running", h.repo + "/a.log");
-  closeRun(h.db, beginRun(h.db, nodeRow(ended), "run-ended", h.repo + "/b.log"), "reported", 0);
-  closeRun(h.db, beginRun(h.db, nodeRow(again), "run-first", h.repo + "/c.log"), "failed", 1);
+  const end = (id: string, runId: string, log: string) => {
+    closeRun(h.db, beginRun(h.db, nodeRow(id), runId, h.repo + log), "reported", 0);
+    releaseAgentClaim(h.db, id, "stop");
+  };
+  end(ended, "run-ended", "/b.log");
+  end(again, "run-first", "/c.log");
   beginRun(h.db, nodeRow(again), "run-second", h.repo + "/d.log");
 
   // Human stages, scheduled, claimed, and a stage the process no longer has.

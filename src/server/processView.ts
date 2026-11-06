@@ -1,12 +1,11 @@
 // The process page's view of `stages.yaml`, which still answers while the config is invalid. Not to be
-// confused with `processes.ts`, which is about operating system processes.
+// confused with `osProcesses.ts`, which is about operating system processes.
 
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
 import type { ProcessView } from "../shared/api.js";
 import { loadConfig } from "./config.js";
 import { ConfigError } from "./errors.js";
-import { aopHome, configPath } from "./paths.js";
+import { aopHome, configPath, resolveConfigPath } from "./paths.js";
 import { describeStages, loadStagesFile } from "./stages.js";
 import { parseYamlFile } from "./yamlFile.js";
 
@@ -15,7 +14,7 @@ function stagesPathFrom(home: string): string | null {
   const parsed = parseYamlFile(configPath(home));
   if (!parsed.ok || typeof parsed.value !== "object" || parsed.value === null) return null;
   const setting = (parsed.value as Record<string, unknown>)["stages"];
-  return typeof setting === "string" && setting.length > 0 ? resolve(home, setting) : null;
+  return typeof setting === "string" && setting.length > 0 ? resolveConfigPath(home, setting) : null;
 }
 
 /**
