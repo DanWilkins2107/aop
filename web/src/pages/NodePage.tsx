@@ -5,7 +5,7 @@ import { ClaimMark } from "../components/ClaimMark.js";
 import { ErrorNotice } from "../components/ErrorNotice.js";
 import { PipelineGraph } from "../components/PipelineGraph.js";
 import { ancestorsOf } from "../lib/ancestry.js";
-import { api } from "../lib/api.js";
+import { api, loadProjectGraph } from "../lib/api.js";
 import { humanize } from "../lib/format.js";
 import { useLiveData } from "../lib/live.js";
 import { originalStage } from "../lib/stageGraph.js";
@@ -17,17 +17,14 @@ import { MovingOn } from "./node/MovingOn.js";
 
 async function loadNode(nodeId: string) {
   const node = await api.node(nodeId);
-  const [messages, events, edges, links, stages, projectNodes, projectEdges, projects] = await Promise.all([
+  const [messages, events, edges, links, graph] = await Promise.all([
     api.messages(nodeId),
     api.events(nodeId),
     api.edges(nodeId),
     api.links(nodeId),
-    api.stages(),
-    api.nodes(node.project_id),
-    api.projectEdges(node.project_id),
-    api.projects(),
+    loadProjectGraph(node.project_id),
   ]);
-  const project = projects.find((p) => p.id === node.project_id) ?? null;
+  const { stages, nodes: projectNodes, edges: projectEdges, project } = graph;
   return { node, messages, events, edges, links, stages, projectNodes, projectEdges, project };
 }
 
