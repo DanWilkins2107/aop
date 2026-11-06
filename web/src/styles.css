@@ -371,6 +371,37 @@ label {
 .settings-delete {
   margin-top: 24px;
 }
+
+/* ---- roadmap ---- */
+
+.markdown {
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.markdown h1 {
+  margin-top: 8px;
+}
+.markdown h2 {
+  margin: 22px 0 6px;
+}
+.markdown ul,
+.markdown ol {
+  margin: 6px 0 12px;
+  padding-left: 22px;
+}
+.markdown li + li {
+  margin-top: 4px;
+}
+.markdown pre {
+  overflow-x: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+}
+.markdown hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 18px 0;
+}
 .settings-note {
   margin: 8px 0 14px;
   color: var(--muted);

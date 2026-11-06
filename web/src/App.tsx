@@ -6,6 +6,7 @@ import { NodePage } from "./pages/NodePage.js";
 import { ProcessPage } from "./pages/ProcessPage.js";
 import { ProjectSettingsPage } from "./pages/ProjectSettingsPage.js";
 import { ProjectsPage } from "./pages/ProjectsPage.js";
+import { RoadmapPage } from "./pages/RoadmapPage.js";
 
 /** Says nothing while the connection is healthy. */
 function ConnectionNotice() {
@@ -29,6 +30,9 @@ export function App() {
         <Link to="/process" className="quiet-link">
           Process
         </Link>
+        <Link to="/roadmap" className="quiet-link">
+          Roadmap
+        </Link>
         <Link to="/settings" className="quiet-link">
           AOP settings
         </Link>
@@ -39,6 +43,7 @@ export function App() {
           <Route path="/" element={<ProjectsPage />} />
           <Route path="/settings" element={<AopSettingsPage />} />
           <Route path="/process" element={<ProcessPage />} />
+          <Route path="/roadmap" element={<RoadmapPage />} />
           <Route path="/p/:projectId" element={<GraphPage />} />
           <Route path="/p/:projectId/settings" element={<ProjectSettingsPage />} />
           <Route path="/n/:nodeId" element={<NodePage />} />
