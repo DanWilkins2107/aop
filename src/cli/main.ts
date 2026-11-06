@@ -13,6 +13,7 @@ import type {
   EdgeRequest,
   EdgeRow,
   EditNodeRequest,
+  FailRequest,
   LinkRequest,
   MessageRequest,
   MessageRow,
@@ -328,7 +329,7 @@ async function run(argv: string[]): Promise<void> {
     }
     case "fail": {
       const reason = only(args(rest, COMMANDS.fail, {}).positionals, COMMANDS.fail);
-      movedTo(await send("POST", `${nodePath(ownNode())}/fail`, { reason, actor: ACTOR }));
+      movedTo(await send("POST", apiPaths.nodeAction(ownNode(), "fail"), { reason, actor: ACTOR } satisfies FailRequest));
       return;
     }
     case "message": {
