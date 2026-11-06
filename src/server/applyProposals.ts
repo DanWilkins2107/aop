@@ -4,7 +4,7 @@ import type { ApplyResult } from "../shared/api.js";
 import { type AopConfig, loadConfig } from "./config.js";
 import type { Db } from "./db.js";
 import { badRequest, refused } from "./errors.js";
-import { allowedTarget, assertNotAopState, canonicalPath, notAllowed, proposalRows } from "./improvements.js";
+import { allowedTarget, assertNotAopState, canonicalPath, isStale, notAllowed, proposalRows } from "./improvements.js";
 import { getNodeRow, RAISE_PR_STAGE } from "./nodes.js";
 import { isWithin } from "./paths.js";
 import { appendEvent, newId, type Actor } from "./records.js";
@@ -39,6 +39,14 @@ export function applyProposals(
   if (node.kind !== "improvement") throw refused("Only improvements can be applied");
   const proposals = proposalRows(db, nodeId);
   if (proposals.length === 0) throw refused("Nothing to apply: this improvement has no proposals");
+  // Writing a proposal over a file that changed since it was drafted would silently undo that change.
+  const stale = proposals.filter(isStale).map((proposal) => proposal.path);
+  if (stale.length > 0) {
+    throw refused(
+      `Changed since the proposal was drafted: ${stale.join(", ")}. Nothing was written. Redraft, or save the proposal again, against the current file`,
+      { stale },
+    );
+  }
 
   const plan: { target: string; content: string }[] = [];
   const skipped: string[] = [];

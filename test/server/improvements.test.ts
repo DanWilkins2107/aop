@@ -8,6 +8,7 @@ import { nodeContext } from "../../src/server/context.js";
 import { aopHome } from "../../src/server/paths.js";
 import { IMPROVEMENTS_PROJECT_ID, nodeStartPath } from "../../src/server/projects.js";
 import type {
+  ApiErrorBody,
   ApplyResult,
   ImprovementDetail,
   ImprovementsList,
@@ -395,6 +396,102 @@ describe("applying", () => {
     const res = await apply(node.id, worktree);
     expect(res.status, JSON.stringify(res.body)).toBe(400);
     expect(existsSync(join(outside, "SKILL.md"))).toBe(false);
+  });
+});
+
+describe("stale proposals", () => {
+  beforeEach(() => {
+    h = harness(ON);
+  });
+
+  const list = async (id: string) => (await h.call<ProposalView[]>("GET", `/api/improvements/${id}/proposals`)).body;
+
+  it("refuses to apply any file when one changed since it was drafted, naming it and writing nothing", async () => {
+    const { node } = await capture({ body: "x" });
+    const fresh = join(skills(), "new-skill", "SKILL.md");
+    await propose(node.id, skill(), "Proposed.\n");
+    await propose(node.id, fresh, "Fresh.\n");
+    expect((await list(node.id)).map((p) => p.stale)).toEqual([false, false]);
+
+    writeFiles(aopHome(), { "skills/write-tests/SKILL.md": "Edited by hand.\n" });
+    const proposals = await list(node.id);
+    expect(proposals.map((p) => [p.display_path, p.stale, p.current])).toEqual([
+      ["new-skill/SKILL.md", false, null],
+      ["write-tests/SKILL.md", true, "Edited by hand.\n"],
+    ]);
+
+    await reviewAndChoose(node.id, "save_locally");
+    const res = await apply(node.id);
+    expect(res.status, JSON.stringify(res.body)).toBe(409);
+    const error = (res.body as unknown as ApiErrorBody).error;
+    expect(error.details).toEqual({ stale: [skill()] });
+    expect(error.message).toContain(skill());
+    expect(readFileSync(skill(), "utf8")).toBe("Edited by hand.\n");
+    expect(existsSync(fresh)).toBe(false);
+    const events = (await h.call<{ kind: string }[]>("GET", `/api/nodes/${node.id}/events`)).body;
+    expect(events.map((e) => e.kind)).not.toContain("proposals_applied");
+  });
+
+  it("counts a new file as stale once something is written there", async () => {
+    const { node } = await capture({ body: "x" });
+    const fresh = join(skills(), "new-skill", "SKILL.md");
+    await propose(node.id, fresh, "Fresh.\n");
+    writeFiles(aopHome(), { "skills/new-skill/SKILL.md": "Got there first.\n" });
+    expect((await list(node.id))[0]?.stale).toBe(true);
+    await reviewAndChoose(node.id, "save_locally");
+    expect((await apply(node.id)).status).toBe(409);
+    expect(readFileSync(fresh, "utf8")).toBe("Got there first.\n");
+  });
+
+  it("goes stale when another improvement is applied first", async () => {
+    const first = (await capture({ body: "first" })).node;
+    const second = (await capture({ body: "second" })).node;
+    await propose(first.id, skill(), "First.\n");
+    await propose(second.id, skill(), "Second.\n");
+    await reviewAndChoose(first.id, "save_locally");
+    expect((await apply(first.id)).status).toBe(200);
+
+    await reviewAndChoose(second.id, "save_locally");
+    expect((await apply(second.id)).status).toBe(409);
+    expect(readFileSync(skill(), "utf8")).toBe("First.\n");
+  });
+
+  it("is re-based on the current file when a human saves an edit", async () => {
+    const { node } = await capture({ body: "x" });
+    await propose(node.id, skill(), "Proposed.\n");
+    await h.post(node.id, "next", { outcome: "drafted", actor: "agent" });
+    writeFiles(aopHome(), { "skills/write-tests/SKILL.md": "Edited by hand.\n" });
+    expect((await list(node.id))[0]?.stale).toBe(true);
+
+    const saved = await propose(node.id, skill(), "Edited by hand, then proposed.\n", "human");
+    expect(saved.status, JSON.stringify(saved.body)).toBe(200);
+    expect(saved.body.stale).toBe(false);
+    expect((await h.post(node.id, "next", { outcome: "save_locally", actor: "human" })).status).toBe(200);
+    expect((await apply(node.id)).status).toBe(200);
+    expect(readFileSync(skill(), "utf8")).toBe("Edited by hand, then proposed.\n");
+  });
+
+  it("never blocks a proposal saved before bases were recorded", async () => {
+    const { node } = await capture({ body: "x" });
+    await propose(node.id, skill(), "Proposed.\n");
+    h.db.prepare("UPDATE proposals SET base = 'unknown'").run();
+    writeFiles(aopHome(), { "skills/write-tests/SKILL.md": "Edited by hand.\n" });
+    expect((await list(node.id))[0]?.stale).toBe(false);
+    await reviewAndChoose(node.id, "save_locally");
+    expect((await apply(node.id)).status).toBe(200);
+    expect(readFileSync(skill(), "utf8")).toBe("Proposed.\n");
+  });
+
+  it("is checked on apply --into too, against the real file", async () => {
+    mkdirSync(join(skills(), ".git"));
+    const worktree = mkdtempSync(join(aopHome(), "worktree-"));
+    mkdirSync(join(worktree, ".git"));
+    const { node } = await capture({ body: "x" });
+    await propose(node.id, skill(), "Proposed.\n");
+    writeFiles(aopHome(), { "skills/write-tests/SKILL.md": "Edited by hand.\n" });
+    await reviewAndChoose(node.id, "raise_pr");
+    expect((await apply(node.id, worktree)).status).toBe(409);
+    expect(existsSync(join(worktree, "write-tests", "SKILL.md"))).toBe(false);
   });
 });
 

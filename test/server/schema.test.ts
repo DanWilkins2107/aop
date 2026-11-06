@@ -547,6 +547,38 @@ describe("upgrading runs to record usage", () => {
   });
 });
 
+describe("upgrading proposals to record their base", () => {
+  it("keeps every proposal, with an unknown base, and enforces the new check", () => {
+    const step = migrations.findIndex((m) => m.sql.includes("ALTER TABLE proposals ADD COLUMN base"));
+    expect(step).toBeGreaterThan(0);
+    const path = join(mkdtempSync(join(aopHome(), "upgrade-")), "aop.db");
+    const old = new Database(path);
+    old.function("aop_project_being_deleted", { deterministic: false }, () => null);
+    for (const migration of migrations.slice(0, step)) old.exec(migration.sql);
+    old.pragma(`user_version = ${step}`);
+    old.prepare("INSERT INTO projects (id, created_at, name, repo_path) VALUES ('improvements', ?, 'Improvements', NULL)").run(T);
+    old
+      .prepare("INSERT INTO nodes (id, created_at, project_id, title, type, stage, kind) VALUES ('n', ?, 'improvements', 't', 'improvement', 'draft_change', 'improvement')")
+      .run(T);
+    old
+      .prepare("INSERT INTO proposals (id, created_at, node_id, path, content, updated_at, updated_by) VALUES ('pr', ?, 'n', '/x.md', 'X', ?, 'agent')")
+      .run(T, T);
+    old.close();
+
+    const upgraded = openDb(path);
+    try {
+      expect(upgraded.prepare("SELECT id, content, base FROM proposals").all()).toEqual([{ id: "pr", content: "X", base: "unknown" }]);
+      for (const bad of ["", "sha256:abc", `sha256:${"G".repeat(64)}`, `md5:${"a".repeat(67)}`]) {
+        expect(() => upgraded.prepare("UPDATE proposals SET base = ?").run(bad), bad).toThrow(/CHECK/);
+      }
+      upgraded.prepare("UPDATE proposals SET base = 'absent'").run();
+      upgraded.prepare("UPDATE proposals SET base = ?").run(`sha256:${"0a".repeat(32)}`);
+    } finally {
+      upgraded.close();
+    }
+  });
+});
+
 describe("upgrading from every earlier version", () => {
   /** Every table, index and trigger, as SQLite stores them, for comparing two databases. */
   const schemaOf = (database: Database.Database) =>

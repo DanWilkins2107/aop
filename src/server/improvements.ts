@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type {
@@ -43,6 +44,8 @@ interface ProposalRow {
   content: string;
   updated_at: string;
   updated_by: "human" | "agent";
+  /** What the real file held when this was last saved: see `baseOf`. */
+  base: string;
 }
 
 /** The first line, cut to fit a title. */
@@ -228,6 +231,25 @@ function readCurrent(path: string): string | null {
   }
 }
 
+/**
+ * What a file holds now, to compare a proposal's base with: `sha256:<hex>` of its bytes, or
+ * `absent` when there's no file. A proposal saved before bases were recorded has `unknown`.
+ */
+export function baseOf(path: string): string {
+  let bytes: Buffer;
+  try {
+    bytes = readFileSync(path);
+  } catch {
+    return "absent";
+  }
+  return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+}
+
+/** Whether the real file has changed since the proposal was drafted. An unknown base never has. */
+export function isStale(row: { path: string; base: string }): boolean {
+  return row.base !== "unknown" && baseOf(row.path) !== row.base;
+}
+
 export function proposalRows(db: Db, nodeId: string): ProposalRow[] {
   return db.prepare("SELECT * FROM proposals WHERE node_id = ? ORDER BY path").all(nodeId) as ProposalRow[];
 }
@@ -241,6 +263,7 @@ export function listProposals(db: Db, nodeId: string, config: AopConfig = loadCo
     display_path: displayPath(config, row.path),
     proposed: row.content,
     current: readCurrent(row.path),
+    stale: isStale(row),
     updated_at: row.updated_at,
     updated_by: row.updated_by,
   }));
@@ -281,12 +304,13 @@ export function propose(
     assertCanPropose(db, nodeId, input.actor);
     const path = storedPath(db, nodeId, target);
     const at = now();
+    // Every save, by agent or human, is based on the file as it is now.
     db.prepare(
-      `INSERT INTO proposals (id, created_at, node_id, path, content, updated_at, updated_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO proposals (id, created_at, node_id, path, content, updated_at, updated_by, base)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (node_id, path) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at,
-         updated_by = excluded.updated_by`,
-    ).run(newId(), at, nodeId, path, input.content, at, actor);
+         updated_by = excluded.updated_by, base = excluded.base`,
+    ).run(newId(), at, nodeId, path, input.content, at, actor, baseOf(target));
     appendEvent(db, nodeId, input.actor, "proposal_saved", { path });
     return path;
   })();

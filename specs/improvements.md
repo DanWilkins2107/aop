@@ -12,6 +12,7 @@ Improvements change how agents work: your skills and your stage prompts. A human
 - Improvements are nodes with `kind = 'improvement'`, so stages, messages, claims, runs and history work as they do anywhere else. They belong to the machine, not a project: they sit in a reserved project, `improvements`, that the projects list and project routes never show. Edges can't join them to project nodes.
 - An `improvements` row links each one to its source message and node. It keeps a copy of the message text and the node's title, so the link still reads after the source project is deleted, which clears the IDs.
 - `proposals` holds the proposed contents of each file, one row per improvement and path. Real files are untouched until the change is applied.
+- Each proposal also records its base: a hash of the real file when it was last saved, `absent` if there was no file, or `unknown` for proposals saved before bases were recorded.
 
 ## Pipeline
 `config.yaml` links to it the same way it links to `stages.yaml`:
@@ -60,10 +61,12 @@ aop proposals [--show <path>]
 ## Applying
 - `aop apply` at `save_locally` writes every proposal to its real path, creating folders, and records an event listing them.
 - `aop apply --into <checkout>` at `raise_pr` writes each proposal to the same place relative to the repo's root inside another checkout of it, such as a git worktree. The repo's own checkout is refused, and files outside the repo are skipped and listed. The agent then commits, pushes, opens the PR and links it.
+- A proposal is stale when its real file no longer matches its base, such as after a hand edit or another improvement applied first. If any is stale, apply writes nothing and refuses with 409, naming the stale files. An `unknown` base is never stale. With `--into`, the base is checked against the real file.
 - Each file is written beside its target first, then moved into place. If one can't be written, no real file changes. In a checkout given to `--into`, a path that a link leads out of it is refused.
 
 ## UI
 - **Improvements tab:** beside Projects, at the same level. A plain list, newest first, of each title, stage and source, with a quiet "New improvement". No graph.
 - **Node page:** the normal node page, with "Improvements" in the breadcrumb and "From: <message>" under the title, linking back to the message.
-- **Proposed changes card:** after the description. Per file, its path and a line diff against the current file; a new file shows every line added. On human stages each file has a quiet Edit, which opens the proposed side in a text box with Save and Cancel.
+- **Proposed changes card:** after the description. Per file, its path and a line diff against the current file; a new file shows every line added. On human stages each file has a quiet Edit, which opens the proposed side in a text box with Save and Cancel. Every save, by agent or human, re-bases the proposal on the current file.
+- A stale file says so in plain text, with no colour or badge: "Changed since drafted" by its stats, and a line saying nothing can be applied until it's updated, with Redraft, or Edit and save, as the way forward. Its diff is against the file as it is now.
 - **AOP settings** shows Improvement stages and Improvements path. The **process page** draws the improvement pipeline under its own heading.

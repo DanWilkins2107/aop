@@ -415,7 +415,10 @@ async function proposalsCommand(c: Ctx, argv: string[]): Promise<void> {
     return;
   }
   if (proposals.length === 0) c.log("No proposals.");
-  for (const p of proposals) c.log(`${p.path}  (${p.current === null ? "new file" : "changes the file"}, last by ${p.updated_by})`);
+  for (const p of proposals) {
+    const what = p.current === null ? "new file" : "changes the file";
+    c.log(`${p.path}  (${what}, last by ${p.updated_by}${p.stale ? "; the file has changed since" : ""})`);
+  }
 }
 
 async function applyCommand(c: Ctx, argv: string[]): Promise<void> {

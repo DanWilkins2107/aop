@@ -316,6 +316,18 @@ WHEN (SELECT kind FROM nodes WHERE id = NEW.node_id) IS NOT 'improvement'
 BEGIN SELECT RAISE(ABORT, 'only improvements have proposals'); END;
 `,
   },
+  {
+    // What the real file held when each proposal was last saved: `sha256:<hex>` of its bytes, or
+    // `absent` when it didn't exist. Applying refuses when a file has changed since. Proposals saved
+    // before this was recorded are `unknown`, and never count as changed.
+    sql: `
+ALTER TABLE proposals ADD COLUMN base TEXT NOT NULL DEFAULT 'unknown'
+  CONSTRAINT proposals_base_known CHECK (
+    base IN ('unknown', 'absent')
+    OR (length(base) = 71 AND substr(base, 1, 7) = 'sha256:' AND substr(base, 8) NOT GLOB '*[^0-9a-f]*')
+  );
+`,
+  },
 ];
 
 export interface Migration extends Step {
