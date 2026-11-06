@@ -1,8 +1,10 @@
-/** A request the API refuses. Rendered as `{ error: { code, message, details? } }`. */
+import type { ApiErrorCode } from "../shared/api.js";
+
+/** A request the API refuses. Rendered as an `ApiErrorBody`. */
 export class ApiError extends Error {
   constructor(
     readonly status: 400 | 404 | 409,
-    readonly code: string,
+    readonly code: ApiErrorCode,
     message: string,
     readonly details?: unknown,
   ) {

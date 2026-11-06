@@ -1,7 +1,7 @@
 // Live data. One event stream per page, and `useLiveData` refetches whenever the server says something changed.
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ApiFailure } from "./api.js";
+import { ApiFailure, urls } from "./api.js";
 
 type Status = "connecting" | "live" | "offline";
 
@@ -20,7 +20,7 @@ function setStatus(next: Status): void {
 /** One stream for the whole page. EventSource reconnects by itself after a server restart. */
 function ensureConnected(): void {
   if (source) return;
-  source = new EventSource("/api/events");
+  source = new EventSource(urls.events);
   const fire = () => {
     for (const listener of changeListeners) listener();
   };

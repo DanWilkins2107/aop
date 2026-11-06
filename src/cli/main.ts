@@ -4,15 +4,28 @@
 import { spawn } from "node:child_process";
 import { parseArgs, type ParseArgsConfig } from "node:util";
 import type {
+  ActorRequest,
+  AddProjectRequest,
   AgentProcessView,
+  ApiErrorBody,
+  AskRequest,
+  CreateNodeRequest,
+  EdgeRequest,
   EdgeRow,
+  EditNodeRequest,
+  FailRequest,
+  LinkRequest,
+  MessageRequest,
   MessageRow,
+  NextRequest,
   NodeView,
   ProjectRow,
   ReapResult,
   SearchResult,
+  SteerRequest,
   SteerSession,
 } from "../shared/api.js";
+import { API_PREFIX, apiPaths } from "../shared/paths.js";
 
 /** Each command's usage, for both the help and its own usage errors, so the two can't drift apart. */
 const AGENT_COMMANDS = {
@@ -76,7 +89,7 @@ const notTheApi = () => new CliFailure(`What answered at ${serverUrl()} isn't th
 /** The API's own error, if that's what the body is. */
 function apiError(text: string): { message: string; details?: unknown } | undefined {
   try {
-    const { error } = JSON.parse(text) as { error?: { message?: unknown; details?: unknown } };
+    const { error } = JSON.parse(text) as { error?: Partial<ApiErrorBody["error"]> };
     if (typeof error?.message === "string") return { message: error.message, details: error.details };
   } catch {
     // Not JSON, or JSON null.
@@ -93,7 +106,7 @@ async function call(method: string, path: string, body?: unknown): Promise<{ typ
   }
   let response: Response;
   try {
-    response = await fetch(`${serverUrl()}/api${path}`, init);
+    response = await fetch(`${serverUrl()}${API_PREFIX}${path}`, init);
   } catch {
     throw new CliFailure(`Can't reach the AOP server at ${serverUrl()}. Is \`aop serve\` running?`);
   }
@@ -123,8 +136,6 @@ async function sendForText(path: string): Promise<string> {
   if (!type.startsWith("text/plain")) throw notTheApi();
   return text;
 }
-
-const nodePath = (id: string) => `/nodes/${encodeURIComponent(id)}`;
 
 /** The node this session is working on. An agent can only move its own, so it's never an argument. */
 function ownNode(): string {
@@ -156,7 +167,7 @@ function none(argv: string[], usage: Usage): void {
 const movedTo = (node: NodeView) => console.log(`${node.id} is now at ${node.stage}`);
 
 async function resolveProject(reference: string): Promise<string> {
-  const projects = await send<ProjectRow[]>("GET", "/projects");
+  const projects = await send<ProjectRow[]>("GET", apiPaths.projects);
   const matches = projects.filter((p) => p.id === reference || p.name === reference);
   const [project] = matches;
   if (project === undefined) throw new CliFailure(`No project "${reference}"`);
@@ -168,7 +179,7 @@ async function resolveProject(reference: string): Promise<string> {
 async function projectForNewNode(reference: string | undefined, parent: string | undefined): Promise<string> {
   if (reference !== undefined) return resolveProject(reference);
   const nearby = parent ?? process.env["AOP_NODE_ID"];
-  if (nearby) return (await send<NodeView>("GET", nodePath(nearby))).project_id;
+  if (nearby) return (await send<NodeView>("GET", apiPaths.node(nearby))).project_id;
   throw new CliFailure("Say which project with --project, or --parent, or run this in a session on a node.");
 }
 
@@ -188,14 +199,14 @@ async function nodeCommand(argv: string[]): Promise<void> {
       throw usageError(usage);
     }
     const project = await projectForNewNode(values.project, values.parent);
-    const node = await send<NodeView>("POST", `/projects/${encodeURIComponent(project)}/nodes`, {
+    const node = await send<NodeView>("POST", apiPaths.projectAction(project, "nodes"), {
       title: values.title,
       actor: ACTOR,
       ...(values.body !== undefined ? { body: values.body } : {}),
       ...(values.parent !== undefined ? { parent_id: values.parent } : {}),
       ...(values.type !== undefined ? { type: values.type } : {}),
       ...(values.stage !== undefined ? { stage: values.stage } : {}),
-    });
+    } satisfies CreateNodeRequest);
     console.log(`Created ${node.id} at ${node.stage}`);
     return;
   }
@@ -206,11 +217,11 @@ async function nodeCommand(argv: string[]): Promise<void> {
       throw usageError(usage);
     }
     const id = positionals[0] ?? ownNode();
-    await send("PATCH", nodePath(id), {
+    await send("PATCH", apiPaths.node(id), {
       actor: ACTOR,
       ...(values.title !== undefined ? { title: values.title } : {}),
       ...(values.body !== undefined ? { body: values.body } : {}),
-    });
+    } satisfies EditNodeRequest);
     console.log(`Edited ${id}`);
     return;
   }
@@ -222,15 +233,15 @@ async function edgeCommand(argv: string[]): Promise<void> {
   const [action, kind, from, to, ...extra] = args(argv, usage, {}).positionals;
   if (kind !== "blocks" || from === undefined || to === undefined || extra.length > 0) throw usageError(usage);
   if (action === "add") {
-    await send("POST", `${nodePath(from)}/edges`, { target_id: to, kind, actor: ACTOR });
+    await send("POST", apiPaths.nodeAction(from, "edges"), { target_id: to, kind, actor: ACTOR } satisfies EdgeRequest);
     console.log(`${from} now blocks ${to}`);
     return;
   }
   if (action === "remove") {
-    const edges = await send<EdgeRow[]>("GET", `${nodePath(from)}/edges`);
+    const edges = await send<EdgeRow[]>("GET", apiPaths.nodeAction(from, "edges"));
     const edge = edges.find((e) => e.kind === kind && e.source_id === from && e.target_id === to);
     if (!edge) throw new CliFailure(`${from} doesn't block ${to}`);
-    await send("DELETE", `/edges/${encodeURIComponent(edge.id)}`, { actor: ACTOR });
+    await send("DELETE", apiPaths.edge(edge.id), { actor: ACTOR } satisfies ActorRequest);
     console.log(`${from} no longer blocks ${to}`);
     return;
   }
@@ -243,8 +254,8 @@ async function searchCommand(argv: string[]): Promise<void> {
   const query = new URLSearchParams({ q: positionals.join(" ") });
   const own = process.env["AOP_NODE_ID"];
   // With no node there's no current project to narrow to.
-  if (values.all !== true && own) query.set("project", (await send<NodeView>("GET", nodePath(own))).project_id);
-  const results = await send<SearchResult[]>("GET", `/search?${query}`);
+  if (values.all !== true && own) query.set("project", (await send<NodeView>("GET", apiPaths.node(own))).project_id);
+  const results = await send<SearchResult[]>("GET", `${apiPaths.search}?${query}`);
   if (results.length === 0) console.log("No matches.");
   for (const result of results) {
     console.log(`${result.node_id}  [${result.stage}]  ${result.title}`);
@@ -255,7 +266,7 @@ async function searchCommand(argv: string[]): Promise<void> {
 async function steerCommand(argv: string[]): Promise<void> {
   const { values, positionals } = args(argv, COMMANDS.steer, { "no-sandbox": { type: "boolean" } });
   const id = only(positionals, COMMANDS.steer);
-  const session = await send<SteerSession>("POST", `${nodePath(id)}/steer`, { no_sandbox: values["no-sandbox"] === true });
+  const session = await send<SteerSession>("POST", apiPaths.nodeAction(id, "steer"), { no_sandbox: values["no-sandbox"] === true } satisfies SteerRequest);
   console.log(`Claimed ${id}. Opening a session in ${session.cwd}. Release the claim in the UI when you're done.`);
   // The command is the user's own config string, which may need a shell. No node text goes in it.
   const child = spawn(session.command, {
@@ -303,35 +314,35 @@ async function run(argv: string[]): Promise<void> {
     case "context": {
       const { positionals } = args(rest, COMMANDS.context, {});
       if (positionals.length > 1) throw usageError(COMMANDS.context);
-      console.log(await sendForText(`${nodePath(positionals[0] ?? ownNode())}/context`));
+      console.log(await sendForText(apiPaths.nodeAction(positionals[0] ?? ownNode(), "context")));
       return;
     }
     case "next": {
       const outcome = only(args(rest, COMMANDS.next, {}).positionals, COMMANDS.next);
-      movedTo(await send("POST", `${nodePath(ownNode())}/next`, { outcome, actor: ACTOR }));
+      movedTo(await send("POST", apiPaths.nodeAction(ownNode(), "next"), { outcome, actor: ACTOR } satisfies NextRequest));
       return;
     }
     case "ask": {
       const question = only(args(rest, COMMANDS.ask, {}).positionals, COMMANDS.ask);
-      movedTo(await send("POST", `${nodePath(ownNode())}/ask`, { question }));
+      movedTo(await send("POST", apiPaths.nodeAction(ownNode(), "ask"), { question } satisfies AskRequest));
       return;
     }
     case "fail": {
       const reason = only(args(rest, COMMANDS.fail, {}).positionals, COMMANDS.fail);
-      movedTo(await send("POST", `${nodePath(ownNode())}/fail`, { reason, actor: ACTOR }));
+      movedTo(await send("POST", apiPaths.nodeAction(ownNode(), "fail"), { reason, actor: ACTOR } satisfies FailRequest));
       return;
     }
     case "message": {
       const { values, positionals } = args(rest, COMMANDS.message, { node: { type: "string" } });
       const body = only(positionals, COMMANDS.message);
-      const message = await send<MessageRow>("POST", `${nodePath(values.node ?? ownNode())}/messages`, { body, author: ACTOR });
+      const message = await send<MessageRow>("POST", apiPaths.nodeAction(values.node ?? ownNode(), "messages"), { body, author: ACTOR } satisfies MessageRequest);
       console.log(`Posted to ${message.node_id}`);
       return;
     }
     case "link": {
       const [kind, url, ...extra] = args(rest, COMMANDS.link, {}).positionals;
       if ((kind !== "pr" && kind !== "ticket") || url === undefined || extra.length > 0) throw usageError(COMMANDS.link);
-      await send("POST", `${nodePath(ownNode())}/links`, { kind, url, actor: ACTOR });
+      await send("POST", apiPaths.nodeAction(ownNode(), "links"), { kind, url, actor: ACTOR } satisfies LinkRequest);
       console.log(`Linked ${kind} ${url}`);
       return;
     }
@@ -344,13 +355,13 @@ async function run(argv: string[]): Promise<void> {
     case "split": {
       const action = only(args(rest, COMMANDS.split, {}).positionals, COMMANDS.split);
       if (action !== "start" && action !== "finish") throw usageError(COMMANDS.split);
-      movedTo(await send("POST", `${nodePath(ownNode())}/split/${action}`));
+      movedTo(await send("POST", apiPaths.nodeAction(ownNode(), `split/${action}`)));
       return;
     }
     case "project": {
       const [action, path, ...extra] = args(rest, COMMANDS.project, {}).positionals;
       if (action !== "add" || path === undefined || extra.length > 0) throw usageError(COMMANDS.project);
-      const project = await send<ProjectRow>("POST", "/projects", { repo_path: path });
+      const project = await send<ProjectRow>("POST", apiPaths.projects, { repo_path: path } satisfies AddProjectRequest);
       console.log(`Added project "${project.name}" (${project.id})`);
       return;
     }
@@ -363,11 +374,11 @@ async function run(argv: string[]): Promise<void> {
       return steerCommand(rest);
     case "ps":
       none(rest, COMMANDS.ps);
-      printAgents(await send<AgentProcessView[]>("GET", "/agents"));
+      printAgents(await send<AgentProcessView[]>("GET", apiPaths.agents));
       return;
     case "reap":
       none(rest, COMMANDS.reap);
-      printReaped(await send<ReapResult>("POST", "/agents/reap"));
+      printReaped(await send<ReapResult>("POST", apiPaths.reap));
       return;
     case "init": {
       const { runInit } = await import("./init.js");
