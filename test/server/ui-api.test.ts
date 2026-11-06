@@ -41,7 +41,7 @@ describe("UI API", () => {
     expect(res.body.error.details).toHaveLength(3);
   });
 
-  it("has no per-project stages any more, and 404s the edges of an unknown project", async () => {
+  it("404s per-project stages, and the edges of an unknown project", async () => {
     expect((await h.call("GET", `/api/projects/${h.projectId}/stages`)).status).toBe(404);
     expect((await h.call("GET", "/api/projects/nope/edges")).status).toBe(404);
   });

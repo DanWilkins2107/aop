@@ -38,7 +38,7 @@ Shows `docs/roadmap.md`, bundled at build time, from a quiet link in the top bar
 Two tabs at the top, Projects and Improvements. Projects is a list of projects with a low-emphasis "Add project". Adding needs only a name; the path is optional. The Improvements tab, and the + beside each message, are in [improvements.md](improvements.md).
 
 ## Project settings
-Each project has a settings page for its name, optional path and delete, instead of buttons on the list. Delete is permanent, requires typing the project's name, stops its agents first, and never touches the repo.
+Each project has a settings page for its name, optional path and delete. Delete is permanent, requires typing the project's name, stops its agents first, and never touches the repo.
 
 ## AOP settings
 A read-only view of `config.yaml`, with a note to edit `~/.aop/config.yaml` to change it. Agents can reach the API, so nothing in the UI can change commands. Each setting has a line of description under it:

@@ -101,7 +101,7 @@ describe("config loading", () => {
     }
   });
 
-  it("no longer accepts the old keys", () => {
+  it("rejects unknown keys such as agent_command and max_agents", () => {
     const home = makeHome({ "config.yaml": `${CONFIG_YAML}agent_command: x\nmax_agents: 3\n` });
     const problems = problemsOf(home).join();
     expect(problems).toContain("agent_command");

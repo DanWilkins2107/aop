@@ -616,7 +616,7 @@ describe("waiting and hidden cards", () => {
     expect(cardType(nodeAt("done"))).toBe("flow");
   });
 
-  it("says in words what used to take a badge", () => {
+  it("says in words where a node's stage is", () => {
     expect(stageLabel(nodeAt("pr_review"))).toBe("PR review");
     expect(stageLabel(nodeAt("beta", { invalidated_by_parent: true }))).toBe("Invalidated by parent");
     expect(stageLabel(nodeAt("legal_signoff", { stage_exists: false }))).toBe("Legal signoff: stage gone");

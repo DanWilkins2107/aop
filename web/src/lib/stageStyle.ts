@@ -111,7 +111,7 @@ export function stageBand(node: NodeView, stages: StagesView | null): { backgrou
   return { background, text: readableText(background) };
 }
 
-/** Where a node's stage is, in words. Carries what used to take a badge. */
+/** Where a node's stage is, in words. */
 export function stageLabel(node: NodeView): string {
   if (!node.stage_exists) return `${humanize(node.stage)}: stage gone`;
   if (node.invalidated_by_parent && node.stage !== "invalidated") return "Invalidated by parent";
