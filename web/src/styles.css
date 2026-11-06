@@ -76,8 +76,7 @@ code {
   overflow-wrap: anywhere;
 }
 
-button,
-.btn {
+button {
   font: inherit;
   display: inline-block;
   padding: 5px 12px;
@@ -87,8 +86,7 @@ button,
   color: var(--text);
   cursor: pointer;
 }
-button:hover:not(:disabled),
-.btn:hover {
+button:hover:not(:disabled) {
   border-color: #868e96;
   text-decoration: none;
 }
