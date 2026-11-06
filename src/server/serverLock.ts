@@ -2,7 +2,7 @@ import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import Database from "better-sqlite3";
 import { aopHome } from "./paths.js";
-import { isAlive } from "./processes.js";
+import { isAlive } from "./osProcesses.js";
 
 /**
  * One server per AOP_HOME. A second one would treat the first's agents as leftovers from a crash and

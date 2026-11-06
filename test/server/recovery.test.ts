@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { afterEach, describe, expect, it, onTestFinished } from "vitest";
 import { openDb } from "../../src/server/db.js";
-import { isAlive, killTree, readProcessStarts, waitGone } from "../../src/server/processes.js";
+import { isAlive, killTree, readProcessStarts, waitGone } from "../../src/server/osProcesses.js";
 import { listProcesses, recordProcess } from "../../src/server/runs.js";
 import type { AgentProcessView, NodeView, ProjectRow, ReapResult } from "../../src/shared/api.js";
 import { aopShim, directives, fakeConfig, nodeArgs, pidIn, settle, until, world, type World } from "./agents.helpers.js";

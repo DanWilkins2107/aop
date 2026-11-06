@@ -6,7 +6,7 @@ import { ChangeFeed } from "../../src/server/changes.js";
 import { openDb, type Db } from "../../src/server/db.js";
 import { Orchestrator } from "../../src/server/orchestrator.js";
 import { aopHome } from "../../src/server/paths.js";
-import { isAlive, killTree } from "../../src/server/processes.js";
+import { isAlive, killTree } from "../../src/server/osProcesses.js";
 import { addProject } from "../../src/server/projects.js";
 import type { RunRow } from "../../src/server/runs.js";
 import { startServer, type RunningServer } from "../../src/server/server.js";

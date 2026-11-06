@@ -22,15 +22,13 @@ Where each part of the specs lives in the code, and how one request moves throug
 | Startup | `main.ts` (`npm start`) and `aop serve` both call `serve.ts`, which wires everything below. `server.ts` binds the port. `serverLock.ts` stops a second server |
 | HTTP | `api.ts`: every route, body validation, error rendering, and the change notice after each write |
 | Nodes and stages | `nodes.ts`: every stage change, claims, messages, links, edges and events |
-| Process definition | `stages.ts` parses and validates `stages.yaml`. `config.ts` loads `config.yaml` and the stages it links to. `process.ts` is the process page's view of both |
+| Process definition | `stages.ts` parses and validates `stages.yaml`. `config.ts` loads `config.yaml` and the stages it links to. `processView.ts` is the process page's view of both |
 | Agent text | `context.ts`: `aop context` output and every agent's prompt |
-| Agents | `orchestrator.ts` decides what runs and handles each run's end. `runs.ts` holds the `runs` and `agent_processes` rows. `processes.ts` is OS process handling: start times, children, killing. `runLog.ts` writes logs |
+| Agents | `orchestrator.ts` decides what runs and handles each run's end. `runs.ts` holds the `runs` and `agent_processes` rows. `osProcesses.ts` is OS process handling: start times, children, killing. `runLog.ts` writes logs |
 | Scheduling | `scheduler.ts` fires `scheduled` nodes. `cron.ts` parses cron |
 | Humans | `steer.ts` (`aop steer`), `projects.ts`, `search.ts` |
 | Storage | `db.ts` opens SQLite and runs `migrations.ts`. `records.ts` makes IDs, timestamps and events. `paths.ts` finds `~/.aop` |
 | Errors | `errors.ts`: `ApiError` for refusals, `ConfigError` for a bad config |
-
-`process.ts` is about the process in `stages.yaml`. `processes.ts` is about operating system processes.
 
 ## One request
 A human clicks an outcome on the node page:

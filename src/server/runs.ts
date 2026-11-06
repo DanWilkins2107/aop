@@ -2,7 +2,7 @@
 
 import type { Db } from "./db.js";
 import type { NodeRow } from "./nodes.js";
-import type { Identity } from "./processes.js";
+import type { Identity } from "./osProcesses.js";
 import { appendEvent, now, type Actor } from "./records.js";
 
 export type EndReason = "reported" | "failed" | "stopped" | "held" | "shutdown";

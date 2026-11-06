@@ -17,7 +17,7 @@ import { ApiError, badRequest, ConfigError, notFound, refused } from "./errors.j
 import * as nodes from "./nodes.js";
 import { describeConfig, loadConfig } from "./config.js";
 import type { Orchestrator } from "./orchestrator.js";
-import { describeProcess } from "./process.js";
+import { describeProcess } from "./processView.js";
 import { addProject, deleteProject, getProject, listProjects, updateProject } from "./projects.js";
 import { deleteLogs } from "./runLog.js";
 import { getRun, projectLogPaths } from "./runs.js";

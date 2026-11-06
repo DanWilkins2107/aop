@@ -1,5 +1,5 @@
 // Decides which agents run and what each run's end means for its node. OS-level process handling is
-// in `processes.ts`, and the `runs` and `agent_processes` rows in `runs.ts`.
+// in `osProcesses.ts`, and the `runs` and `agent_processes` rows in `runs.ts`.
 
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import type { WriteStream } from "node:fs";
@@ -22,7 +22,7 @@ import {
   RUN_MARKER,
   sweepRuns,
   waitGone,
-} from "./processes.js";
+} from "./osProcesses.js";
 import { agentStartPath, getProject } from "./projects.js";
 import { newId } from "./records.js";
 import { appendToLog, logPathFor, openLog } from "./runLog.js";
