@@ -1,5 +1,4 @@
 import { accessSync, constants, copyFileSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
@@ -7,6 +6,7 @@ import { parseArgs } from "node:util";
 import { stringify } from "yaml";
 import { loadConfig } from "../server/config.js";
 import { ConfigError } from "../server/errors.js";
+import { aopHome, configPath, isFromUserHome, resolveConfigPath } from "../server/paths.js";
 import { loadStagesFile } from "../server/stages.js";
 import { parseYamlFile } from "../server/yamlFile.js";
 
@@ -76,16 +76,8 @@ export function findOnPath(name: string, env: NodeJS.ProcessEnv, platform: NodeJ
   return undefined;
 }
 
-function aopHomeFor(io: InitIo): string {
-  const fromEnv = io.env["AOP_HOME"];
-  return fromEnv ? resolve(io.cwd, fromEnv) : join(homedir(), ".aop");
-}
-
 /** `~` and `~/x` are the user's home; anything else relative is from where `aop init` runs. */
-function expandPath(path: string, cwd: string): string {
-  const fromHome = /^~(?:[\\/](.*))?$/.exec(path);
-  return fromHome ? resolve(join(homedir(), fromHome[1] ?? "")) : resolve(cwd, path);
-}
+const expandPath = (path: string, cwd: string) => resolveConfigPath(cwd, path);
 
 /** The git repo holding `path`, if any. AOP's state must stay out of repos. */
 function repoAround(path: string): string | undefined {
@@ -253,7 +245,7 @@ Open from. ${ABOUT.open_from}`);
     }
   }
   // Keep `~` forms as typed. Other paths are stored absolute, since config paths are relative to AOP_HOME.
-  const openFromSetting = /^~(?:[\\/]|$)/.test(openFrom) ? openFrom : expandPath(openFrom, io.cwd);
+  const openFromSetting = isFromUserHome(openFrom) ? openFrom : expandPath(openFrom, io.cwd);
 
   // agent_timeout_minutes
   let timeout: number | undefined;
@@ -320,10 +312,10 @@ function copyDefaults(io: InitIo, home: string, say: (text: string) => void): vo
 
 /** Whether the config at `home` uses `home/stages.yaml`, so the default process belongs there. */
 function usesHomeStages(home: string): boolean {
-  const parsed = parseYamlFile(join(home, "config.yaml"));
+  const parsed = parseYamlFile(configPath(home));
   if (!parsed.ok || typeof parsed.value !== "object" || parsed.value === null) return false;
   const stages = (parsed.value as Record<string, unknown>)["stages"];
-  return typeof stages === "string" && resolve(home, stages) === join(home, "stages.yaml");
+  return typeof stages === "string" && resolveConfigPath(home, stages) === join(home, "stages.yaml");
 }
 
 const quoted = (path: string) => (/\s/.test(path) ? `"${path}"` : path);
@@ -367,12 +359,12 @@ async function init(argv: string[], io: InitIo): Promise<void> {
   }
 
   const say = (text: string) => io.output.write(`${text}\n`);
-  const home = aopHomeFor(io);
+  const home = aopHome(io.env, io.cwd);
   const repo = repoAround(home);
   if (repo !== undefined) {
     throw new InitFailure(`${home} is inside the git repo ${repo}. AOP never writes to repos. Set AOP_HOME to a folder outside it.`);
   }
-  const configFile = join(home, "config.yaml");
+  const configFile = configPath(home);
   const configExists = existsSync(configFile);
   if (configExists && values["fill-missing"] !== true) {
     throw new InitFailure(

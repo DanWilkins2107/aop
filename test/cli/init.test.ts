@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, relative, sep } from "node:path";
 import { Readable, Writable } from "node:stream";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { findOnPath, runInit, type InitIo } from "../../src/cli/init.js";
@@ -195,6 +195,19 @@ describe("existing config", () => {
     expect(readFileSync(join(box.home, "prompts", "implement.md"), "utf8")).toBe(
       readFileSync(join(ROOT, "defaults", "prompts", "implement.md"), "utf8"),
     );
+  });
+
+  // Needs the sandbox under the user's home to write a `~` path to it. It only reads from there.
+  const underHome = !relative(homedir(), aopHome()).startsWith("..") && !isAbsolute(relative(homedir(), aopHome()));
+  it.runIf(underHome)("reads a `~` stages path in an existing config, as the loader does", async () => {
+    const box = sandbox();
+    mkdirSync(box.home);
+    const fromHome = relative(homedir(), join(box.home, "stages.yaml")).split(sep).join("/");
+    writeFileSync(join(box.home, "config.yaml"), `agent_session_command: c\nopen_from: ${box.code}\nstages: ~/${fromHome}\n`);
+    const result = await init(box, ["--fill-missing"]);
+    expect(result.err).toBe("");
+    expect(result.code).toBe(0);
+    expect(result.out).toContain(`Wrote ${join(box.home, "stages.yaml")}`);
   });
 
   it("reports an invalid existing config with --fill-missing", async () => {
