@@ -764,4 +764,22 @@ describe("routing", () => {
     });
     expect(res.status).toBe(400);
   });
+
+  it("refuses an oversized body with a JSON 413, before changing anything", async () => {
+    const { MAX_BODY_BYTES } = await import("../../src/server/api.js");
+    const res = await h.call("POST", `/api/projects/${h.projectId}/nodes`, {
+      type: "dev",
+      title: "Too big",
+      body: "a".repeat(MAX_BODY_BYTES),
+    });
+    expect(res.status).toBe(413);
+    expect(errorOf(res).code).toBe("payload_too_large");
+    expect((await h.call<NodeView[]>("GET", `/api/projects/${h.projectId}/nodes`)).body).toEqual([]);
+  });
+
+  it("still takes a long description", async () => {
+    const body = "A long description, around 4 MB in all.\n".repeat(100_000);
+    const node = await h.create("dev", { body });
+    expect(node.body).toBe(body);
+  });
 });
