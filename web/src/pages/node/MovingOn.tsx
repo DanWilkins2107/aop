@@ -1,7 +1,7 @@
 import type { EventView, NodeView, StagesView } from "../../../../src/shared/api.js";
+import { FINISHED_STAGES } from "../../../../src/shared/builtInStages.js";
 import { api } from "../../lib/api.js";
 import { humanize, toTarget } from "../../lib/format.js";
-import { FINISHED_STAGES } from "../../lib/stageStyle.js";
 import { useAction } from "../../lib/useAction.js";
 import { MoveForm } from "./MoveForm.js";
 

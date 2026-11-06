@@ -1,4 +1,5 @@
 import type { Cron } from "croner";
+import { FINISHED_STAGES } from "../shared/builtInStages.js";
 import type { ChangeFeed } from "./changes.js";
 import { loadConfig } from "./config.js";
 import { parseCron } from "./cron.js";
@@ -9,7 +10,7 @@ import { appendEvent } from "./records.js";
 import type { StageGraph } from "./stages.js";
 
 /** Stages a previous child can be at for the next run to go ahead. */
-const FINISHED_STAGES = ["done", "broken_down", "invalidated"];
+const PREVIOUS_DONE_STAGES: readonly string[] = [...FINISHED_STAGES, "invalidated"];
 
 /** The longest the scheduler sleeps, so a missed change can't leave a node unscheduled for long. */
 const MAX_SLEEP_MS = 60_000;
@@ -200,7 +201,7 @@ export class Scheduler {
     const previous = this.db
       .prepare("SELECT id, stage FROM nodes WHERE spawned_by = ? ORDER BY rowid DESC LIMIT 1")
       .get(node.id) as { id: string; stage: string } | undefined;
-    if (previous !== undefined && !FINISHED_STAGES.includes(previous.stage)) {
+    if (previous !== undefined && !PREVIOUS_DONE_STAGES.includes(previous.stage)) {
       return skip("previous_unfinished", { previous_child_id: previous.id });
     }
 

@@ -1,31 +1,12 @@
-// Parses and validates `stages.yaml` into a `StageGraph`, and names the built-in stages.
-// What each built-in does is in `nodes.ts`, and `scheduled` in `scheduler.ts`.
+// Parses and validates `stages.yaml` into a `StageGraph`. The built-in stages are named in
+// `src/shared/builtInStages.ts`.
 
 import { existsSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { z } from "zod";
 import type { StagesView, Turn } from "../shared/api.js";
+import { FINISHED_STAGES, isBuiltIn } from "../shared/builtInStages.js";
 import { parseYamlFile } from "./yamlFile.js";
-
-export const BUILT_IN_STAGES = [
-  "done",
-  "broken_down",
-  "invalidated",
-  "scheduled",
-  "ask_human_question",
-  "failed",
-  "externally_blocked",
-  "splitting",
-] as const;
-
-export type BuiltInStage = (typeof BUILT_IN_STAGES)[number];
-
-export function isBuiltIn(name: string): name is BuiltInStage {
-  return (BUILT_IN_STAGES as readonly string[]).includes(name);
-}
-
-/** The only built-ins `next` can target. The others are entered through their own actions. */
-const NEXT_TARGET_BUILT_INS: readonly string[] = ["done", "broken_down"];
 
 export type { Turn };
 
@@ -163,7 +144,7 @@ export function validateStages(
       const next = new Map(Object.entries(typeStage.data.next));
       for (const [outcome, target] of next) {
         if (isBuiltIn(target)) {
-          if (!NEXT_TARGET_BUILT_INS.includes(target)) {
+          if (!FINISHED_STAGES.includes(target)) {
             problems.push(
               `${stageLabel}: outcome "${outcome}" targets "${target}", but done and broken_down are the only built-ins next can target`,
             );

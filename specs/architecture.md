@@ -6,7 +6,7 @@ Where each part of the specs lives in the code, and how one request moves throug
 | Folder | What's there |
 |---|---|
 | `src/server/` | The one server process: HTTP API, state machine, agents, scheduler, SQLite |
-| `src/shared/api.ts` | Types for everything the API returns. Types only, so the browser imports it too |
+| `src/shared/` | Code the browser imports too. `api.ts` has the types for everything the API returns, `builtInStages.ts` the built-in stage names and sets |
 | `src/cli/` | `aop`: `main.ts` turns commands into HTTP calls, `init.ts` is `aop init` |
 | `web/src/` | The React app. `pages/` per route, `components/` shared UI, `lib/` data and maths |
 | `plugin/` | The skills agents load. See [plugin.md](plugin.md) |
@@ -45,7 +45,7 @@ An agent's `aop next` is the same request from `src/cli/main.ts`, with `actor: a
 
 ## Stages and nodes in the code
 - **Process:** `stages.ts` turns `stages.yaml` into a `StageGraph`: a pool of `StageDef`s and a `TypeDef` per type, each mapping stage to outcome to target. `config.ts` loads it on every call, so edits apply without a restart.
-- **Built-ins:** named in `BUILT_IN_STAGES` in `stages.ts`. Their behaviour is the action functions in `nodes.ts`: `ask`, `answer`, `fail`, `retry`, `invalidate`, `restore`, `block`, `unblock`, `splitStart`, `splitFinish`. `scheduled` lives in `scheduler.ts`. The web app has its own lists in `web/src/lib/stageStyle.ts`.
+- **Built-ins:** named in `src/shared/builtInStages.ts`, with the global, finished and human-turn sets, so the server and web app share one list. Their behaviour is the action functions in `nodes.ts`: `ask`, `answer`, `fail`, `retry`, `invalidate`, `restore`, `block`, `unblock`, `splitStart`, `splitFinish`. `scheduled` lives in `scheduler.ts`.
 - **Stored:** a node row holds `type`, `stage`, `return_stage` for stages that go back, and `claimed_by`. Where it came from is in its `stage_changed` events, which `restore` and `unblock` read.
 - **Derived:** `holdersOf` in `nodes.ts` is everything stopping an agent starting: `blocks` edges, a splitting parent, an invalidated ancestor. `turnOf` says whose move it is.
 - **Runs:** `beginRun` takes the claim and opens the run together. A run ends in `Orchestrator.finish`, which reads the stop reason and `left_via` to decide between `failed`, stopped and reported.
