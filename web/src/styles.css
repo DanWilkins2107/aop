@@ -700,32 +700,27 @@ p.action-text:last-child {
 
 /* ---- messages ---- */
 
-.composer + .message {
+/* One card per visit to a stage, inside the Messages card. Quiet grey, so the white human
+   messages stand out, with a thin edge in the stage's colour set inline. */
+.visit {
   margin-top: 12px;
+  padding: 8px 10px 10px;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: 6px;
+}
+.visit-stage {
+  font-weight: 500;
+  margin: 0;
 }
 .message {
-  position: relative;
   margin-top: 8px;
-  padding: 8px 10px 8px 14px;
+  padding: 8px 10px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 6px;
-}
-/* The stage the message was written in. Wider than it looks, so its tooltip is easy to find. */
-.message-bar {
-  position: absolute;
-  top: -1px;
-  bottom: -1px;
-  left: -1px;
-  width: 12px;
-}
-.message-bar::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 4px;
-  border-radius: 6px 0 0 6px;
-  background: currentColor;
+  min-width: 0;
 }
 .message-agent {
   background: #e7f1fc;

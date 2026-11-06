@@ -152,7 +152,7 @@ export function NodePage() {
         </header>
 
         <Description node={node} reload={reload} />
-        <Messages node={node} messages={messages} stages={stages} reload={reload} />
+        <Messages node={node} messages={messages} events={events} stages={stages} reload={reload} />
         <Details node={node} edges={data.edges} nodes={projectNodes} events={events} stages={stages} titleOf={titleOf} reload={reload} />
       </div>
     </div>
