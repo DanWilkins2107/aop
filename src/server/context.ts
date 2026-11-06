@@ -1,3 +1,5 @@
+// The text agents read: `aop context` for a node, and the prompt each launched agent gets on stdin.
+
 import { readFileSync } from "node:fs";
 import type { AopConfig } from "./config.js";
 import type { Db } from "./db.js";

@@ -1,3 +1,6 @@
+// `aop serve` and `npm start`: loads the config, takes the lock, opens the database, and starts the
+// API, orchestrator and scheduler in that order. Also owns clean shutdown.
+
 import { parseArgs } from "node:util";
 import { ChangeFeed } from "./changes.js";
 import { loadConfig } from "./config.js";

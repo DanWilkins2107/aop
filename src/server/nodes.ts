@@ -1,3 +1,7 @@
+// The node state machine. Every stage change goes through `applyStageChange`, and every action a human
+// or agent takes on a node is a function here: next, move, ask, block, split, claim, and so on. Also
+// owns messages, links, edges and events, and `toView`, which derives what a node row doesn't store.
+
 import { loadConfig } from "./config.js";
 import type { Db } from "./db.js";
 import { badRequest, notFound, refused } from "./errors.js";

@@ -1,3 +1,5 @@
+// The browser's client for the HTTP API: one function per route the UI uses.
+
 import type {
   ConfigView,
   EdgeRow,
