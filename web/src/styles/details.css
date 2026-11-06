@@ -1,0 +1,71 @@
+/* ---- details ---- */
+
+.edge-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+}
+.edge-list:empty {
+  display: none;
+}
+.edge-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 0;
+}
+.edge-kind {
+  flex: 0 0 70px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.edge-node {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 8px;
+  overflow-wrap: anywhere;
+}
+.section-text + .inline-form {
+  margin-top: 8px;
+}
+.inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.inline-form select,
+.inline-form input {
+  flex: 1 1 140px;
+  width: auto;
+}
+.inline-form button {
+  flex: 0 0 auto;
+}
+.history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.history li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0 12px;
+  padding: 3px 0;
+  font-size: 12.5px;
+}
+.history-text {
+  flex: 1 1 200px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.history-time {
+  flex: 0 0 auto;
+  font-size: 12px;
+}

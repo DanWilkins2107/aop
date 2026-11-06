@@ -1,0 +1,8 @@
+/* ---- pipeline ---- */
+
+.pipeline-scroll {
+  overflow-x: auto;
+}
+.pipeline p {
+  margin: 6px 0 0;
+}
