@@ -165,7 +165,8 @@ describe("runs on a node", () => {
 
   it("a running run's tail says so and updates as the log grows", TIMEOUT, async () => {
     w = await world({ claude: true });
-    const node = await w.create(directives("say first", "sleep 1500", "say second", "hang"));
+    // A long gap, so a busy machine still reads the tail before the second line is written.
+    const node = await w.create(directives("say first", "sleep 10000", "say second", "hang"));
     const run = await w.runStarted(node.id);
     const early = await eventually("the first line", async () => {
       const found = (await tailOf(run.id)).body;
