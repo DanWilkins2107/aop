@@ -1,0 +1,66 @@
+/* ---- shell ---- */
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 16px;
+  background: #1f2226;
+  color: #e9ecef;
+  flex: 0 0 auto;
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.6px;
+  color: #f1f3f5;
+}
+.brand:hover {
+  text-decoration: none;
+}
+.topbar-spacer {
+  flex: 1;
+}
+.quiet-link {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.quiet-link:hover {
+  color: var(--text);
+}
+.topbar .quiet-link {
+  color: #adb5bd;
+}
+.topbar .quiet-link:hover {
+  color: #f1f3f5;
+}
+.connection-notice {
+  font-size: 12px;
+  color: #adb5bd;
+}
+.main {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+.page {
+  padding: 16px 16px 40px;
+  max-width: 1240px;
+  width: 100%;
+  margin: 0 auto;
+}
+.page-narrow {
+  max-width: 720px;
+}
