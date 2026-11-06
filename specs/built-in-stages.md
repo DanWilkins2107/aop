@@ -19,7 +19,7 @@ Only `done` and `broken_down` can be `next` targets. `scheduled` can be a type's
 
 ## Behaviour
 - **`done`:** finished.
-- **`broken_down`:** finished. The work continues in the children, and this node shows no progress from them. Refused if the node has no children, or still has `blocks` edges, so its blocks must first move to the children they apply to. New `blocks` edges to or from a `broken_down` node are refused.
+- **`broken_down`:** finished. The work continues in the children, and this node shows no progress from them. Refused if the node has no children, or still has `blocks` edges, so its blocks must first move to the children they apply to. A human's force move skips the blocks check, as the escape hatch. New `blocks` edges to or from a `broken_down` node are refused.
 - **`invalidated`:** requires a reason. Offered at every stage, separately from outcomes. Descendants read as "invalidated by parent", which is derived rather than stored.
 - **`ask_human_question`:** the question is posted to the node and the agent exits. An answer returns the node to its previous stage, which starts again with the answer in its messages.
 - **`failed`:** the node shows a link to the log. An agent's reason is posted to the node. Humans can't mark a node failed. Retrying returns it to its previous stage. Nothing retries automatically.
