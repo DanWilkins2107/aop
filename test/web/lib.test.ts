@@ -5,7 +5,8 @@ import type { EventView, NodeView, TypeView } from "../../src/shared/api.js";
 import { contrast, parseHex, readableText, visibleOn } from "../../web/src/lib/color.js";
 import { CARD_HEIGHT, CARD_WIDTH, fittedViewport, graphView, layoutGraph, smoothPath } from "../../web/src/lib/layout.js";
 import { originalStage, stageDrawing } from "../../web/src/lib/stageGraph.js";
-import { claimLabel, describeEvent, humanize, stageOptionGroups } from "../../web/src/lib/format.js";
+import { describeEvent } from "../../web/src/lib/eventText.js";
+import { claimLabel, humanize, stageOptionGroups } from "../../web/src/lib/format.js";
 import { cardKind, cardLook, cardType, isInvalidated, lookOf, stageColor, stageLabel } from "../../web/src/lib/stageStyle.js";
 
 const COLORS = ["#ffc107", "#cddc39", "#000000", "#ffffff", "#123", "#4263eb", "#e91e63", "#808080", "#12b886aa"];
