@@ -129,7 +129,8 @@ export class Scheduler {
 
   /**
    * The time from which slots count: the last slot handled, or when the node last arrived at
-   * scheduled, whichever is later. Arriving again, such as on restore or a new cron, starts afresh.
+   * scheduled, whichever is later. Arriving again, such as on restore, unblock or a new cron, starts
+   * afresh, so slots missed while invalidated or externally blocked aren't caught up.
    */
   private anchor(node: NodeRow): Date {
     const handled = this.db

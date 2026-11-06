@@ -185,6 +185,24 @@ describe("stopping", () => {
     expect(scheduler.tick()[0]).toMatchObject({ fired: true });
   });
 
+  it("pauses while externally blocked, and fires again from the next slot after unblocking", async () => {
+    const node = await createScheduled();
+    expect((await h.post(node.id, "block", { reason: "Waiting on the data team" })).body).toMatchObject({
+      stage: "externally_blocked",
+      return_stage: "scheduled",
+    });
+    at("2026-03-02T11:02:00Z");
+    expect(scheduler.tick()).toEqual([]);
+    expect(events(node.id, SKIP_EVENT)).toEqual([]);
+
+    expect((await h.post(node.id, "unblock")).body).toMatchObject({ stage: "scheduled", cron: "*/5 * * * *" });
+    // Slots missed while blocked aren't caught up.
+    expect(scheduler.tick()).toEqual([]);
+    at("2026-03-02T11:05:00Z");
+    expect(scheduler.tick()).toEqual([expect.objectContaining({ fired: true, dueAt: "2026-03-02T11:05:00.000Z" })]);
+    expect(children(node.id)).toHaveLength(1);
+  });
+
   it("stops firing once moved off scheduled", async () => {
     const node = await createScheduled("report");
     await h.post(node.id, "move", { stage: "draft" });

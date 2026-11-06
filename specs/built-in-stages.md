@@ -23,9 +23,10 @@ Only `done` and `broken_down` can be `next` targets. `scheduled` can be a type's
 - **`invalidated`:** requires a reason. Offered at every stage, separately from outcomes. Descendants read as "invalidated by parent", which is derived rather than stored.
 - **`ask_human_question`:** the question is posted to the node and the agent exits. An answer returns the node to its previous stage, which starts again with the answer in its messages.
 - **`failed`:** the node shows a link to the log. An agent's reason is posted to the node. Humans can't mark a node failed. Retrying returns it to its previous stage. Nothing retries automatically.
-- **`externally_blocked`:** for waiting on something outside AOP. Requires a reason, posted to the node. Human-only, so agents aren't told about it. No agent starts while it's here, and anything it blocks stays blocked. Unblocking returns it to its previous stage.
+- **`externally_blocked`:** for waiting on something outside AOP. Requires a reason, posted to the node. Human-only, so agents aren't told about it. No agent starts while it's here, a `scheduled` node doesn't fire, and anything it blocks stays blocked. Unblocking returns it to its previous stage.
 - **`splitting`:** lets an agent create children and edges without any of them starting early. AOP holds a node while its parent is `splitting`, and `aop split finish` moves the parent to `broken_down`, which releases them together. An `aop ask` or failure during a split keeps the children held, and answering or retrying restarts the agent stage that began the split, with the existing children in its prompt.
 - **`scheduled`:** stays here and creates a child node each time it fires. The child carries out the task described on this node, and `next` says where it starts.
   - The cron schedule is set on the node, so nodes of one type can run at different times.
   - The child gets a copy of the description.
   - A run is skipped and logged if the previous child hasn't finished.
+  - Blocking it pauses it. Unblocking returns it to `scheduled`, and it fires again from the next slot, with no catch-up for the paused time.
