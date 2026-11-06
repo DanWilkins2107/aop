@@ -47,6 +47,9 @@ const HUMAN_COMMANDS = {
   project: ["aop project add <path>"],
   serve: ["aop serve [--port <port>]"],
   steer: ["aop steer <node> [--no-sandbox]"],
+  stop: ["aop stop <node>"],
+  release: ["aop release <node>"],
+  logs: ["aop logs <node> [--lines N]"],
   ps: ["aop ps"],
   reap: ["aop reap"],
 } as const;
@@ -76,6 +79,10 @@ const usageError = (usage: Usage, problem?: string) =>
 const DEFAULT_PORT = "4317";
 /** The commands agents use all say so. `actor` is self-reported, and these are the agent's commands. */
 const ACTOR = "agent";
+/** The human commands say so instead, and always name their node rather than reading AOP_NODE_ID. */
+const HUMAN = "human";
+/** How much of a log `aop logs` prints unless asked for more or less. */
+const DEFAULT_LOG_LINES = 50;
 
 class UsageError extends Error {}
 class CliFailure extends Error {}
@@ -266,7 +273,7 @@ async function steerCommand(argv: string[]): Promise<void> {
   const { values, positionals } = args(argv, COMMANDS.steer, { "no-sandbox": { type: "boolean" } });
   const id = only(positionals, COMMANDS.steer);
   const session = await send<SteerSession>("POST", apiPaths.nodeAction(id, "steer"), { no_sandbox: values["no-sandbox"] === true } satisfies SteerRequest);
-  console.log(`Claimed ${id}. Opening a session in ${session.cwd}. Release the claim in the UI when you're done.`);
+  console.log(`Claimed ${id}. Opening a session in ${session.cwd}. Release the claim in the UI or with \`aop release ${id}\` when you're done.`);
   // The command is the user's own config string, which may need a shell. No node text goes in it.
   const child = spawn(session.command, {
     shell: true,
@@ -281,6 +288,43 @@ async function steerCommand(argv: string[]): Promise<void> {
       done();
     });
   });
+}
+
+/** Stops the agent running on a node, as the UI's Stop run does. The node stays put, claimed by the human. */
+async function stopCommand(argv: string[]): Promise<void> {
+  const id = only(args(argv, COMMANDS.stop, {}).positionals, COMMANDS.stop);
+  const node = await send<NodeView>("GET", apiPaths.node(id));
+  if (node.run_id === null) throw new CliFailure(`No agent is running on ${id}`);
+  const stopped = await send<NodeView>("POST", apiPaths.run(node.run_id, "stop"));
+  console.log(`Stopped ${node.run_id}. ${id} stays at ${stopped.stage}, claimed by you. Run \`aop release ${id}\` to start the stage again.`);
+}
+
+async function releaseCommand(argv: string[]): Promise<void> {
+  const id = only(args(argv, COMMANDS.release, {}).positionals, COMMANDS.release);
+  await send<NodeView>("POST", apiPaths.nodeAction(id, "release"), { actor: HUMAN });
+  console.log(`Released ${id}`);
+}
+
+/** The last lines of a text, not counting the newline it ends with. */
+function tail(text: string, lines: number): string {
+  return text.replace(/\r?\n$/, "").split(/\r?\n/).slice(-lines).join("\n");
+}
+
+/** Prints the end of the node's latest run's log, the one the node page shows. */
+async function logsCommand(argv: string[]): Promise<void> {
+  const usage = COMMANDS.logs;
+  const { values, positionals } = args(argv, usage, { lines: { type: "string" } });
+  const id = only(positionals, usage);
+  const lines = values.lines === undefined ? DEFAULT_LOG_LINES : Number(values.lines);
+  if (!Number.isInteger(lines) || lines < 1) throw usageError(usage, "--lines must be a whole number above 0");
+  const node = await send<NodeView>("GET", apiPaths.node(id));
+  if (node.last_run_id === null) throw new CliFailure(`${id} has had no runs yet`);
+  const log = await sendForText(apiPaths.run(node.last_run_id, "log"));
+  if (log.trim() === "") {
+    console.log(`The log for ${node.last_run_id} is empty so far.`);
+    return;
+  }
+  console.log(tail(log, lines));
 }
 
 function printAgents(agents: AgentProcessView[]): void {
@@ -328,7 +372,7 @@ async function run(argv: string[]): Promise<void> {
     }
     case "fail": {
       const reason = only(args(rest, COMMANDS.fail, {}).positionals, COMMANDS.fail);
-      movedTo(await send("POST", `${nodePath(ownNode())}/fail`, { reason, actor: ACTOR }));
+      movedTo(await send("POST", apiPaths.nodeAction(ownNode(), "fail"), { reason, actor: ACTOR }));
       return;
     }
     case "message": {
@@ -371,6 +415,12 @@ async function run(argv: string[]): Promise<void> {
     }
     case "steer":
       return steerCommand(rest);
+    case "stop":
+      return stopCommand(rest);
+    case "release":
+      return releaseCommand(rest);
+    case "logs":
+      return logsCommand(rest);
     case "ps":
       none(rest, COMMANDS.ps);
       printAgents(await send<AgentProcessView[]>("GET", apiPaths.agents));
