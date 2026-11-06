@@ -484,38 +484,40 @@ export class Orchestrator {
         }
         continue;
       }
-
       const marked = swept.filter((found) => found.runId === row.id).map(({ pid }) => pid);
-      const confirmed = identitiesOf(row).filter(({ pid, start }) => starts.get(pid) === start && !marked.includes(pid));
-      if (marked.length > 0) {
-        const pid = marked.includes(row.pid) ? row.pid : (marked[0] as number);
-        result.killed.push({ run_id: row.id, pid, reason: this.whyCondemned(row) ?? "this server didn't start it" });
-        if (confirmed.length > 0) await killConfirmed(row.pid, confirmed);
-        const gone = await Promise.all([...marked, ...confirmed.map(({ pid }) => pid)].map((pid) => waitGone(pid, STOP_WAIT_MS)));
-        if (gone.every(Boolean)) forgetProcess(this.db, row.id);
-        continue;
-      }
-      if (confirmed.length === 0) {
-        if (row.process_start === null && starts.has(row.pid)) {
-          // It stays on record until it's gone, because nothing can show it's safe to kill.
-          result.skipped.push({ run_id: row.id, pid: row.pid, reason: "AOP never recorded its start time" });
-          continue;
-        }
-        if (starts.has(row.pid)) {
-          result.skipped.push({ run_id: row.id, pid: row.pid, reason: "its process ID now belongs to another process" });
-        }
-        forgetProcess(this.db, row.id);
-        continue;
-      }
-
-      result.killed.push({ run_id: row.id, pid: row.pid, reason: this.whyCondemned(row) ?? "this server didn't start it" });
-      await killConfirmed(row.pid, confirmed);
-      const gone = await Promise.all(confirmed.map(({ pid }) => waitGone(pid, STOP_WAIT_MS)));
-      if (gone.every(Boolean)) forgetProcess(this.db, row.id);
+      await this.reapLost(row, starts, marked, result);
     }
 
     if (this.db.open) this.closeDeadRuns();
     return result;
+  }
+
+  /**
+   * Deals with a recorded process this server isn't tracking. The sweep has already killed whatever
+   * carried its run's marker, so this kills what's left that its record confirms, waits for all of it
+   * to go, and only then forgets the record.
+   */
+  private async reapLost(row: ProcessRow, starts: Map<number, string>, marked: number[], result: ReapResult): Promise<void> {
+    const confirmed = identitiesOf(row).filter(({ pid, start }) => starts.get(pid) === start && !marked.includes(pid));
+    if (marked.length === 0 && confirmed.length === 0) {
+      if (row.process_start === null && starts.has(row.pid)) {
+        // It stays on record until it's gone, because nothing can show it's safe to kill.
+        result.skipped.push({ run_id: row.id, pid: row.pid, reason: "AOP never recorded its start time" });
+        return;
+      }
+      if (starts.has(row.pid)) {
+        result.skipped.push({ run_id: row.id, pid: row.pid, reason: "its process ID now belongs to another process" });
+      }
+      forgetProcess(this.db, row.id);
+      return;
+    }
+
+    // The launched shell's ID where it's among them, which is the one on record.
+    const pid = marked.length === 0 || marked.includes(row.pid) ? row.pid : (marked[0] as number);
+    result.killed.push({ run_id: row.id, pid, reason: this.whyCondemned(row) ?? "this server didn't start it" });
+    if (confirmed.length > 0) await killConfirmed(row.pid, confirmed);
+    const gone = await Promise.all([...marked, ...confirmed.map(({ pid }) => pid)].map((pid) => waitGone(pid, STOP_WAIT_MS)));
+    if (gone.every(Boolean) && this.db.open) forgetProcess(this.db, row.id);
   }
 
   /** Reads every process on record, the launched shells and what they started. */
