@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { EdgeRow, EventView, LinkRow, MessageRow } from "../../src/shared/api.js";
 import { directives, fakeCommand, nodeArgs, settle, world, type World } from "./agents.helpers.js";
+import { makeRepo } from "./helpers.js";
 
 const TIMEOUT = { timeout: 90_000 };
 let w: World;
@@ -126,6 +127,34 @@ describe("the agent commands", () => {
     expect(bare.stderr).toContain("--project");
     const named = await aop(["node", "create", "--title", "x", "--project", w.projectId, "--stage", "pr_review"]);
     expect(named.code).toBe(0);
+  });
+
+  it("search keeps to the session's project unless --all, and --project takes a name", TIMEOUT, async () => {
+    const added = await aop(["project", "add", makeRepo()]);
+    const otherName = /^Added project "(.+)"/.exec(added.stdout)?.[1] as string;
+    const here = await parked({ title: "Zebra here" });
+    const there = await aop(["node", "create", "--title", "Zebra there", "--project", otherName, "--stage", "pr_review"]);
+    expect(there.code).toBe(0);
+
+    const scoped = await aop(["search", "Zebra"], { node: here.id });
+    expect(scoped.stdout).toContain(`${here.id}  [pr_review]  Zebra here`);
+    expect(scoped.stdout).not.toContain("Zebra there");
+    for (const res of [await aop(["search", "Zebra", "--all"], { node: here.id }), await aop(["search", "Zebra"])]) {
+      expect(res.stdout).toContain("Zebra here");
+      expect(res.stdout).toContain("Zebra there");
+    }
+    expect((await aop(["search", "Quagga"])).stdout).toBe("No matches.\n");
+
+    const unknown = await aop(["node", "create", "--title", "x", "--project", "no-such-project"]);
+    expect(unknown.code).toBe(1);
+    expect(unknown.stderr).toContain('No project "no-such-project"');
+  });
+
+  it("edge remove says when there's no such edge", TIMEOUT, async () => {
+    const [a, b] = [await parked(), await parked()];
+    const res = await aop(["edge", "remove", "blocks", a.id, b.id]);
+    expect(res.code).toBe(1);
+    expect(res.stderr).toContain(`${a.id} doesn't block ${b.id}`);
   });
 
   it("a new child can't start before its parent holds it", TIMEOUT, async () => {
