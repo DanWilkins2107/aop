@@ -105,7 +105,7 @@ async function eventually<T>(what: string, check: () => Promise<T | null | false
 }
 
 describe("what a run's end means", () => {
-  const running = { status: "running", left_via: null } as const;
+  const running = { status: "running", left_via: null, shutting_down: 0 } as const;
   const exited = (stopReason: StopReason | null, extra: Partial<Extract<RunEnding, { kind: "exited" }>> = {}): RunEnding => ({
     kind: "exited",
     stopReason,
@@ -120,19 +120,19 @@ describe("what a run's end means", () => {
 
   it("decides nothing for a run that's gone, already closed, or whose node is gone", () => {
     expect(decide({ run: undefined, ending: exited(null) })).toBeNull();
-    expect(decide({ run: { status: "exited", left_via: null }, ending: exited(null) })).toBeNull();
-    expect(decide({ run: { status: "exited", left_via: null }, ending: { kind: "lost" } })).toBeNull();
+    expect(decide({ run: { status: "exited", left_via: null, shutting_down: 0 }, ending: exited(null) })).toBeNull();
+    expect(decide({ run: { status: "exited", left_via: null, shutting_down: 0 }, ending: { kind: "lost" } })).toBeNull();
     expect(decide({ nodeExists: false, ending: exited("project_deleted") })).toBeNull();
   });
 
   it("a node that moved on while the run went is reported if the agent moved it, stopped if not, and its claim left alone", () => {
     for (const ending of [exited(null), exited("moved_on"), exited("timeout"), exited("human"), { kind: "lost" } as const]) {
-      expect(decide({ run: { status: "running", left_via: "next" }, reported: true, ending })).toEqual({
+      expect(decide({ run: { status: "running", left_via: "next", shutting_down: 0 }, reported: true, ending })).toEqual({
         outcome: "reported",
         timedOut: false,
         then: { kind: "none" },
       });
-      expect(decide({ run: { status: "running", left_via: "move" }, ending })).toEqual({
+      expect(decide({ run: { status: "running", left_via: "move", shutting_down: 0 }, ending })).toEqual({
         outcome: "stopped",
         timedOut: false,
         then: { kind: "none" },
@@ -185,6 +185,21 @@ describe("what a run's end means", () => {
       outcome: "failed",
       timedOut: false,
       then: { kind: "mark_failed", reason: LOST_RUN_REASON },
+    });
+  });
+
+  it("a run a clean shutdown began stopping goes back in the queue, even if its process outlived the shutdown", () => {
+    const stopping = { status: "running", left_via: null, shutting_down: 1 } as const;
+    const requeued = { outcome: "shutdown", timedOut: false, then: { kind: "release_claim", via: "shutdown" } };
+    expect(decide({ run: stopping, ending: { kind: "lost" } })).toEqual(requeued);
+    expect(decide({ run: stopping, ending: exited("shutdown") })).toEqual(requeued);
+    // Exited by itself after the shutdown began, before the kill came.
+    expect(decide({ run: stopping, ending: exited(null, { exitCode: 1 }) })).toEqual(requeued);
+    // A stop already under way, or a node that had moved on, still decides.
+    expect(decide({ run: stopping, ending: exited("human") })).toMatchObject({ then: { kind: "hand_to_human" } });
+    expect(decide({ run: stopping, ending: exited("timeout") })).toMatchObject({ outcome: "failed", timedOut: true });
+    expect(decide({ run: { ...stopping, left_via: "next" }, reported: true, ending: { kind: "lost" } })).toMatchObject({
+      outcome: "reported",
     });
   });
 });

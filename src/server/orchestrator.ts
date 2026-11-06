@@ -37,6 +37,7 @@ import {
   handClaimToHuman,
   identitiesOf,
   listProcesses,
+  markShuttingDown,
   recordProcess,
   recordUsage,
   releaseAgentClaim,
@@ -146,6 +147,9 @@ export class Orchestrator {
     this.running = false;
     this.unsubscribe?.();
     for (const timer of this.timers) clearInterval(timer);
+    // Before anything is killed, and before this yields, so that a run whose process outlives the
+    // wait below is put back in the queue by the next start rather than failed.
+    if (this.db.open) markShuttingDown(this.db, [...this.active.keys()]);
     await this.reaping?.catch(logFailure);
     await Promise.all([...this.active.values()].map((run) => this.stop(run, "shutdown")));
     await Promise.all(this.background);

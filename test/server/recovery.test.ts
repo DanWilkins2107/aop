@@ -52,6 +52,33 @@ describe("recovery with the orchestrator restarted in place", () => {
     expect(w.node(node.id).stage).toBe("implement");
   });
 
+  it("a clean shutdown marks each run before killing it, so one that outlives the shutdown is requeued, not failed", TIMEOUT, async () => {
+    w = await world();
+    const node = await w.create(directives(`pid ${w.file("agent.pid")}`, "hang"));
+    await w.pidFrom("agent.pid");
+    await w.runStarted(node.id);
+
+    const shuttingDown = w.orchestrator.shutdown();
+    // Nothing has been killed yet: the kill can't come before this test yields.
+    expect(w.runs(node.id)[0]).toMatchObject({ status: "running", shutting_down: 1 });
+    await shuttingDown;
+    expect(w.runs(node.id)[0]).toMatchObject({ status: "exited", end_reason: "shutdown" });
+
+    // As a run whose process took longer to die than the shutdown waited leaves things: still
+    // `running` and claimed, with nothing this server is tracking.
+    const stuck = await w.create("", { stage: "pr_review", type: "dev" });
+    w.db
+      .prepare("INSERT INTO runs (id, created_at, node_id, stage, status, log_path, shutting_down) VALUES ('stuck-run', 'now', ?, 'pr_review', 'running', '/none', 1)")
+      .run(stuck.id);
+    w.db.prepare("UPDATE nodes SET claimed_by = 'agent' WHERE id = ?").run(stuck.id);
+
+    await w.restartOrchestrator();
+    expect(w.node(stuck.id)).toMatchObject({ stage: "pr_review", claimed_by: null });
+    expect(w.runs(stuck.id)[0]).toMatchObject({ status: "exited", end_reason: "shutdown" });
+    // And the node that was cleanly stopped starts again.
+    await w.runStarted(node.id, 2);
+  });
+
   it("a shutdown during a split keeps the split, and its children held", TIMEOUT, async () => {
     w = await world();
     const parent = await w.create(directives('ifnot Stage: splitting :: aop ["split","start"]', "hang"), {

@@ -259,4 +259,14 @@ CREATE INDEX runs_node ON runs(node_id);
 CREATE INDEX nodes_spawned_by ON nodes(spawned_by) WHERE spawned_by IS NOT NULL;
 `,
   },
+  {
+    version: 9,
+    // Set on a run a clean shutdown is stopping, before it kills the process. A run whose process
+    // outlives the shutdown's wait keeps its `running` row, and this tells the next start that it
+    // wasn't a crash, so its node goes back in the queue rather than to failed.
+    sql: `
+ALTER TABLE runs ADD COLUMN shutting_down INTEGER NOT NULL DEFAULT 0
+  CONSTRAINT runs_shutting_down_flag CHECK (shutting_down IN (0, 1));
+`,
+  },
 ];

@@ -30,6 +30,8 @@ export interface RunRow {
   output_tokens: number | null;
   /** 1 for a `failed` run that ran past agent_timeout_minutes. */
   timed_out: 0 | 1;
+  /** 1 once a clean shutdown has begun stopping the run. See `markShuttingDown`. */
+  shutting_down: 0 | 1;
 }
 
 /** A process AOP started. Stays until AOP knows the process is gone, whatever happens to its run. */
@@ -99,7 +101,7 @@ export interface RunEndDecision {
 
 export interface RunEndInput {
   /** The run as it is now, or undefined if it's gone with its project. */
-  run: Pick<RunRow, "status" | "left_via"> | undefined;
+  run: Pick<RunRow, "status" | "left_via" | "shutting_down"> | undefined;
   ending: RunEnding;
   /** See `agentReported`. */
   reported: boolean;
@@ -119,6 +121,11 @@ export function decideRunEnd({ run, ending, reported, nodeExists }: RunEndInput)
 
   // The node moved on while the run was going, so whoever moved it has dealt with the claim.
   if (run.left_via !== null) return decision(reported ? "reported" : "stopped", { kind: "none" });
+
+  // A clean shutdown began stopping it, so whether or not its process outlived the shutdown's wait,
+  // it wasn't a crash, and the node goes back in the queue. A stop already under way says more.
+  const shutdown = run.shutting_down === 1 && (ending.kind === "lost" || ending.stopReason === null);
+  if (shutdown) return decision("shutdown", { kind: "release_claim", via: "shutdown" });
 
   if (ending.kind === "lost") return decision("failed", { kind: "mark_failed", reason: LOST_RUN_REASON });
 
@@ -159,6 +166,17 @@ export function beginRun(db: Db, node: NodeRow, id: string, logPath: string, for
     appendEvent(db, node.id, "system", "run_started", { run_id: id, stage: node.stage });
   })();
   return getRun(db, id) as RunRow;
+}
+
+/**
+ * Notes that a clean shutdown is stopping these runs, before it kills them, so that a run whose
+ * process outlives the shutdown is put back in the queue by the next start, not failed.
+ */
+export function markShuttingDown(db: Db, runIds: string[]): void {
+  const mark = db.prepare("UPDATE runs SET shutting_down = 1 WHERE id = ? AND status = 'running'");
+  db.transaction(() => {
+    for (const id of runIds) mark.run(id);
+  })();
 }
 
 /** Call inside the transaction that decides what the run's end means for its node. */
