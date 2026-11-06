@@ -2,10 +2,12 @@
 // `live.ts` and free of `window`, so it can be tested without a browser.
 
 import { urls } from "./api.js";
+import { type ChangeNotice, readNotice } from "./changes.js";
 
 export type Status = "connecting" | "live" | "offline";
 
-const changeListeners = new Set<() => void>();
+/** Each hears a change notice, or null on connecting, when anything may have changed. */
+const changeListeners = new Set<(notice: ChangeNotice | null) => void>();
 const statusListeners = new Set<() => void>();
 let status: Status = "connecting";
 let source: EventSource | null = null;
@@ -24,14 +26,15 @@ function setStatus(next: Status): void {
 function ensureConnected(): void {
   if (source) return;
   source = new EventSource(urls.events);
-  const fire = () => {
-    for (const listener of changeListeners) listener();
+  const fire = (notice: ChangeNotice | null) => {
+    for (const listener of changeListeners) listener(notice);
   };
+  // Changes may have been missed while away, so every page reloads in full.
   source.addEventListener("ready", () => {
     setStatus("live");
-    fire();
+    fire(null);
   });
-  source.addEventListener("change", fire);
+  source.addEventListener("change", (event) => fire(readNotice((event as MessageEvent).data)));
   source.onerror = () => setStatus("offline");
 }
 
@@ -44,8 +47,8 @@ export function subscribeLiveStatus(listener: () => void): () => void {
 
 export const liveStatus = (): Status => status;
 
-/** Calls `listener` whenever the server says something changed. Returns the unsubscribe. */
-export function subscribeChanges(listener: () => void): () => void {
+/** Calls `listener` with what the server says changed, or null on connecting. Returns the unsubscribe. */
+export function subscribeChanges(listener: (notice: ChangeNotice | null) => void): () => void {
   ensureConnected();
   changeListeners.add(listener);
   return () => changeListeners.delete(listener);

@@ -1,6 +1,6 @@
 import { realpathSync, statSync } from "node:fs";
 import { basename, isAbsolute } from "node:path";
-import type { NodeRow, ProjectRow } from "../shared/api.js";
+import { IMPROVEMENTS_PROJECT_ID, type NodeRow, type ProjectRow } from "../shared/api.js";
 import type { AopConfig } from "./config.js";
 import { allowProjectDeletion, type Db } from "./db.js";
 import { ApiError, badRequest, notFound } from "./errors.js";
@@ -8,8 +8,7 @@ import { newId, now } from "./records.js";
 
 export type { ProjectRow };
 
-/** The reserved project improvements live in. It's never listed, and project routes can't reach it. */
-export const IMPROVEMENTS_PROJECT_ID = "improvements";
+export { IMPROVEMENTS_PROJECT_ID };
 
 /** Creates the improvements project's row the first time it's needed. */
 export function ensureImprovementsProject(db: Db): void {

@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import type { ImprovementSource } from "../../../src/shared/api.js";
+import { IMPROVEMENTS_PROJECT_ID, type ImprovementSource } from "../../../src/shared/api.js";
 import { CaptureImprovement } from "../components/CaptureImprovement.js";
 import { ErrorNotice } from "../components/ErrorNotice.js";
 import { HomeTabs } from "../components/HomeTabs.js";
 import { api } from "../lib/api.js";
+import { touchesProject } from "../lib/changes.js";
 import { humanize } from "../lib/format.js";
 import { useLiveData } from "../lib/live.js";
 import { stageColor } from "../lib/stageStyle.js";
@@ -21,7 +22,14 @@ function sourceText(source: ImprovementSource | null): string {
 
 /** Every improvement, newest first. No graph: each one opens as a node. */
 export function ImprovementsPage() {
-  const { data, error, reload } = useLiveData(load, "improvements");
+  const { data, error, reload } = useLiveData(load, "improvements", {
+    // Any change to an improvement, or to a project one was captured from, which names it.
+    affects: (notice, shown) =>
+      touchesProject(notice, IMPROVEMENTS_PROJECT_ID) ||
+      (shown?.list.improvements ?? []).some(
+        ({ source }) => source?.project_id != null && touchesProject(notice, source.project_id),
+      ),
+  });
   const [adding, setAdding] = useState(false);
   const list = data?.list;
 

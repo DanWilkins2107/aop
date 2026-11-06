@@ -1,10 +1,12 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
+import { createApp } from "../../src/server/api.js";
+import { ChangeFeed, type ChangeNotice } from "../../src/server/changes.js";
 import { loadConfig } from "../../src/server/config.js";
 import { nodeContext } from "../../src/server/context.js";
 import { aopHome } from "../../src/server/paths.js";
-import { nodeStartPath } from "../../src/server/projects.js";
+import { IMPROVEMENTS_PROJECT_ID, nodeStartPath } from "../../src/server/projects.js";
 import type {
   ApplyResult,
   ImprovementDetail,
@@ -348,5 +350,34 @@ describe("applying", () => {
     expect(readFileSync(skill(), "utf8")).toBe("Old skill.\n");
     // The real files are only for save_locally.
     expect((await apply(node.id)).status).toBe(409);
+  });
+});
+
+describe("change notices", () => {
+  beforeEach(() => {
+    h = harness(ON);
+  });
+
+  it("name the improvement, and on capture the work node it came from", async () => {
+    const message = await sourceMessage();
+    const changes = new ChangeFeed();
+    const heard: ChangeNotice[] = [];
+    changes.subscribe((notice) => heard.push(notice));
+    const app = createApp(h.db, { changes });
+    const send = async (method: string, path: string, body: unknown) => {
+      const res = await app.request(path, { method, headers: { host: "localhost:4317" }, body: JSON.stringify(body) });
+      expect(res.status, await res.clone().text()).toBeLessThan(300);
+      return res.json() as Promise<unknown>;
+    };
+
+    const { node } = (await send("POST", "/api/improvements", { body: "x", source_message_id: message.id })) as ImprovementView;
+    const captured = heard.at(-1);
+    expect([...(captured?.project_ids ?? [])].sort()).toEqual([IMPROVEMENTS_PROJECT_ID, h.projectId].sort());
+    expect([...(captured?.node_ids ?? [])].sort()).toEqual([node.id, message.node_id].sort());
+
+    await send("PUT", `/api/improvements/${node.id}/proposals`, { path: skill(), content: "new", actor: "agent" });
+    expect(heard.at(-1)).toEqual({ project_ids: [IMPROVEMENTS_PROJECT_ID], node_ids: [node.id] });
+    await send("DELETE", `/api/improvements/${node.id}/proposals`, { path: skill(), actor: "agent" });
+    expect(heard.at(-1)).toEqual({ project_ids: [IMPROVEMENTS_PROJECT_ID], node_ids: [node.id] });
   });
 });

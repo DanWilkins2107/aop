@@ -6,8 +6,8 @@ import type { WriteStream } from "node:fs";
 import { setTimeout as delay } from "node:timers/promises";
 import type { AgentProcessView, ReapResult } from "../shared/api.js";
 import { headlessCommand, StreamJsonUsage, type OutputFormat } from "./agentOutput.js";
-import type { ChangeFeed } from "./changes.js";
-import { type AopConfig, loadConfig } from "./config.js";
+import { type ChangeFeed, nodesNotice } from "./changes.js";
+import { type AopConfig, loadConfig, withConfigSnapshot } from "./config.js";
 import { buildPrompt } from "./context.js";
 import type { Db } from "./db.js";
 import { ConfigError, refused } from "./errors.js";
@@ -133,7 +133,7 @@ export class Orchestrator {
     if (this.shutDown) return;
     this.releaseStrandedClaims();
     this.running = true;
-    this.unsubscribe = this.changes.subscribe(() => this.kick());
+    this.unsubscribe = this.changes.subscribeBursts(() => this.kick());
     this.timers = [
       setInterval(() => this.kick(), this.reconcileIntervalMs),
       setInterval(() => void this.reap().catch(logFailure), this.reapIntervalMs),
@@ -165,8 +165,10 @@ export class Orchestrator {
       this.kicked = false;
       if (!this.running || !this.db.open) return;
       try {
-        this.checkActiveRuns();
-        this.startQueuedNodes();
+        withConfigSnapshot(() => {
+          this.checkActiveRuns();
+          this.startQueuedNodes();
+        });
       } catch (error) {
         logFailure(error);
       }
@@ -250,7 +252,7 @@ export class Orchestrator {
       return;
     }
     this.track(run, node.project_id, child, command, prompt, config.agent_timeout_minutes, format);
-    this.changes.notify();
+    this.changes.notify(nodesNotice(this.db, node.id));
   }
 
   private failBeforeLaunch(run: RunRow, reason: string): void {
@@ -264,7 +266,7 @@ export class Orchestrator {
       closeRun(this.db, run, "failed", null);
       markFailed(this.db, getNodeRow(this.db, run.node_id), { reason, runId: run.id });
     })();
-    this.changes.notify();
+    this.changes.notify(nodesNotice(this.db, run.node_id));
   }
 
   private track(
@@ -404,7 +406,7 @@ export class Orchestrator {
         timeoutMinutes: active.timeoutMinutes,
       });
     })();
-    this.changes.notify();
+    this.changes.notify(nodesNotice(this.db, active.nodeId));
   }
 
   /** Records a run's end as `decideRunEnd` says. Call inside a transaction. */

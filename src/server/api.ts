@@ -38,12 +38,12 @@ import {
 } from "../shared/requests.js";
 import { API_PREFIX, apiPaths, routes } from "../shared/paths.js";
 import { readableLines } from "./agentOutput.js";
-import { ChangeFeed } from "./changes.js";
+import { ChangeFeed, EVERYTHING, nodesNotice, type ChangeNotice } from "./changes.js";
 import type { Db } from "./db.js";
 import { nodeContext } from "./context.js";
 import { ApiError, badRequest, ConfigError, notFound, refused } from "./errors.js";
 import * as nodes from "./nodes.js";
-import { describeConfig, loadConfig } from "./config.js";
+import { describeConfig, loadConfig, withConfigSnapshot } from "./config.js";
 import type { Orchestrator } from "./orchestrator.js";
 import { describeProcess } from "./processView.js";
 import { addProject, deleteProject, getProject, listProjects, updateProject } from "./projects.js";
@@ -133,6 +133,9 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
     return options.orchestrator;
   };
 
+  // One read of the config for the whole request, however many times its code asks.
+  app.use("*", (_c, proceed) => withConfigSnapshot(proceed));
+
   // Keeps other websites out, including through DNS rebinding. Non-browser clients send no Origin.
   app.use("*", async (c, proceed) => {
     const host = c.req.header("host");
@@ -147,6 +150,9 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
     return;
   });
 
+  /** What each write touched, which its route records for the change notice. None recorded means anything. */
+  const touched = new WeakMap<Request, ChangeNotice>();
+  const isWrite = (c: Context) => !["GET", "HEAD"].includes(c.req.method) && c.res.status < 400;
   // Some routes serve what agents and people wrote as text/plain (a node's context, a run's log).
   // Browsers must take the type as given, so none of it can ever run as a page on this origin.
   app.use(`${API_PREFIX}/*`, async (c, proceed) => {
@@ -173,8 +179,23 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
       throw refused(`Agent run ${runId} has ended, so it can't change anything. It should exit`);
     }
     await proceed();
-    if (!["GET", "HEAD"].includes(c.req.method) && c.res.status < 400) changes.notify();
+    if (isWrite(c)) changes.notify(touched.get(c.req.raw) ?? EVERYTHING);
   });
+
+  const touchedNodes = (...nodeIds: string[]): ChangeNotice => nodesNotice(db, ...nodeIds);
+  /** A project's own row: its nodes' messages, events, links and edges are untouched unless `nodeIds` says. */
+  const touchedProject = (projectId: string, nodeIds: string[] | null = []): ChangeNotice => ({
+    project_ids: [projectId],
+    node_ids: nodeIds,
+  });
+
+  // A write to a node touches that node, unless its route recorded more.
+  const nodeWrite = async (c: Context, proceed: () => Promise<void>) => {
+    await proceed();
+    if (isWrite(c) && !touched.has(c.req.raw)) touched.set(c.req.raw, touchedNodes(c.req.param("id") ?? ""));
+  };
+  app.use(routes.node, nodeWrite);
+  app.use(`${routes.node}/*`, nodeWrite);
 
   app.onError((error, c) => {
     if (error instanceof ApiError) return errorResponse(c, error.status, error.code, error.message, error.details);
@@ -192,11 +213,13 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
 
   app.get(at(apiPaths.health), (c) => c.json({ ok: true }));
 
-  // Fires whenever data changes. `ready` lets a client catch up on anything missed while away.
+  // Fires once per burst of changes, saying where. `ready` lets a client catch up on anything missed while away.
   app.get(at(apiPaths.events), (c) =>
     streamSSE(c, async (stream) => {
       await new Promise<void>((finished) => {
-        const unsubscribe = changes.subscribe(() => void stream.writeSSE({ event: "change", data: "{}" }));
+        const unsubscribe = changes.subscribeBursts(
+          (notice) => void stream.writeSSE({ event: "change", data: JSON.stringify(notice) }),
+        );
         const keepAlive = setInterval(() => void stream.write(": keep-alive\n\n"), STREAM_KEEP_ALIVE_MS);
         stream.onAbort(() => {
           unsubscribe();
@@ -211,11 +234,15 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
   // Projects
   app.get(at(apiPaths.projects), (c) => c.json(listProjects(db)));
   app.post(at(apiPaths.projects), async (c) => {
-    return c.json(addProject(db, await readBody(c, addProjectBody)), 201);
+    const project = addProject(db, await readBody(c, addProjectBody));
+    touched.set(c.req.raw, touchedProject(project.id));
+    return c.json(project, 201);
   });
-  app.patch(routes.project, async (c) =>
-    c.json(updateProject(db, c.req.param("id"), await readBody(c, updateProjectBody))),
-  );
+  app.patch(routes.project, async (c) => {
+    const project = updateProject(db, c.req.param("id"), await readBody(c, updateProjectBody));
+    touched.set(c.req.raw, touchedProject(project.id));
+    return c.json(project);
+  });
   app.delete(routes.project, async (c) => {
     const { id } = getProject(db, c.req.param("id"));
     // Agents stop first, and none can start on the project until it has gone.
@@ -230,10 +257,11 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
     }
     // Only once the project has gone, and its agents have stopped and closed their logs.
     deleteLogs(logs);
+    touched.set(c.req.raw, touchedProject(id, null));
     return c.json(deleted);
   });
 
-  // The one process, shared by all projects. Read from disk every time.
+  // The one process, shared by all projects. Read from disk whenever it has changed.
   app.get(at(apiPaths.stages), (c) => c.json(describeStages(loadConfig().graph)));
   // For the process page, which still answers when the config is invalid, listing the problems.
   app.get(at(apiPaths.process), (c) => c.json(describeProcess()));
@@ -241,16 +269,28 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
   app.get(at(apiPaths.improvementStages), (c) => c.json(describeStages(loadConfig().improvementGraph ?? EMPTY_GRAPH)));
 
   // Improvements. Proposals are stored here; only apply writes files, and only where allowedTarget says.
+  // Each write says what it touched: the improvement, and on capture the work node it came from.
   app.get(at(apiPaths.improvements), (c) => c.json(listImprovements(db)));
-  app.post(at(apiPaths.improvements), async (c) => c.json(createImprovement(db, await readBody(c, improvementBody)), 201));
+  app.post(at(apiPaths.improvements), async (c) => {
+    const improvement = createImprovement(db, await readBody(c, improvementBody));
+    const source = improvement.source?.node_id;
+    touched.set(c.req.raw, touchedNodes(improvement.node.id, ...(source == null ? [] : [source])));
+    return c.json(improvement, 201);
+  });
   app.get(routes.improvement, (c) => c.json(getImprovement(db, c.req.param("id"))));
   app.get(routes.improvementAction("proposals"), (c) => c.json(listProposals(db, c.req.param("id"))));
-  app.put(routes.improvementAction("proposals"), async (c) =>
-    c.json(propose(db, c.req.param("id"), await readBody(c, proposalBody))),
-  );
-  app.delete(routes.improvementAction("proposals"), async (c) =>
-    c.json(withdraw(db, c.req.param("id"), await readBody(c, withdrawBody))),
-  );
+  app.put(routes.improvementAction("proposals"), async (c) => {
+    const proposal = propose(db, c.req.param("id"), await readBody(c, proposalBody));
+    touched.set(c.req.raw, touchedNodes(c.req.param("id")));
+    return c.json(proposal);
+  });
+  app.delete(routes.improvementAction("proposals"), async (c) => {
+    const withdrawn = withdraw(db, c.req.param("id"), await readBody(c, withdrawBody));
+    touched.set(c.req.raw, touchedNodes(c.req.param("id")));
+    return c.json(withdrawn);
+  });
+  // Applying writes real files, which can include stage prompts, and so whether the config is valid:
+  // it records nothing narrower, so every page refetches.
   app.post(routes.improvementAction("apply"), async (c) =>
     c.json(applyProposals(db, c.req.param("id"), await readBody(c, applyBody, true))),
   );
@@ -271,7 +311,10 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
   app.post(routes.projectAction("nodes"), async (c) => {
     const project = getProject(db, c.req.param("id"));
     const body = await readBody(c, createNodeBody);
-    return c.json(nodes.createNode(db, project.id, body), 201);
+    const node = nodes.createNode(db, project.id, body);
+    // A parent gets an edge, and an event saying so.
+    touched.set(c.req.raw, touchedNodes(node.id, ...(body.parent_id === undefined ? [] : [body.parent_id])));
+    return c.json(node, 201);
   });
   app.get(routes.node, (c) => c.json(nodes.getNode(db, c.req.param("id"))));
   app.patch(routes.node, async (c) =>
@@ -338,12 +381,16 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
   app.get(routes.nodeAction("edges"), (c) =>
     c.json(nodes.listEdges(db, c.req.param("id"), c.req.query("include_removed") === "true")),
   );
-  app.post(routes.nodeAction("edges"), async (c) =>
-    c.json(nodes.addEdge(db, c.req.param("id"), await readBody(c, edgeBody)), 201),
-  );
-  app.delete(routes.edge, async (c) =>
-    c.json(nodes.removeEdge(db, c.req.param("id"), (await readBody(c, actorBody, true)).actor)),
-  );
+  app.post(routes.nodeAction("edges"), async (c) => {
+    const edge = nodes.addEdge(db, c.req.param("id"), await readBody(c, edgeBody));
+    touched.set(c.req.raw, touchedNodes(edge.source_id, edge.target_id));
+    return c.json(edge, 201);
+  });
+  app.delete(routes.edge, async (c) => {
+    const edge = nodes.removeEdge(db, c.req.param("id"), (await readBody(c, actorBody, true)).actor);
+    touched.set(c.req.raw, touchedNodes(edge.source_id, edge.target_id));
+    return c.json(edge);
+  });
 
   // Events
   app.get(routes.nodeAction("events"), (c) => c.json(nodes.listEvents(db, c.req.param("id"))));
@@ -359,7 +406,11 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
   // Agents
   app.get(at(apiPaths.agents), async (c) => c.json(await orchestrator().listAgents()));
   app.post(at(apiPaths.reap), async (c) => c.json(await orchestrator().reap()));
-  app.post(routes.run("stop"), async (c) => c.json(await orchestrator().stopRun(c.req.param("id"))));
+  app.post(routes.run("stop"), async (c) => {
+    const node = await orchestrator().stopRun(c.req.param("id"));
+    touched.set(c.req.raw, touchedNodes(node.id));
+    return c.json(node);
+  });
   app.get(routes.nodeAction("runs"), (c) => {
     const node = nodes.getNodeRow(db, c.req.param("id"));
     return c.json(listRuns(db, node.id));

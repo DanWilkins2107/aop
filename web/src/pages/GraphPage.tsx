@@ -7,6 +7,7 @@ import { RoutedEdge, type RoutedEdgeType } from "../components/RoutedEdge.js";
 import { StageCard, type StageCardNode } from "../components/StageCard.js";
 import { loadProjectGraph } from "../lib/api.js";
 import { CARD_HEIGHT, CARD_WIDTH, fittedViewport, graphView, inReadingOrder, type FitOptions } from "../lib/layout.js";
+import { touchesProject } from "../lib/changes.js";
 import { useLiveData } from "../lib/live.js";
 import { isInvalidated } from "../lib/stageStyle.js";
 
@@ -90,7 +91,9 @@ export function GraphPage() {
   const [readyFor, setReadyFor] = useState<string | null>(null);
   const narrow = size !== null && size.width < NARROW_WIDTH;
 
-  const { data, error } = useLiveData(() => loadProjectGraph(projectId), projectId);
+  const { data, error } = useLiveData(() => loadProjectGraph(projectId), projectId, {
+    affects: (notice) => touchesProject(notice, projectId),
+  });
 
   const { flowNodes, flowEdges, viewport } = useMemo(() => {
     const none: Viewport = { x: 0, y: 0, zoom: 1 };

@@ -1,6 +1,17 @@
 import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
-import type { EdgeRow, ImprovementSource, LinkRow, NodeView } from "../../../src/shared/api.js";
+import type {
+  EdgeRow,
+  EventView,
+  ImprovementDetail,
+  ImprovementSource,
+  LinkRow,
+  MessageRow,
+  NodeView,
+  ProjectRow,
+  ProposalView,
+  StagesView,
+} from "../../../src/shared/api.js";
 import { GLOBAL_STAGES } from "../../../src/shared/builtInStages.js";
 import { ClaimMark } from "../components/ClaimMark.js";
 import { CopyId } from "../components/CopyId.js";
@@ -9,7 +20,8 @@ import { PipelineGraph } from "../components/PipelineGraph.js";
 import { ancestorsOf } from "../lib/ancestry.js";
 import { api, loadProjectGraph } from "../lib/api.js";
 import { humanize } from "../lib/format.js";
-import { useLiveData } from "../lib/live.js";
+import { touchesNode, touchesProject } from "../lib/changes.js";
+import { type Refresh, useLiveData } from "../lib/live.js";
 import { originalStage } from "../lib/stageGraph.js";
 import { findType, stageBand } from "../lib/stageStyle.js";
 import { NodeControls } from "./node/Controls.js";
@@ -20,30 +32,41 @@ import { MovingOn } from "./node/MovingOn.js";
 import { Part } from "./node/Part.js";
 import { Proposals } from "./node/Proposals.js";
 
-async function loadNode(nodeId: string) {
-  const node = await api.node(nodeId);
-  if (node.kind === "improvement") {
-    // Improvements belong to no project, and follow their own pipeline.
-    const [messages, events, edges, links, stages, improvement, proposals] = await Promise.all([
-      api.messages(nodeId),
-      api.events(nodeId),
-      api.edges(nodeId),
-      api.links(nodeId),
-      api.improvementStages(),
-      api.improvement(nodeId),
-      api.proposals(nodeId),
-    ]);
-    const projectNodes: NodeView[] = [node];
-    const projectEdges: EdgeRow[] = [];
-    return { node, messages, events, edges, links, stages, projectNodes, projectEdges, project: null, improvement, proposals };
-  }
-  const [messages, events, edges, links, graph] = await Promise.all([
-    api.messages(nodeId),
-    api.events(nodeId),
-    api.edges(nodeId),
-    api.links(nodeId),
-    loadProjectGraph(node.project_id),
+const loadOwn = (nodeId: string) =>
+  Promise.all([api.messages(nodeId), api.events(nodeId), api.edges(nodeId), api.links(nodeId)]).then(
+    ([messages, events, edges, links]) => ({ messages, events, edges, links }),
+  );
+
+/** An improvement belongs to no project and follows its own pipeline, so it's read whole each time. */
+async function loadImprovement(node: NodeView): Promise<NodeData> {
+  const [own, stages, improvement, proposals] = await Promise.all([
+    loadOwn(node.id),
+    api.improvementStages(),
+    api.improvement(node.id),
+    api.proposals(node.id),
   ]);
+  return { node, ...own, stages, projectNodes: [node], projectEdges: [], project: null, improvement, proposals };
+}
+
+/**
+ * The node, its own messages, events, edges and links, and its project's graph. On a refetch the node's
+ * project is known, and a node never changes project, so the node comes from the project's nodes and its
+ * own parts are read again only if the change touched them.
+ */
+async function loadNode(nodeId: string, refresh: Refresh<NodeData> | null): Promise<NodeData> {
+  const previous = refresh?.previous ?? null;
+  if (previous?.node.kind === "improvement") return loadImprovement(await api.node(nodeId));
+  const ownChanged = refresh === null || touchesNode(refresh.change, nodeId, refresh.previous.node.project_id);
+  const first = previous === null ? await api.node(nodeId) : null;
+  if (first?.kind === "improvement") return loadImprovement(first);
+  const projectId = first?.project_id ?? previous!.node.project_id;
+  const [own, graph] = await Promise.all([
+    ownChanged || previous === null ? loadOwn(nodeId) : previous,
+    loadProjectGraph(projectId),
+  ]);
+  // Gone from its project means deleted, and this says so.
+  const node = first ?? graph.nodes.find((n) => n.id === nodeId) ?? (await api.node(nodeId));
+  const { messages, events, edges, links } = own;
   const { stages, nodes: projectNodes, edges: projectEdges, project } = graph;
   return { node, messages, events, edges, links, stages, projectNodes, projectEdges, project, improvement: null, proposals: [] };
 }
@@ -66,6 +89,21 @@ function SourceLink({ source }: { source: ImprovementSource | null }) {
       <span className="muted">({where})</span>
     </p>
   );
+}
+
+interface NodeData {
+  node: NodeView;
+  messages: MessageRow[];
+  events: EventView[];
+  edges: EdgeRow[];
+  links: LinkRow[];
+  stages: StagesView;
+  projectNodes: NodeView[];
+  projectEdges: EdgeRow[];
+  project: ProjectRow | null;
+  /** Set for an improvement. */
+  improvement: ImprovementDetail | null;
+  proposals: ProposalView[];
 }
 
 const LINK_LABELS: Record<LinkRow["kind"], string> = { pr: "PR", ticket: "Ticket" };
@@ -92,7 +130,14 @@ function Links({ links }: { links: LinkRow[] }) {
 
 export function NodePage() {
   const { nodeId = "" } = useParams();
-  const { data, error, reload } = useLiveData(() => loadNode(nodeId), nodeId);
+  const { data, error, reload } = useLiveData<NodeData>((refresh) => loadNode(nodeId, refresh), nodeId, {
+    // The node's view depends on the rest of its project: its holders, and its ancestors' titles. An
+    // improvement's also shows its source, in another project.
+    affects: (notice, shown) =>
+      shown === null ||
+      touchesProject(notice, shown.node.project_id) ||
+      (shown.improvement?.source?.project_id != null && touchesProject(notice, shown.improvement.source.project_id)),
+  });
 
   const titleOf = useMemo(() => {
     const titles = new Map(data?.projectNodes.map((n) => [n.id, n.title]));

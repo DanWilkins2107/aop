@@ -5,6 +5,7 @@ import { FormError, useFormError } from "../components/FormError.js";
 import { DeleteProjectDialog, RepoPathHint } from "../components/ProjectDialogs.js";
 import { SubPage } from "../components/SubPage.js";
 import { api } from "../lib/api.js";
+import { touchesProject } from "../lib/changes.js";
 import { useLiveData } from "../lib/live.js";
 import { useAction } from "../lib/useAction.js";
 
@@ -98,7 +99,7 @@ export function ProjectSettingsPage() {
       project: projects.find((p) => p.id === projectId) ?? null,
       openFrom: config.settings?.open_from_path ?? null,
     };
-  }, `settings:${projectId}`);
+  }, `settings:${projectId}`, { affects: (notice) => touchesProject(notice, projectId) });
 
   const project = data?.project;
   return (

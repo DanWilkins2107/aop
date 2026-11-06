@@ -87,6 +87,9 @@ export interface ConfigView {
   } | null;
 }
 
+/** The reserved project improvements live in. It's never listed, and project routes can't reach it. */
+export const IMPROVEMENTS_PROJECT_ID = "improvements";
+
 /** A node is project work, or an improvement to how agents work, which belongs to no project. */
 export type NodeKind = "work" | "improvement";
 
@@ -377,4 +380,14 @@ export interface ApplyResult {
   written: string[];
   /** With `into`: proposals outside the repo, which have no place in the checkout. */
   skipped: string[];
+}
+
+/**
+ * The data of a `change` event on `/api/events`: what a burst of writes touched. `project_ids` null
+ * means anything may have changed. `node_ids` lists the nodes whose own messages, events, links or
+ * edges changed, and null means any node in those projects may have.
+ */
+export interface ChangeNotice {
+  project_ids: string[] | null;
+  node_ids: string[] | null;
 }

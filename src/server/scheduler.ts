@@ -1,8 +1,8 @@
 import type { Cron } from "croner";
+import { type ChangeFeed, nodesNotice } from "./changes.js";
+import { loadConfig, withConfigSnapshot } from "./config.js";
 import type { EventKind, ScheduleSkip } from "../shared/api.js";
 import { FINISHED_STAGES } from "../shared/builtInStages.js";
-import type { ChangeFeed } from "./changes.js";
-import { loadConfig } from "./config.js";
 import { parseCron } from "./cron.js";
 import type { Db } from "./db.js";
 import { ConfigError } from "./errors.js";
@@ -58,7 +58,7 @@ export class Scheduler {
     if (this.running) return;
     this.running = true;
     // A new or moved node may be due sooner than the current timer.
-    this.unsubscribe = this.changes.subscribe(() => {
+    this.unsubscribe = this.changes.subscribeBursts(() => {
       if (!this.ticking) this.arm();
     });
     this.wake();
@@ -74,12 +74,14 @@ export class Scheduler {
 
   private wake(): void {
     if (!this.running || !this.db.open) return;
-    try {
-      this.tick();
-    } catch (error) {
-      console.error(error);
-    }
-    this.arm();
+    withConfigSnapshot(() => {
+      try {
+        this.tick();
+      } catch (error) {
+        console.error(error);
+      }
+      this.arm();
+    });
   }
 
   /** Sleeps until the soonest due slot, or the longest sleep. */
@@ -121,7 +123,10 @@ export class Scheduler {
     } finally {
       this.ticking = false;
     }
-    if (results.length > 0) this.changes.notify();
+    if (results.length > 0) {
+      const touched = results.flatMap((result) => (result.fired ? [result.nodeId, result.childId] : [result.nodeId]));
+      this.changes.notify(nodesNotice(this.db, ...touched));
+    }
     return results;
   }
 
