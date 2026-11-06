@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { parseMarkdown } from "../../web/src/lib/markdown.js";
 
 const text = (value: string) => ({ kind: "text", text: value });
+const item = (value: string, ...lists: unknown[]) => ({ children: [text(value)], ...(lists.length > 0 ? { lists } : {}) });
 
 describe("markdown", () => {
   it("reads headings, lists, paragraphs and inline marks", () => {
@@ -20,8 +21,8 @@ describe("markdown", () => {
           text("."),
         ],
       },
-      { kind: "list", ordered: false, items: [[text("one")], [text("two")]] },
-      { kind: "list", ordered: true, items: [[text("first")]] },
+      { kind: "list", ordered: false, items: [item("one"), item("two")] },
+      { kind: "list", ordered: true, items: [item("first")] },
     ]);
   });
 
@@ -39,6 +40,56 @@ describe("markdown", () => {
         children: [{ kind: "link", href: "https://example.com", children: [text("site")] }, text(" "), text("bad")],
       },
     ]);
+  });
+
+  it("drops a closing run of # only when a space comes before it", () => {
+    expect(parseMarkdown("## Title ##\n\n# Learn C#\n\n# ##")).toEqual([
+      { kind: "heading", level: 2, children: [text("Title")] },
+      { kind: "heading", level: 1, children: [text("Learn C#")] },
+      { kind: "heading", level: 1, children: [] },
+    ]);
+  });
+
+  it("reads links and marks inside headings", () => {
+    expect(parseMarkdown("### See [the **spec**](/specs) #")).toEqual([
+      {
+        kind: "heading",
+        level: 3,
+        children: [
+          text("See "),
+          { kind: "link", href: "/specs", children: [text("the "), { kind: "strong", children: [text("spec")] }] },
+        ],
+      },
+    ]);
+  });
+
+  it("joins wrapped lines of a paragraph and of a list item", () => {
+    expect(parseMarkdown("one\ntwo\n\n- first\n  continued\n- second")).toEqual([
+      { kind: "paragraph", children: [text("one two")] },
+      { kind: "list", ordered: false, items: [item("first continued"), item("second")] },
+    ]);
+  });
+
+  it("nests an indented list under the item before it", () => {
+    const bullets = (...items: unknown[]) => ({ kind: "list", ordered: false, items });
+    const numbers = (...items: unknown[]) => ({ kind: "list", ordered: true, items });
+    expect(parseMarkdown("- a\n  - a1\n    - a1x\n  - a2\n- b")).toEqual([
+      bullets(item("a", bullets(item("a1", bullets(item("a1x"))), item("a2"))), item("b")),
+    ]);
+    expect(parseMarkdown("1. first\n   - detail\n   - more\n2. second")).toEqual([
+      numbers(item("first", bullets(item("detail"), item("more"))), item("second")),
+    ]);
+  });
+
+  it("starts a new list when the marker kind changes at the same depth", () => {
+    expect(parseMarkdown("- a\n1. b")).toEqual([
+      { kind: "list", ordered: false, items: [item("a")] },
+      { kind: "list", ordered: true, items: [item("b")] },
+    ]);
+  });
+
+  it("keeps snake_case words whole", () => {
+    expect(parseMarkdown("use return_stage here")).toEqual([{ kind: "paragraph", children: [text("use return_stage here")] }]);
   });
 
   it("drops HTML comments, so the roadmap's editing note stays hidden", () => {

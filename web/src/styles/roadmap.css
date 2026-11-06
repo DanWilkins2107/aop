@@ -15,6 +15,10 @@
   margin: 6px 0 12px;
   padding-left: 22px;
 }
+.markdown li > ul,
+.markdown li > ol {
+  margin: 4px 0 0;
+}
 .markdown li + li {
   margin-top: 4px;
 }

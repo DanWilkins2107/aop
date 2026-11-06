@@ -1,7 +1,7 @@
-import { Link } from "react-router-dom";
 import { GLOBAL_STAGES } from "../../../src/shared/builtInStages.js";
-import { ErrorNotice, ProblemBanner } from "../components/ErrorNotice.js";
+import { ProblemBanner } from "../components/ErrorNotice.js";
 import { PipelineGraph } from "../components/PipelineGraph.js";
+import { SubPage } from "../components/SubPage.js";
 import { api } from "../lib/api.js";
 import { humanize } from "../lib/format.js";
 import { useLiveData } from "../lib/live.js";
@@ -13,12 +13,7 @@ export function ProcessPage() {
   const { data, error } = useLiveData(() => api.process(), "process");
   const types = data?.process?.types ?? [];
   return (
-    <div className="page page-narrow">
-      <nav className="breadcrumb">
-        <Link to="/">Projects</Link>
-      </nav>
-      <h1 className="settings-title">Process</h1>
-      {error ? <ErrorNotice error={error} /> : null}
+    <SubPage title="Process" error={error}>
       {data ? (
         <p className="settings-note">
           View-only. To change the process, edit{" "}
@@ -67,6 +62,6 @@ export function ProcessPage() {
           </ul>
         </section>
       ) : null}
-    </div>
+    </SubPage>
   );
 }

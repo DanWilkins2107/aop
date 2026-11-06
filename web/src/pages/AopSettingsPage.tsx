@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
-import { ErrorNotice, ProblemBanner } from "../components/ErrorNotice.js";
+import { ProblemBanner } from "../components/ErrorNotice.js";
+import { SubPage } from "../components/SubPage.js";
 import { api } from "../lib/api.js";
 import { useLiveData } from "../lib/live.js";
 
@@ -26,12 +26,7 @@ export function AopSettingsPage() {
   const { data, error } = useLiveData(() => api.config(), "config");
   const settings = data?.settings;
   return (
-    <div className="page page-narrow">
-      <nav className="breadcrumb">
-        <Link to="/">Projects</Link>
-      </nav>
-      <h1 className="settings-title">AOP settings</h1>
-      {error ? <ErrorNotice error={error} /> : null}
+    <SubPage title="AOP settings" error={error}>
       {data ? (
         <p className="settings-note">
           Read-only. To change these, edit <code>{data.config_path}</code>.
@@ -92,6 +87,6 @@ export function AopSettingsPage() {
           />
         </dl>
       ) : null}
-    </div>
+    </SubPage>
   );
 }
