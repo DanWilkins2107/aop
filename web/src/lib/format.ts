@@ -101,6 +101,18 @@ export function describeEvent(event: EventView, titleOf: (id: string) => string)
       return `${data["kind"] === "blocks" ? "Now blocks" : "Subtask added:"} ${titleOf(text(data["target_id"]))}`;
     case "edge_removed":
       return `${data["kind"] === "blocks" ? "No longer blocks" : "Subtask removed:"} ${titleOf(text(data["target_id"]))}`;
+    case "improvement_captured":
+      return "Improvement captured from a message";
+    case "improvement_sourced":
+      return "Captured from a message";
+    case "proposal_saved":
+      return `Proposed a change to ${text(data["path"])}`;
+    case "proposal_withdrawn":
+      return `Withdrew the change to ${text(data["path"])}`;
+    case "proposals_applied": {
+      const written = Array.isArray(data["written"]) ? data["written"].length : 0;
+      return `Applied: wrote ${written} file${written === 1 ? "" : "s"}${data["into"] ? ` into ${text(data["into"])}` : ""}`;
+    }
     case "scheduled_run":
       return "Schedule fired: created a child";
     case "scheduled_run_skipped":

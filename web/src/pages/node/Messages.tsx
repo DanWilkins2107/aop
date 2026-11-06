@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import type { EventView, MessageRow, NodeView, StagesView } from "../../../../src/shared/api.js";
+import { CaptureImprovement } from "../../components/CaptureImprovement.js";
 import { api } from "../../lib/api.js";
 import { messageVisits } from "../../lib/messageVisits.js";
 import { humanize, timeAgo, toTarget } from "../../lib/format.js";
@@ -57,6 +59,16 @@ export function Messages({
 }) {
   const asking = node.stage === "ask_human_question";
   const visits = messageVisits(events, messages);
+  // Improvements come from project work, so an improvement's own messages have no +.
+  const canCapture = node.kind === "work";
+  const [capturing, setCapturing] = useState<string | null>(null);
+  const { hash } = useLocation();
+
+  // "From:" on an improvement links here, to one message.
+  const hasTarget = messages.some((m) => `#m-${m.id}` === hash);
+  useEffect(() => {
+    if (hasTarget) document.getElementById(hash.slice(1))?.scrollIntoView({ block: "center" });
+  }, [hash, hasTarget]);
   return (
     <section className="panel messages" aria-label="Messages">
       <h2>Messages</h2>
@@ -74,14 +86,33 @@ export function Messages({
         >
           <h3 className="visit-stage">{humanize(visit.stage)}</h3>
           {visit.messages.map((message) => (
-            <article key={message.id} className={`message message-${message.author}`}>
+            <article
+              key={message.id}
+              id={`m-${message.id}`}
+              className={`message message-${message.author}${`#m-${message.id}` === hash ? " message-target" : ""}`}
+            >
               <div className="message-meta">
                 <span className="message-author">{humanize(message.author)}</span>
                 <span className="message-context" title={message.created_at}>
                   {timeAgo(message.created_at)}
                 </span>
+                {canCapture ? (
+                  <button
+                    type="button"
+                    className="btn-quiet message-capture"
+                    aria-label="Add an improvement from this message"
+                    title="Add an improvement from this message"
+                    aria-expanded={capturing === message.id}
+                    onClick={() => setCapturing(capturing === message.id ? null : message.id)}
+                  >
+                    +
+                  </button>
+                ) : null}
               </div>
               <div className="message-body">{message.body}</div>
+              {capturing === message.id ? (
+                <CaptureImprovement key={message.id} sourceMessageId={message.id} onClose={() => setCapturing(null)} />
+              ) : null}
             </article>
           ))}
         </section>

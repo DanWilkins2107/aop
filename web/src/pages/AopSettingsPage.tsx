@@ -78,6 +78,18 @@ export function AopSettingsPage() {
             value={settings.stages}
             resolved={settings.stages_path}
           />
+          <Setting
+            name="Improvement stages"
+            about="The pipeline that drafts, reviews and applies improvements to your skills and stage prompts."
+            value={settings.improvement_stages ?? NOT_SET}
+            {...(settings.improvement_stages_path ? { resolved: settings.improvement_stages_path } : {})}
+          />
+          <Setting
+            name="Improvements path"
+            about="The folder improvements may change, along with your stage prompts. Raise PR needs it inside a git repo."
+            value={settings.improvements_path}
+            resolved={settings.improvements_dir}
+          />
         </dl>
       ) : null}
     </div>

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ErrorNotice } from "../components/ErrorNotice.js";
+import { HomeTabs } from "../components/HomeTabs.js";
 import { AddProjectDialog } from "../components/ProjectDialogs.js";
 import { api } from "../lib/api.js";
 import { useLiveData } from "../lib/live.js";
@@ -15,12 +16,13 @@ export function ProjectsPage() {
 
   return (
     <div className="page page-narrow">
-      <div className="projects-head">
-        <h1>Projects</h1>
-        <button type="button" className="btn-small" onClick={() => setAdding(true)}>
-          Add project
-        </button>
-      </div>
+      <HomeTabs
+        action={
+          <button type="button" className="btn-small" onClick={() => setAdding(true)}>
+            Add project
+          </button>
+        }
+      />
       {error ? <ErrorNotice error={error} /> : null}
       {projects?.length === 0 ? (
         <div className="empty">

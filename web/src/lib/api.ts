@@ -2,7 +2,11 @@ import type {
   ConfigView,
   EdgeRow,
   EventView,
+  ImprovementDetail,
+  ImprovementsList,
+  ImprovementView,
   LinkRow,
+  ProposalView,
   MessageRow,
   NodeView,
   ProjectRow,
@@ -48,6 +52,7 @@ async function send<T>(method: string, path: string, body?: unknown): Promise<T>
 
 const nodePath = (id: string) => `/nodes/${encodeURIComponent(id)}`;
 const projectPath = (id: string) => `/projects/${encodeURIComponent(id)}`;
+const improvementPath = (id: string) => `/improvements/${encodeURIComponent(id)}`;
 
 export const api = {
   projects: () => send<ProjectRow[]>("GET", "/projects"),
@@ -86,6 +91,18 @@ export const api = {
     send<EdgeRow>("POST", `${nodePath(sourceId)}/edges`, { target_id: targetId, kind }),
   stopRun: (runId: string) => send<NodeView>("POST", `/runs/${encodeURIComponent(runId)}/stop`),
   removeEdge: (edgeId: string) => send<EdgeRow>("DELETE", `/edges/${encodeURIComponent(edgeId)}`),
+
+  improvements: () => send<ImprovementsList>("GET", "/improvements"),
+  improvement: (id: string) => send<ImprovementDetail>("GET", improvementPath(id)),
+  improvementStages: () => send<StagesView>("GET", "/improvement-stages"),
+  createImprovement: (body: string, sourceMessageId?: string) =>
+    send<ImprovementView>("POST", "/improvements", {
+      body,
+      ...(sourceMessageId !== undefined ? { source_message_id: sourceMessageId } : {}),
+    }),
+  proposals: (id: string) => send<ProposalView[]>("GET", `${improvementPath(id)}/proposals`),
+  saveProposal: (id: string, path: string, content: string) =>
+    send<ProposalView>("PUT", `${improvementPath(id)}/proposals`, { path, content }),
 };
 
 /** The message to show for a failed action. */
