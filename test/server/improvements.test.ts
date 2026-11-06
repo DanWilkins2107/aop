@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../src/server/api.js";
@@ -282,6 +282,19 @@ describe("proposals", () => {
     expect((await propose(node.id, skill(), "late", "human")).status).toBe(409);
   });
 
+  it.runIf(process.platform === "win32")("treat a new file's path in another case as the same file on Windows", async () => {
+    const { node } = await capture({ body: "x" });
+    const typed = join(skills(), "new", "NOTES.md");
+    await propose(node.id, typed, "First.\n");
+    expect((await propose(node.id, join(skills(), "New", "notes.md"), "Second.\n")).body.path).toBe(typed);
+    const listed = (await h.call<ProposalView[]>("GET", `/api/improvements/${node.id}/proposals`)).body;
+    expect(listed.map((p) => [p.path, p.proposed])).toEqual([[typed, "Second.\n"]]);
+
+    const res = await h.call("DELETE", `/api/improvements/${node.id}/proposals`, { path: join(skills(), "NEW", "Notes.md"), actor: "agent" });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect((await h.call<ProposalView[]>("GET", `/api/improvements/${node.id}/proposals`)).body).toEqual([]);
+  });
+
   it("belong only to improvements", async () => {
     const work = await h.create("dev");
     expect((await propose(work.id, skill(), "x")).status).toBe(409);
@@ -331,6 +344,22 @@ describe("applying", () => {
     expect(readFileSync(skill(), "utf8")).toBe("Old skill.\n");
   });
 
+  it("leaves every real file as it was when one of them can't be written", async () => {
+    // A file where the second proposal needs a folder, so only writing it can find the problem.
+    writeFiles(aopHome(), { "skills/zz": "In the way.\n" });
+    const { node } = await capture({ body: "x" });
+    await propose(node.id, skill(), "New.\n");
+    await propose(node.id, join(skills(), "zz", "SKILL.md"), "Blocked.\n");
+    await reviewAndChoose(node.id, "save_locally");
+
+    const res = await apply(node.id);
+    expect(res.status, JSON.stringify(res.body)).toBe(409);
+    expect(readFileSync(skill(), "utf8")).toBe("Old skill.\n");
+    expect(readdirSync(join(skills(), "write-tests"))).toEqual(["SKILL.md"]);
+    const events = (await h.call<{ kind: string }[]>("GET", `/api/nodes/${node.id}/events`)).body;
+    expect(events.map((e) => e.kind)).not.toContain("proposals_applied");
+  });
+
   it("exports into another checkout at raise_pr, skipping files outside the repo", async () => {
     mkdirSync(join(skills(), ".git"));
     const worktree = mkdtempSync(join(aopHome(), "worktree-"));
@@ -350,6 +379,22 @@ describe("applying", () => {
     expect(readFileSync(skill(), "utf8")).toBe("Old skill.\n");
     // The real files are only for save_locally.
     expect((await apply(node.id)).status).toBe(409);
+  });
+
+  it("refuses to follow a link in the other checkout out of it, writing nothing", async () => {
+    mkdirSync(join(skills(), ".git"));
+    const worktree = mkdtempSync(join(aopHome(), "worktree-"));
+    mkdirSync(join(worktree, ".git"));
+    const outside = mkdtempSync(join(aopHome(), "outside-"));
+    // A junction needs no special rights on Windows, and is a plain symlink elsewhere.
+    symlinkSync(outside, join(worktree, "write-tests"), "junction");
+    const { node } = await capture({ body: "x" });
+    await propose(node.id, skill(), "New.\n");
+    await reviewAndChoose(node.id, "raise_pr");
+
+    const res = await apply(node.id, worktree);
+    expect(res.status, JSON.stringify(res.body)).toBe(400);
+    expect(existsSync(join(outside, "SKILL.md"))).toBe(false);
   });
 });
 

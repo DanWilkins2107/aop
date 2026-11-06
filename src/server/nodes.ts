@@ -278,8 +278,8 @@ export function getNode(db: Db, id: string): NodeView {
 }
 
 /**
- * What a write answers with. Every write that answers with a node reads `stages.yaml` before it
- * changes anything and renders with that same graph. So an invalid file refuses the write outright,
+ * What a write answers with. Every write that answers with a node reads the process files before it
+ * changes anything and renders with those same graphs. So an invalid file refuses the write outright,
  * rather than committing it and then failing to answer: a refused request must change nothing,
  * because the change feed only fires on success.
  */
