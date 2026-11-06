@@ -18,7 +18,7 @@ export function getNodeRow(db: Db, id: string): NodeRow {
   return node;
 }
 
-/** Read from disk every time, so edits to `stages.yaml` apply without a restart. */
+/** Read from disk whenever it has changed, so edits to `stages.yaml` apply without a restart. */
 function currentGraph(): StageGraph {
   return loadConfig().graph;
 }

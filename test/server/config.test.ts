@@ -1,11 +1,11 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync, statSync, utimesSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { loadConfig } from "../../src/server/config.js";
+import { loadConfig, withConfigSnapshot } from "../../src/server/config.js";
 import { ConfigError } from "../../src/server/errors.js";
 import { aopHome, dbPath } from "../../src/server/paths.js";
-import { CONFIG_YAML, makeHome, writeFiles, STAGES_YAML } from "./helpers.js";
+import { CONFIG_YAML, makeHome, PROMPTS, writeFiles, STAGES_YAML } from "./helpers.js";
 
 function problemsOf(home: string): string[] {
   try {
@@ -332,5 +332,92 @@ types:
     expect(problemsOf(home).length).toBeGreaterThan(0);
     writeFiles(home, { "stages.yaml": STAGES_YAML });
     expect(problemsOf(home)).toEqual([]);
+  });
+});
+
+describe("config cache", () => {
+  const FILES = ["config.yaml", "stages.yaml", ...PROMPTS.map((p) => `prompts/${p}.md`)];
+  /** Makes files look long settled, as a config nobody has touched today is. */
+  function age(home: string, ...paths: string[]): void {
+    const old = new Date(Date.now() - 60 * 60_000);
+    for (const path of paths) utimesSync(join(home, path), old, old);
+  }
+  const timeout = (minutes: number) => CONFIG_YAML.replace("agent_timeout_minutes: 30", `agent_timeout_minutes: ${minutes}`);
+
+  it("reads the files once while nothing changes", () => {
+    const home = makeHome();
+    age(home, ...FILES);
+    const first = loadConfig(home);
+    expect(loadConfig(home)).toBe(first);
+  });
+
+  it("picks up an edit to stages.yaml straight away, even one of the same size", () => {
+    const home = makeHome();
+    age(home, ...FILES);
+    const first = loadConfig(home);
+    expect(first.graph.types.has("hotfix")).toBe(true);
+    // The same length, so only the modification time tells.
+    writeFiles(home, { "stages.yaml": STAGES_YAML.replaceAll("hotfix", "hotfux") });
+    expect(statSync(join(home, "stages.yaml")).size).toBe(Buffer.byteLength(STAGES_YAML));
+    const second = loadConfig(home);
+    expect(second.graph.types.has("hotfux")).toBe(true);
+    expect(second.graph.types.has("hotfix")).toBe(false);
+  });
+
+  it("picks up an edit with an old timestamp, by its size", () => {
+    const home = makeHome();
+    age(home, ...FILES);
+    expect(problemsOf(home)).toEqual([]);
+    writeFiles(home, { "stages.yaml": "stages: {}\n" });
+    age(home, "stages.yaml");
+    expect(problemsOf(home).length).toBeGreaterThan(0);
+  });
+
+  it("picks up config.yaml edits, and a prompt file going and coming back", () => {
+    const home = makeHome();
+    age(home, ...FILES);
+    expect(loadConfig(home).agent_timeout_minutes).toBe(30);
+    writeFiles(home, { "config.yaml": timeout(45) });
+    expect(loadConfig(home).agent_timeout_minutes).toBe(45);
+    age(home, "config.yaml");
+    expect(loadConfig(home).agent_timeout_minutes).toBe(45);
+    rmSync(join(home, "prompts", "implement.md"));
+    expect(problemsOf(home).join("\n")).toContain("prompt file not found");
+    writeFiles(home, { "prompts/implement.md": "Do implement." });
+    age(home, "prompts/implement.md");
+    expect(problemsOf(home)).toEqual([]);
+  });
+
+  it("keeps an invalid config's problems until the file is fixed", () => {
+    const home = makeHome({ "stages.yaml": "stages: {}\n" });
+    age(home, ...FILES.slice(0, 2));
+    const problems = problemsOf(home);
+    expect(problems.length).toBeGreaterThan(0);
+    expect(problemsOf(home)).toEqual(problems);
+    writeFiles(home, { "stages.yaml": STAGES_YAML });
+    expect(problemsOf(home)).toEqual([]);
+  });
+
+  it("gives an operation one config, even across an await, and the next one the edit", async () => {
+    const home = makeHome();
+    const [before, after] = await withConfigSnapshot(async () => {
+      const first = loadConfig(home);
+      writeFiles(home, { "config.yaml": timeout(45) });
+      await new Promise((wait) => setTimeout(wait, 5));
+      return [first, loadConfig(home)];
+    });
+    expect(after).toBe(before);
+    expect(loadConfig(home).agent_timeout_minutes).toBe(45);
+  });
+
+  it("lets nothing that outlives an operation keep its config", () => {
+    const home = makeHome();
+    let later = () => 0;
+    withConfigSnapshot(() => {
+      loadConfig(home);
+      later = () => loadConfig(home).agent_timeout_minutes;
+    });
+    writeFiles(home, { "config.yaml": timeout(45) });
+    expect(later()).toBe(45);
   });
 });

@@ -1,6 +1,6 @@
 import type { Cron } from "croner";
 import { type ChangeFeed, nodesNotice } from "./changes.js";
-import { loadConfig } from "./config.js";
+import { loadConfig, withConfigSnapshot } from "./config.js";
 import { parseCron } from "./cron.js";
 import type { Db } from "./db.js";
 import { ConfigError } from "./errors.js";
@@ -72,12 +72,14 @@ export class Scheduler {
 
   private wake(): void {
     if (!this.running || !this.db.open) return;
-    try {
-      this.tick();
-    } catch (error) {
-      console.error(error);
-    }
-    this.arm();
+    withConfigSnapshot(() => {
+      try {
+        this.tick();
+      } catch (error) {
+        console.error(error);
+      }
+      this.arm();
+    });
   }
 
   /** Sleeps until the soonest due slot, or the longest sleep. */

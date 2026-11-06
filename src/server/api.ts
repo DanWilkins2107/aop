@@ -17,7 +17,7 @@ import type { Db } from "./db.js";
 import { nodeContext } from "./context.js";
 import { ApiError, badRequest, ConfigError, notFound, refused } from "./errors.js";
 import * as nodes from "./nodes.js";
-import { describeConfig, loadConfig } from "./config.js";
+import { describeConfig, loadConfig, withConfigSnapshot } from "./config.js";
 import type { Orchestrator } from "./orchestrator.js";
 import { describeProcess } from "./process.js";
 import { addProject, deleteProject, getProject, listProjects, updateProject } from "./projects.js";
@@ -141,6 +141,9 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
     return options.orchestrator;
   };
 
+  // One read of the config for the whole request, however many times its code asks.
+  app.use("*", (_c, proceed) => withConfigSnapshot(proceed));
+
   // Keeps other websites out, including through DNS rebinding. Non-browser clients send no Origin.
   app.use("*", async (c, proceed) => {
     const host = c.req.header("host");
@@ -244,7 +247,7 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
     return c.json(deleted);
   });
 
-  // The one process, shared by all projects. Read from disk every time.
+  // The one process, shared by all projects. Read from disk whenever it has changed.
   app.get("/api/stages", (c) => c.json(describeStages(loadConfig().graph)));
   // For the process page, which still answers when the config is invalid, listing the problems.
   app.get("/api/process", (c) => c.json(describeProcess()));

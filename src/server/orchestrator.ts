@@ -7,7 +7,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import type { AgentProcessView, ReapResult } from "../shared/api.js";
 import { headlessCommand, StreamJsonUsage, type OutputFormat } from "./agentOutput.js";
 import { type ChangeFeed, nodesNotice } from "./changes.js";
-import { type AopConfig, loadConfig } from "./config.js";
+import { type AopConfig, loadConfig, withConfigSnapshot } from "./config.js";
 import { buildPrompt } from "./context.js";
 import type { Db } from "./db.js";
 import { ConfigError, refused } from "./errors.js";
@@ -153,8 +153,10 @@ export class Orchestrator {
       this.kicked = false;
       if (!this.running || !this.db.open) return;
       try {
-        this.checkActiveRuns();
-        this.startQueuedNodes();
+        withConfigSnapshot(() => {
+          this.checkActiveRuns();
+          this.startQueuedNodes();
+        });
       } catch (error) {
         logFailure(error);
       }
