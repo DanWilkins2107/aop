@@ -1,8 +1,8 @@
 // Parses and validates `stages.yaml` into a `StageGraph`, and names the built-in stages.
 // What each built-in does is in `nodes.ts`, and `scheduled` in `scheduler.ts`.
 
-import { existsSync, statSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { existsSync, realpathSync, statSync } from "node:fs";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import type { StagesView, Turn } from "../shared/api.js";
 import { parseYamlFile } from "./yamlFile.js";
@@ -126,6 +126,10 @@ export function validateStages(
         const promptPath = resolve(baseDir, stage.data.prompt);
         if (!existsSync(promptPath) || !statSync(promptPath).isFile()) {
           problems.push(`${label}: prompt file not found: ${promptPath}`);
+        } else if (!isInside(baseDir, promptPath)) {
+          // A prompt goes straight to an agent, so a shared process file mustn't be able to point
+          // it at the user's own files, such as keys or credentials.
+          problems.push(`${label}: prompt must be in the stages file's folder: ${stage.data.prompt}`);
         }
         def.prompt = promptPath;
       }
@@ -183,6 +187,12 @@ export function validateStages(
   }
 
   return { graph, problems };
+}
+
+/** Whether `path` is inside `folder`, once symlinks are followed on both. Both must exist. */
+function isInside(folder: string, path: string): boolean {
+  const rel = relative(realpathSync.native(folder), realpathSync.native(path));
+  return rel !== "" && rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
 }
 
 /** What the UI needs to draw a process. Leaves out prompt paths, which are the server's business. */
