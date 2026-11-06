@@ -37,10 +37,10 @@ A human clicks an outcome on the node page:
 1. `web/src/pages/node/MovingOn.tsx` calls `api.next` in `web/src/lib/api.ts`, which posts `/api/nodes/:id/next`.
 2. `api.ts` validates the body with zod. No `actor` means `human`.
 3. `nodes.next` reads `stages.yaml` fresh, checks the outcome, and calls `applyStageChange` in one transaction. That's the only place a stage changes: it updates `nodes`, appends a `stage_changed` event, drops an agent's claim, and marks any running run with `left_via`.
-4. The route returns the new `NodeView`. `toView` derives everything not stored: turn, outcomes, holders, invalidated by a parent.
-5. The write middleware in `api.ts` calls `ChangeFeed.notify()` (`changes.ts`).
-6. Two things are listening:
-   - `/api/events` sends `change` to every open page, and `useLiveData` in `web/src/lib/live.ts` refetches. Events carry no data.
+4. The route returns the new `NodeView`. `toView` derives everything not stored: turn, outcomes, holders, invalidated by a parent. `listNodes` derives the same for a whole project from a few queries, through `holdersIn`, and `test/server/views.test.ts` checks the two agree.
+5. The write middleware in `api.ts` calls `ChangeFeed.notify()` (`changes.ts`) with what the route touched: the node's project and the node, or both ends of an edge. A route that says nothing counts as touching everything.
+6. The feed gathers a burst of notices for 40 ms and hands them on merged. Two things are listening:
+   - `/api/events` sends one `change` per burst to every open page, with the project and node IDs as its data. `useLiveData` in `web/src/lib/live.ts` refetches a page only if the change `affects` it: the graph page its project, the node page its project, plus its own messages, events, edges and links only when the change names the node.
    - The orchestrator's `kick` runs a reconcile: `checkActiveRuns` stops any run whose node moved on, and `startQueuedNodes` launches agents on `startableNodes`.
 
 An agent's `aop next` is the same request from `src/cli/main.ts`, with `actor: agent` and the node from `AOP_NODE_ID`. Nothing calls the orchestrator directly: routes change the database, and the orchestrator makes the running agents match it.

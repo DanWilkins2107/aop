@@ -126,6 +126,8 @@ describe("change events", () => {
     status: number;
     /** Resolves once this many `event:` lines have arrived. */
     events(count: number): Promise<string[]>;
+    /** The data of every `change` event so far. */
+    notices(): unknown[];
     close(): void;
   }
 
@@ -145,6 +147,8 @@ describe("change events", () => {
           resolve({
             status: res.statusCode ?? 0,
             close: () => req.destroy(),
+            notices: () =>
+              [...text.matchAll(/^event: change\r?\ndata: (.*)$/gm)].map((m) => JSON.parse(m[1] ?? "null") as unknown),
             events: async (count) => {
               while (names().length < count) await new Promise<void>((wake) => waiters.push(wake));
               return names();
@@ -179,6 +183,25 @@ describe("change events", () => {
     // The next real change must be the first one the stream sees.
     await post(`/projects/${projectId}/nodes`, { type: "dev", title: "T" });
     expect(await stream.events(2)).toEqual(["ready", "change"]);
+  });
+
+  it("says which project and nodes changed, once for a burst of writes", async () => {
+    const stream = await connect();
+    await stream.events(1);
+    const [first, second] = (await Promise.all([
+      post(`/projects/${projectId}/nodes`, { type: "dev", title: "One" }).then((res) => res.json()),
+      post(`/projects/${projectId}/nodes`, { type: "dev", title: "Two" }).then((res) => res.json()),
+    ])) as NodeView[];
+    expect(await stream.events(2)).toEqual(["ready", "change"]);
+    const [notice] = stream.notices() as { project_ids: string[]; node_ids: string[] }[];
+    expect(notice?.project_ids).toEqual([projectId]);
+    expect([...(notice?.node_ids ?? [])].sort()).toEqual([first!.id, second!.id].sort());
+
+    // A later write is a new burst. An edge changes both ends' own data.
+    await new Promise((wait) => setTimeout(wait, 100));
+    expect((await post(`/nodes/${first!.id}/edges`, { target_id: second!.id, kind: "blocks" })).status).toBe(201);
+    expect(await stream.events(3)).toEqual(["ready", "change", "change"]);
+    expect(stream.notices()[1]).toEqual({ project_ids: [projectId], node_ids: [first!.id, second!.id] });
   });
 
   it("stops listening when the client goes away", async () => {

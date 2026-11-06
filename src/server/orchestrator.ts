@@ -6,7 +6,7 @@ import type { WriteStream } from "node:fs";
 import { setTimeout as delay } from "node:timers/promises";
 import type { AgentProcessView, ReapResult } from "../shared/api.js";
 import { headlessCommand, StreamJsonUsage, type OutputFormat } from "./agentOutput.js";
-import type { ChangeFeed } from "./changes.js";
+import { type ChangeFeed, nodesNotice } from "./changes.js";
 import { type AopConfig, loadConfig } from "./config.js";
 import { buildPrompt } from "./context.js";
 import type { Db } from "./db.js";
@@ -125,7 +125,7 @@ export class Orchestrator {
     await this.reap();
     this.releaseStrandedClaims();
     this.running = true;
-    this.unsubscribe = this.changes.subscribe(() => this.kick());
+    this.unsubscribe = this.changes.subscribeBursts(() => this.kick());
     this.timers = [
       setInterval(() => this.kick(), this.reconcileIntervalMs),
       setInterval(() => void this.reap().catch(logFailure), this.reapIntervalMs),
@@ -231,7 +231,7 @@ export class Orchestrator {
       return;
     }
     this.track(run, child, command, prompt, config.agent_timeout_minutes, format);
-    this.changes.notify();
+    this.changes.notify(nodesNotice(this.db, node.id));
   }
 
   private failBeforeLaunch(run: RunRow, reason: string): void {
@@ -240,7 +240,7 @@ export class Orchestrator {
       closeRun(this.db, run, "failed", null);
       markFailed(this.db, getNodeRow(this.db, run.node_id), { reason, runId: run.id });
     })();
-    this.changes.notify();
+    this.changes.notify(nodesNotice(this.db, run.node_id));
   }
 
   private track(
@@ -403,7 +403,7 @@ export class Orchestrator {
         }
       }
     })();
-    this.changes.notify();
+    this.changes.notify(nodesNotice(this.db, active.nodeId));
   }
 
   /**

@@ -1,13 +1,16 @@
-// Live data. One event stream per page, and `useLiveData` refetches whenever the server says something changed.
+// Live data. One event stream per page, and `useLiveData` refetches whenever the server says something
+// it shows has changed.
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ApiFailure } from "./api.js";
+import { type ChangeNotice, mergeNotices, readNotice } from "./changes.js";
 
 type Status = "connecting" | "live" | "offline";
 
 const REFETCH_DELAY_MS = 80;
 
-const changeListeners = new Set<() => void>();
+/** Each hears a change notice, or null on connecting, when anything may have changed. */
+const changeListeners = new Set<(notice: ChangeNotice | null) => void>();
 const statusListeners = new Set<() => void>();
 let status: Status = "connecting";
 let source: EventSource | null = null;
@@ -21,14 +24,15 @@ function setStatus(next: Status): void {
 function ensureConnected(): void {
   if (source) return;
   source = new EventSource("/api/events");
-  const fire = () => {
-    for (const listener of changeListeners) listener();
+  const fire = (notice: ChangeNotice | null) => {
+    for (const listener of changeListeners) listener(notice);
   };
+  // Changes may have been missed while away, so every page reloads in full.
   source.addEventListener("ready", () => {
     setStatus("live");
-    fire();
+    fire(null);
   });
-  source.addEventListener("change", fire);
+  source.addEventListener("change", (event) => fire(readNotice((event as MessageEvent).data)));
   source.onerror = () => setStatus("offline");
 }
 
@@ -49,6 +53,20 @@ export interface Loaded<T> {
   reload: () => Promise<void>;
 }
 
+/** Passed to a loader on a refetch: the data on screen, and what changed since it was loaded. */
+export interface Refresh<T> {
+  previous: T;
+  change: ChangeNotice;
+}
+
+export interface LiveOptions<T> {
+  /**
+   * Whether a change concerns this page, given the data on screen (null before the first load). Without
+   * it, every change does.
+   */
+  affects?: (notice: ChangeNotice, data: T | null) => boolean;
+}
+
 /**
  * An invalid `stages.yaml` must replace the page, because old data would hide that nothing works.
  * So must a project or node that has been deleted.
@@ -57,10 +75,15 @@ const dropsOldData = (error: unknown) =>
   error instanceof ApiFailure && (error.code === "config_invalid" || error.code === "not_found");
 
 /**
- * Loads data, then loads it again whenever the server reports a change or the window regains
- * focus (which also picks up edits to `stages.yaml`). Old data stays on screen during a refetch.
+ * Loads data, then loads it again whenever the server reports a change that `affects` it, or the window
+ * regains focus (which also picks up edits to `stages.yaml`). Old data stays on screen during a refetch.
+ * A loader can use the `Refresh` it's given to read again only what the change could have touched.
  */
-export function useLiveData<T>(load: () => Promise<T>, key: string): Loaded<T> {
+export function useLiveData<T>(
+  load: (refresh: Refresh<T> | null) => Promise<T>,
+  key: string,
+  options: LiveOptions<T> = {},
+): Loaded<T> {
   const [state, setState] = useState<{ key: string; data: T | null; error: unknown }>({
     key,
     data: null,
@@ -69,39 +92,72 @@ export function useLiveData<T>(load: () => Promise<T>, key: string): Loaded<T> {
   const latest = useRef(0);
   const loader = useRef(load);
   loader.current = load;
+  const affects = useRef(options.affects);
+  affects.current = options.affects;
+  const current = state.key === key ? state : { data: null, error: null };
+  const shown = useRef<T | null>(null);
+  shown.current = current.data;
 
-  const reload = useCallback(async () => {
-    const request = ++latest.current;
-    try {
-      const data = await loader.current();
-      if (request === latest.current) setState({ key, data, error: null });
-    } catch (error) {
-      if (request !== latest.current) return;
-      setState((previous) => ({
-        key,
-        data: previous.key === key && !dropsOldData(error) ? previous.data : null,
-        error,
-      }));
-    }
-  }, [key]);
+  // Every change the data on screen hasn't caught up with, null meaning a full load. A refetch that's
+  // overtaken by another hands what it was asked for on, so the later one can't skip it.
+  const owed = useRef<{ change: ChangeNotice | null } | null>(null);
+
+  const fetchData = useCallback(
+    async (change: ChangeNotice | null) => {
+      const request = ++latest.current;
+      const before = owed.current;
+      const asked =
+        before === null ? change : before.change === null || change === null ? null : mergeNotices(before.change, change);
+      owed.current = { change: asked };
+      const previous = shown.current;
+      try {
+        const data = await loader.current(asked !== null && previous !== null ? { previous, change: asked } : null);
+        if (request === latest.current) {
+          owed.current = null;
+          setState({ key, data, error: null });
+        }
+      } catch (error) {
+        if (request !== latest.current) return;
+        setState((before) => ({
+          key,
+          data: before.key === key && !dropsOldData(error) ? before.data : null,
+          error,
+        }));
+      }
+    },
+    [key],
+  );
+  const reload = useCallback(() => fetchData(null), [fetchData]);
 
   useEffect(() => {
-    void reload();
+    void fetchData(null);
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const soon = () => {
+    // What changed since the refetch was scheduled, or null for a full reload. Null when none is.
+    let pending: { change: ChangeNotice | null } | null = null;
+    const soon = (notice: ChangeNotice | null) => {
+      const before = pending;
+      const change =
+        before === null ? notice : before.change === null || notice === null ? null : mergeNotices(before.change, notice);
+      pending = { change };
       clearTimeout(timer);
-      timer = setTimeout(() => void reload(), REFETCH_DELAY_MS);
+      timer = setTimeout(() => {
+        pending = null;
+        void fetchData(change);
+      }, REFETCH_DELAY_MS);
     };
+    const onChange = (notice: ChangeNotice | null) => {
+      if (notice === null || affects.current === undefined || affects.current(notice, shown.current)) soon(notice);
+    };
+    const onFocus = () => soon(null);
     ensureConnected();
-    changeListeners.add(soon);
-    window.addEventListener("focus", soon);
+    changeListeners.add(onChange);
+    window.addEventListener("focus", onFocus);
     return () => {
       clearTimeout(timer);
-      changeListeners.delete(soon);
-      window.removeEventListener("focus", soon);
+      changeListeners.delete(onChange);
+      window.removeEventListener("focus", onFocus);
     };
-  }, [reload]);
+  }, [fetchData]);
 
-  const current = state.key === key ? state : { data: null, error: null };
   return { data: current.data, error: current.error, reload };
 }

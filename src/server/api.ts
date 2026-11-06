@@ -12,7 +12,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { z } from "zod";
 import type { LogTail } from "../shared/api.js";
 import { readableLines } from "./agentOutput.js";
-import { ChangeFeed } from "./changes.js";
+import { ChangeFeed, EVERYTHING, nodesNotice, type ChangeNotice } from "./changes.js";
 import type { Db } from "./db.js";
 import { nodeContext } from "./context.js";
 import { ApiError, badRequest, ConfigError, notFound, refused } from "./errors.js";
@@ -155,11 +155,30 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
     return;
   });
 
+  /** What each write touched, which its route records for the change notice. None recorded means anything. */
+  const touched = new WeakMap<Request, ChangeNotice>();
+  const isWrite = (c: Context) => !["GET", "HEAD"].includes(c.req.method) && c.res.status < 400;
+
   // Every write comes through here, and refused ones change nothing.
   app.use("/api/*", async (c, proceed) => {
     await proceed();
-    if (!["GET", "HEAD"].includes(c.req.method) && c.res.status < 400) changes.notify();
+    if (isWrite(c)) changes.notify(touched.get(c.req.raw) ?? EVERYTHING);
   });
+
+  const touchedNodes = (...nodeIds: string[]): ChangeNotice => nodesNotice(db, ...nodeIds);
+  /** A project's own row: its nodes' messages, events, links and edges are untouched unless `nodeIds` says. */
+  const touchedProject = (projectId: string, nodeIds: string[] | null = []): ChangeNotice => ({
+    project_ids: [projectId],
+    node_ids: nodeIds,
+  });
+
+  // A write to a node touches that node, unless its route recorded more.
+  const nodeWrite = async (c: Context, proceed: () => Promise<void>) => {
+    await proceed();
+    if (isWrite(c) && !touched.has(c.req.raw)) touched.set(c.req.raw, touchedNodes(c.req.param("id") ?? ""));
+  };
+  app.use("/api/nodes/:id", nodeWrite);
+  app.use("/api/nodes/:id/*", nodeWrite);
 
   app.onError((error, c) => {
     if (error instanceof ApiError) return errorResponse(c, error.status, error.code, error.message, error.details);
@@ -177,11 +196,13 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
 
   app.get("/api/health", (c) => c.json({ ok: true }));
 
-  // Fires whenever data changes. `ready` lets a client catch up on anything missed while away.
+  // Fires once per burst of changes, saying where. `ready` lets a client catch up on anything missed while away.
   app.get("/api/events", (c) =>
     streamSSE(c, async (stream) => {
       await new Promise<void>((finished) => {
-        const unsubscribe = changes.subscribe(() => void stream.writeSSE({ event: "change", data: "{}" }));
+        const unsubscribe = changes.subscribeBursts(
+          (notice) => void stream.writeSSE({ event: "change", data: JSON.stringify(notice) }),
+        );
         const keepAlive = setInterval(() => void stream.write(": keep-alive\n\n"), STREAM_KEEP_ALIVE_MS);
         stream.onAbort(() => {
           unsubscribe();
@@ -196,11 +217,15 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
   // Projects
   app.get("/api/projects", (c) => c.json(listProjects(db)));
   app.post("/api/projects", async (c) => {
-    return c.json(addProject(db, await readBody(c, addProjectBody)), 201);
+    const project = addProject(db, await readBody(c, addProjectBody));
+    touched.set(c.req.raw, touchedProject(project.id));
+    return c.json(project, 201);
   });
-  app.patch("/api/projects/:id", async (c) =>
-    c.json(updateProject(db, c.req.param("id"), await readBody(c, updateProjectBody))),
-  );
+  app.patch("/api/projects/:id", async (c) => {
+    const project = updateProject(db, c.req.param("id"), await readBody(c, updateProjectBody));
+    touched.set(c.req.raw, touchedProject(project.id));
+    return c.json(project);
+  });
   app.delete("/api/projects/:id", async (c) => {
     const { id } = getProject(db, c.req.param("id"));
     // Agents stop first, and none can start on the project until it has gone.
@@ -215,6 +240,7 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
     }
     // Only once the project has gone, and its agents have stopped and closed their logs.
     deleteLogs(logs);
+    touched.set(c.req.raw, touchedProject(id, null));
     return c.json(deleted);
   });
 
@@ -239,7 +265,10 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
   app.post("/api/projects/:id/nodes", async (c) => {
     const project = getProject(db, c.req.param("id"));
     const body = await readBody(c, createNodeBody);
-    return c.json(nodes.createNode(db, project.id, body), 201);
+    const node = nodes.createNode(db, project.id, body);
+    // A parent gets an edge, and an event saying so.
+    touched.set(c.req.raw, touchedNodes(node.id, ...(body.parent_id === undefined ? [] : [body.parent_id])));
+    return c.json(node, 201);
   });
   app.get("/api/nodes/:id", (c) => c.json(nodes.getNode(db, c.req.param("id"))));
   app.patch("/api/nodes/:id", async (c) =>
@@ -306,12 +335,16 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
   app.get("/api/nodes/:id/edges", (c) =>
     c.json(nodes.listEdges(db, c.req.param("id"), c.req.query("include_removed") === "true")),
   );
-  app.post("/api/nodes/:id/edges", async (c) =>
-    c.json(nodes.addEdge(db, c.req.param("id"), await readBody(c, edgeBody)), 201),
-  );
-  app.delete("/api/edges/:id", async (c) =>
-    c.json(nodes.removeEdge(db, c.req.param("id"), (await readBody(c, actorBody, true)).actor)),
-  );
+  app.post("/api/nodes/:id/edges", async (c) => {
+    const edge = nodes.addEdge(db, c.req.param("id"), await readBody(c, edgeBody));
+    touched.set(c.req.raw, touchedNodes(edge.source_id, edge.target_id));
+    return c.json(edge, 201);
+  });
+  app.delete("/api/edges/:id", async (c) => {
+    const edge = nodes.removeEdge(db, c.req.param("id"), (await readBody(c, actorBody, true)).actor);
+    touched.set(c.req.raw, touchedNodes(edge.source_id, edge.target_id));
+    return c.json(edge);
+  });
 
   // Events
   app.get("/api/nodes/:id/events", (c) => c.json(nodes.listEvents(db, c.req.param("id"))));
@@ -327,7 +360,11 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
   // Agents
   app.get("/api/agents", async (c) => c.json(await orchestrator().listAgents()));
   app.post("/api/agents/reap", async (c) => c.json(await orchestrator().reap()));
-  app.post("/api/runs/:id/stop", async (c) => c.json(await orchestrator().stopRun(c.req.param("id"))));
+  app.post("/api/runs/:id/stop", async (c) => {
+    const node = await orchestrator().stopRun(c.req.param("id"));
+    touched.set(c.req.raw, touchedNodes(node.id));
+    return c.json(node);
+  });
   app.get("/api/nodes/:id/runs", (c) => {
     const node = nodes.getNodeRow(db, c.req.param("id"));
     return c.json(listRuns(db, node.id));

@@ -174,3 +174,13 @@ export interface ProcessView {
   problems: string[];
   process: StagesView | null;
 }
+
+/**
+ * The data of a `change` event on `/api/events`: what a burst of writes touched. `project_ids` null
+ * means anything may have changed. `node_ids` lists the nodes whose own messages, events, links or
+ * edges changed, and null means any node in those projects may have.
+ */
+export interface ChangeNotice {
+  project_ids: string[] | null;
+  node_ids: string[] | null;
+}

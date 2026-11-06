@@ -1,5 +1,5 @@
 import type { Cron } from "croner";
-import type { ChangeFeed } from "./changes.js";
+import { type ChangeFeed, nodesNotice } from "./changes.js";
 import { loadConfig } from "./config.js";
 import { parseCron } from "./cron.js";
 import type { Db } from "./db.js";
@@ -56,7 +56,7 @@ export class Scheduler {
     if (this.running) return;
     this.running = true;
     // A new or moved node may be due sooner than the current timer.
-    this.unsubscribe = this.changes.subscribe(() => {
+    this.unsubscribe = this.changes.subscribeBursts(() => {
       if (!this.ticking) this.arm();
     });
     this.wake();
@@ -119,7 +119,10 @@ export class Scheduler {
     } finally {
       this.ticking = false;
     }
-    if (results.length > 0) this.changes.notify();
+    if (results.length > 0) {
+      const touched = results.flatMap((result) => (result.fired ? [result.nodeId, result.childId] : [result.nodeId]));
+      this.changes.notify(nodesNotice(this.db, ...touched));
+    }
     return results;
   }
 

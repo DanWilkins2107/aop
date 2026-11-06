@@ -98,14 +98,119 @@ export function holdersOf(db: Db, nodeId: string): Holder[] {
   return [...rows, ...ancestors];
 }
 
+interface LatestRun {
+  id: string;
+  status: string;
+}
+
+/** A node as `holdersIn` needs it: what the holder rules read. */
+type HolderState = Pick<NodeRow, "id" | "stage" | "return_stage">;
+
+/**
+ * `holdersOf` for many nodes at once, in two or three queries instead of several per node, with the
+ * same holders in the same order. `nodes` must be every node of `projectIds`, in rowid order: an edge
+ * never leaves its project, so that's everywhere a holder can be. Returns each node's holders.
+ */
+function holdersIn(db: Db, nodes: HolderState[], projectIds: string[]): Map<string, Holder[]> {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const order = new Map(nodes.map((node, index) => [node.id, index]));
+  const edges = db
+    .prepare(
+      `SELECT e.source_id, e.target_id, e.kind FROM edges e JOIN nodes n ON n.id = e.target_id
+        WHERE n.project_id IN (SELECT value FROM json_each(?)) AND e.removed_at IS NULL
+          AND e.kind IN ('blocks', 'subtask')
+        ORDER BY e.rowid`,
+    )
+    .all(JSON.stringify(projectIds)) as { source_id: string; target_id: string; kind: "blocks" | "subtask" }[];
+
+  const incoming = new Map<string, { source: HolderState; kind: "blocks" | "subtask" }[]>();
+  const parents = new Map<string, string[]>();
+  for (const edge of edges) {
+    const source = byId.get(edge.source_id);
+    if (source === undefined) continue;
+    let into = incoming.get(edge.target_id);
+    if (into === undefined) incoming.set(edge.target_id, (into = []));
+    into.push({ source, kind: edge.kind });
+    if (edge.kind === "subtask") {
+      let above = parents.get(edge.target_id);
+      if (above === undefined) parents.set(edge.target_id, (above = []));
+      above.push(edge.source_id);
+    }
+  }
+
+  // A parent externally blocked from a question or failure still holds its children if that came from splitting.
+  const blockedParents = new Set<string>();
+  for (const edge of edges) {
+    const source = byId.get(edge.source_id);
+    if (
+      edge.kind === "subtask" &&
+      source?.stage === "externally_blocked" &&
+      (source.return_stage === "ask_human_question" || source.return_stage === "failed")
+    ) {
+      blockedParents.add(source.id);
+    }
+  }
+  const blockedFromSplit = new Set<string>();
+  if (blockedParents.size > 0) {
+    const rows = db
+      .prepare(
+        `SELECT node_id, json_extract(data, '$.from_return_stage') AS from_return_stage FROM events
+          WHERE rowid IN (SELECT MAX(rowid) FROM events
+                           WHERE node_id IN (SELECT value FROM json_each(?)) AND kind = 'stage_changed'
+                             AND json_extract(data, '$.via') = 'block'
+                           GROUP BY node_id)`,
+      )
+      .all(JSON.stringify([...blockedParents])) as { node_id: string; from_return_stage: unknown }[];
+    for (const row of rows) if (row.from_return_stage === "splitting") blockedFromSplit.add(row.node_id);
+  }
+  const splits = (node: HolderState) =>
+    node.stage === "splitting" || node.return_stage === "splitting" || blockedFromSplit.has(node.id);
+
+  const anyInvalidated = nodes.some((node) => node.stage === "invalidated");
+  // In rowid order, as the per-node query returns them.
+  const invalidatedAncestorsOf = (id: string): string[] => {
+    if (!anyInvalidated) return [];
+    const seen = new Set<string>();
+    const queue = [...(parents.get(id) ?? [])];
+    for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
+      if (seen.has(next)) continue;
+      seen.add(next);
+      queue.push(...(parents.get(next) ?? []));
+    }
+    return [...seen]
+      .filter((ancestor) => ancestor !== id && byId.get(ancestor)?.stage === "invalidated")
+      .sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
+  };
+
+  const result = new Map<string, Holder[]>();
+  for (const node of nodes) {
+    const into = incoming.get(node.id) ?? [];
+    const blocks = into
+      .filter(({ source, kind }) => kind === "blocks" && source.stage !== "done")
+      .map(({ source }): Holder => ({ id: source.id, stage: source.stage, via: "blocks" }));
+    const split = into
+      .filter(({ source, kind }) => kind === "subtask" && splits(source))
+      .map(({ source }): Holder => ({ id: source.id, stage: source.stage, via: "split" }));
+    const ancestors = invalidatedAncestorsOf(node.id).map(
+      (ancestor): Holder => ({ id: ancestor, stage: "invalidated", via: "invalidated_parent" }),
+    );
+    result.set(node.id, [...blocks, ...split, ...ancestors]);
+  }
+  return result;
+}
+
 function toView(db: Db, graph: StageGraph, node: NodeRow): NodeView {
-  const holders = holdersOf(db, node.id);
+  const latestRun = db.prepare("SELECT id, status FROM runs WHERE node_id = ? ORDER BY rowid DESC LIMIT 1").get(node.id) as
+    | LatestRun
+    | undefined;
+  return deriveView(graph, node, holdersOf(db, node.id), latestRun);
+}
+
+/** What a view adds to its row, given the holders and latest run that `toView` or `listNodes` read. */
+function deriveView(graph: StageGraph, node: NodeRow, holders: Holder[], latestRun: LatestRun | undefined): NodeView {
   const holdersVia = (via: Holder["via"]) => holders.filter((holder) => holder.via === via).map((holder) => holder.id);
   const invalidatedParents = holdersVia("invalidated_parent");
   const heldBy = holdersVia("split");
-  const latestRun = db.prepare("SELECT id, status FROM runs WHERE node_id = ? ORDER BY rowid DESC LIMIT 1").get(node.id) as
-    | { id: string; status: string }
-    | undefined;
   return {
     ...node,
     stage_exists: stageIsLive(graph, node.type, node.stage),
@@ -125,10 +230,21 @@ export function getNode(db: Db, id: string): NodeView {
   return toView(db, currentGraph(), getNodeRow(db, id));
 }
 
+/** Every node in a project, each as `getNode` shows it, from a handful of queries for the whole project. */
 export function listNodes(db: Db, projectId: string): NodeView[] {
   const graph = currentGraph();
   const rows = db.prepare("SELECT * FROM nodes WHERE project_id = ? ORDER BY rowid").all(projectId) as NodeRow[];
-  return rows.map((node) => toView(db, graph, node));
+  if (rows.length === 0) return [];
+  const holders = holdersIn(db, rows, [projectId]);
+  const runs = db
+    .prepare(
+      `SELECT node_id, id, status FROM runs
+        WHERE rowid IN (SELECT MAX(r.rowid) FROM runs r JOIN nodes n ON n.id = r.node_id
+                         WHERE n.project_id = ? GROUP BY r.node_id)`,
+    )
+    .all(projectId) as (LatestRun & { node_id: string })[];
+  const latestRuns = new Map(runs.map((run) => [run.node_id, { id: run.id, status: run.status }]));
+  return rows.map((node) => deriveView(graph, node, holders.get(node.id) ?? [], latestRuns.get(node.id)));
 }
 
 function assertValidCron(cron: string): void {
@@ -301,7 +417,15 @@ export function startableNodes(db: Db, graph: StageGraph): NodeRow[] {
         ORDER BY rowid`,
     )
     .all() as NodeRow[];
-  return rows.filter((node) => turnOf(graph, node) === "agent" && holdersOf(db, node.id).length === 0);
+  const agentTurn = rows.filter((node) => turnOf(graph, node) === "agent");
+  if (agentTurn.length === 0) return [];
+  // A holder can be any node in the project, claimed or not, so read every node of those projects.
+  const projectIds = [...new Set(agentTurn.map((node) => node.project_id))];
+  const everyNode = db
+    .prepare("SELECT id, stage, return_stage FROM nodes WHERE project_id IN (SELECT value FROM json_each(?)) ORDER BY rowid")
+    .all(JSON.stringify(projectIds)) as HolderState[];
+  const holders = holdersIn(db, everyNode, projectIds);
+  return agentTurn.filter((node) => (holders.get(node.id) ?? []).length === 0);
 }
 
 /**
