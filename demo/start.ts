@@ -8,9 +8,8 @@ import { openDb } from "../src/server/db.js";
 import { aopHome } from "../src/server/paths.js";
 import { addProject } from "../src/server/projects.js";
 import { HOSTNAME, startServer } from "../src/server/server.js";
+import { DEFAULT_PORT } from "../src/shared/port.js";
 import { seed } from "./seed.js";
-
-const DEFAULT_PORT = 4317;
 
 // Set before anything reads it. The state lasts as long as this process, so each start is fresh.
 const home = mkdtempSync(join(tmpdir(), "aop-demo-"));

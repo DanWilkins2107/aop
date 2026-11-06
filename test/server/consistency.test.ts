@@ -12,23 +12,16 @@ import { isAlive, waitGone } from "../../src/server/osProcesses.js";
 import { addProject } from "../../src/server/projects.js";
 import { beginRun } from "../../src/server/runs.js";
 import type { NodeView } from "../../src/shared/api.js";
-import { directives, fakeConfig, nodeArgs, settle, world } from "./agents.helpers.js";
+import { aopInProcess } from "../cli/cli.helpers.js";
+import { directives, fakeConfig, settle, world } from "./agents.helpers.js";
 import { harness, makeHome, makeRepo, STAGES_YAML } from "./helpers.js";
 
 const TIMEOUT = { timeout: 90_000 };
 
-/** The real CLI in its own process, with exactly this environment on top of the test's. */
-function aop(args: string[], env: Record<string, string>): Promise<{ code: number | null; output: string }> {
-  const { AOP_NODE_ID: _node, AOP_RUN_ID: _run, ...outer } = process.env;
-  const child = spawn(process.execPath, [...nodeArgs("src/cli/main.ts"), ...args], {
-    env: { ...outer, ...env },
-    stdio: ["ignore", "pipe", "pipe"],
-    windowsHide: true,
-  });
-  let output = "";
-  child.stdout.on("data", (chunk: Buffer) => (output += chunk.toString()));
-  child.stderr.on("data", (chunk: Buffer) => (output += chunk.toString()));
-  return new Promise((done) => child.once("close", (code) => done({ code, output })));
+/** The CLI in-process, with exactly this environment on top of the test's. */
+async function aop(args: string[], env: Record<string, string>): Promise<{ code: number | null; output: string }> {
+  const res = await aopInProcess(args, env);
+  return { code: res.code, output: res.stdout + res.stderr };
 }
 
 describe("an invalid stages.yaml", () => {

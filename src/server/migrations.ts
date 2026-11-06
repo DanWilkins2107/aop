@@ -1,12 +1,16 @@
-/** Numbered migrations. Never edit one that has shipped: add the next number instead. */
-export const migrations: readonly {
-  version: number;
+interface Step {
   sql: string;
   /** For rebuilding a table that others point at, which foreign keys would otherwise refuse. */
   foreignKeysOff?: boolean;
-}[] = [
+}
+
+/**
+ * The schema's history, oldest first. A step's version is its place in this list, from 1, and is what
+ * the database's `user_version` records. So only ever append: never edit, remove or reorder a step
+ * that has shipped. Two branches that each add one get different versions however they merge.
+ */
+const steps: readonly Step[] = [
   {
-    version: 1,
     sql: `
 CREATE TABLE projects (
   id         TEXT PRIMARY KEY NOT NULL,
@@ -119,7 +123,6 @@ CREATE UNIQUE INDEX runs_one_running_per_node ON runs(node_id) WHERE status = 'r
 `,
   },
   {
-    version: 2,
     // SQLite can't add a table CHECK without rebuilding the table, which the foreign keys into
     // `nodes` make awkward. A column's CHECK can read other columns, so the new column carries the
     // return_stage rule for the two stages the first migration left out.
@@ -131,7 +134,6 @@ ALTER TABLE nodes ADD COLUMN claimed_by TEXT
 `,
   },
   {
-    version: 3,
     // Deleting a whole project is the one exception to these guards. The function is registered on
     // each connection by `openDb` and only `allowProjectDeletion` can make it return anything, so
     // no SQL can open the guards: to plain SQL they still refuse every row.
@@ -153,7 +155,6 @@ BEGIN SELECT RAISE(ABORT, 'events are append-only'); END;
 `,
   },
   {
-    version: 4,
     // A project needs only a name. UNIQUE still applies to paths that are set, because SQLite treats
     // each NULL as distinct. Copying the rowid keeps the order projects are listed in.
     foreignKeysOff: true,
@@ -171,7 +172,6 @@ ALTER TABLE projects_new RENAME TO projects;
 `,
   },
   {
-    version: 5,
     // How a run ended, and when its node moved on while it was still running. `agent_processes` is
     // every process AOP may need to find again. It has no foreign keys because it has to outlive the
     // run and the node: a process whose project was deleted is exactly what `aop reap` looks for.
@@ -196,7 +196,6 @@ CREATE TABLE agent_processes (
 `,
   },
   {
-    version: 6,
     // Triggers keep these in step with every write, whichever code makes it. They key on rowid, which
     // only VACUUM could renumber, and AOP never runs that. The WHEN clause matters: every stage change
     // writes invalidation_reason, usually with the value it already had.
@@ -234,7 +233,6 @@ BEGIN DELETE FROM messages_fts WHERE rowid = OLD.rowid; END;
 `,
   },
   {
-    version: 7,
     // What each run used, for the node page's runs table. Added columns keep every existing run, which
     // reads as plain text with no usage. A timeout stays a `failed` end, so it gets a flag of its own
     // rather than a rebuild of the end_reason CHECK.
@@ -251,7 +249,6 @@ ALTER TABLE runs ADD COLUMN timed_out INTEGER NOT NULL DEFAULT 0
 `,
   },
   {
-    version: 8,
     // Lookups made for every node on every read of a project, and on every scheduler pass, which
     // otherwise scan the whole table: a node's latest run, and a scheduled node's latest child.
     sql: `
@@ -260,3 +257,9 @@ CREATE INDEX nodes_spawned_by ON nodes(spawned_by) WHERE spawned_by IS NOT NULL;
 `,
   },
 ];
+
+export interface Migration extends Step {
+  version: number;
+}
+
+export const migrations: readonly Migration[] = steps.map((step, index) => ({ ...step, version: index + 1 }));

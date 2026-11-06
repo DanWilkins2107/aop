@@ -1,10 +1,10 @@
-import { spawnSync } from "node:child_process";
 import { cpSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../../src/server/config.js";
 import { aopHome } from "../../src/server/paths.js";
-import { nodeArgs, ROOT } from "../server/agents.helpers.js";
+import { ROOT } from "../server/agents.helpers.js";
+import { aopInProcess } from "../cli/cli.helpers.js";
 
 const DEFAULTS = join(ROOT, "defaults");
 const PLUGIN = join(ROOT, "plugin");
@@ -62,8 +62,10 @@ describe("shipped defaults", () => {
   });
 });
 
+// The CLI's own help, which lists every command's usage.
+const help = await aopInProcess(["help"]);
+
 describe("plugin and prompts", () => {
-  const help = spawnSync(process.execPath, [...nodeArgs("src/cli/main.ts"), "help"], { encoding: "utf8" });
   const usage = help.stdout
     .split("\n")
     .map((line) => line.trim())
@@ -72,7 +74,7 @@ describe("plugin and prompts", () => {
   for (const line of usage) for (const key of commandKeys(tokensOf(line))) known.set(key, [...(known.get(key) ?? []), line]);
 
   it("reads the CLI's usage", () => {
-    expect(help.status).toBe(0);
+    expect(help.code).toBe(0);
     expect(known.size).toBeGreaterThan(10);
   });
 

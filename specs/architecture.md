@@ -7,7 +7,7 @@ Where each part of the specs lives in the code, and how one request moves throug
 |---|---|
 | `src/server/` | The one server process: HTTP API, state machine, agents, scheduler, SQLite |
 | `src/shared/` | What the server and clients share, so nothing that needs Node. `api.ts`: types for everything the API returns and accepts, and plain constants such as `RUN_ID_HEADER`. `requests.ts`: the zod schemas for request bodies, which the browser only imports types from. `paths.ts`: every API path, for the router and the clients. `builtInStages.ts`: the built-in stage names and sets |
-| `src/cli/` | `aop`: `main.ts` turns commands into HTTP calls, `init.ts` is `aop init` |
+| `src/cli/` | `aop`: `cli.ts` turns commands into HTTP calls, `main.ts` runs it on the real process, `init.ts` is `aop init` |
 | `web/src/` | The React app. `pages/` per route, `components/` shared UI, `lib/` data and maths, `styles/` one stylesheet per part of the UI |
 | `plugin/` | The skills agents load. See [plugin.md](plugin.md) |
 | `defaults/` | The `config.yaml`, `stages.yaml` and prompts `aop init` copies into `~/.aop` |
@@ -41,7 +41,7 @@ A human clicks an outcome on the node page:
    - `/api/events` sends `change` to every open page, and `useLiveData` in `web/src/lib/live.ts` refetches. Events carry no data.
    - The orchestrator's `kick` runs a reconcile: `checkActiveRuns` stops any run whose node moved on, and `startQueuedNodes` launches agents on `startableNodes`.
 
-An agent's `aop next` is the same request from `src/cli/main.ts`, with `actor: agent`, the node from `AOP_NODE_ID`, and its run from `AOP_RUN_ID` in the `RUN_ID_HEADER` header, which the server checks so that a process left over from an ended run can't act. Nothing calls the orchestrator directly: routes change the database, and the orchestrator makes the running agents match it.
+An agent's `aop next` is the same request from `src/cli/cli.ts`, with `actor: agent`, the node from `AOP_NODE_ID`, and its run from `AOP_RUN_ID` in the `RUN_ID_HEADER` header, which the server checks so that a process left over from an ended run can't act. Nothing calls the orchestrator directly: routes change the database, and the orchestrator makes the running agents match it.
 
 ## Stages and nodes in the code
 - **Process:** `stages.ts` turns `stages.yaml` into a `StageGraph`: a pool of `StageDef`s and a `TypeDef` per type, each mapping stage to outcome to target. `config.ts` loads it on every call, so edits apply without a restart.
@@ -56,4 +56,4 @@ An agent's `aop next` is the same request from `src/cli/main.ts`, with `actor: a
 - Stage colours and emphasis are in `lib/stageStyle.ts`, and the colour maths in `lib/color.ts`.
 
 ## Data
-`migrations.ts` is the schema, as numbered SQL. [server.md](server.md) has the tables. Constraints and triggers enforce the rules there, so the database refuses a bad row whichever code writes it.
+`migrations.ts` is the schema, as a list of SQL steps whose versions are their places in it. [server.md](server.md) has the tables. Constraints and triggers enforce the rules there, so the database refuses a bad row whichever code writes it.
