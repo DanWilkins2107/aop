@@ -566,6 +566,14 @@ describe("history text", () => {
     expect(line("claim_taken", { holder: "human" })).toBe("Claimed by a human");
     expect(line("claim_released", { holder: "agent" })).toBe("Claim released by an agent run");
   });
+
+  it("still renders kinds, vias and reasons from older databases that this version doesn't know", () => {
+    expect(line("label_added", { label: "x" })).toBe("Label added");
+    expect(line("stage_changed", { via: "teleport", from_stage: "alpha", to_stage: "beta" })).toBe("Alpha → Beta");
+    expect(line("run_ended", { run_id: "12345678-aaaa", reason: "vanished" })).toBe("Agent run 12345678 ended: vanished");
+    expect(line("scheduled_run_skipped", { reason: "too_busy" })).toBe("Scheduled run skipped: Too busy");
+    expect(line("toString", {})).toBe(humanize("toString"));
+  });
 });
 
 describe("waiting and hidden cards", () => {

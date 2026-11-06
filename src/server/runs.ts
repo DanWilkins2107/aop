@@ -1,13 +1,13 @@
 // Reads and writes the `runs` and `agent_processes` tables. The orchestrator decides when.
 
-import type { RunView } from "../shared/api.js";
+import type { EventDataByKind, RunEndReason, RunView } from "../shared/api.js";
 import type { OutputFormat, Usage } from "./agentOutput.js";
 import type { Db } from "./db.js";
 import type { NodeRow } from "./nodes.js";
 import type { Identity } from "./processes.js";
 import { appendEvent, now, type Actor } from "./records.js";
 
-export type EndReason = "reported" | "failed" | "stopped" | "held" | "shutdown";
+export type EndReason = RunEndReason;
 
 export interface RunRow {
   id: string;
@@ -92,7 +92,11 @@ export function closeRun(db: Db, run: RunRow, reason: EndReason, exitCode: numbe
 }
 
 /** Gives up an agent's claim, leaving the node where it is. */
-export function releaseAgentClaim(db: Db, nodeId: string, via: string): void {
+export function releaseAgentClaim(
+  db: Db,
+  nodeId: string,
+  via: NonNullable<EventDataByKind["claim_released"]["via"]>,
+): void {
   const released = db.prepare("UPDATE nodes SET claimed_by = NULL WHERE id = ? AND claimed_by = 'agent'").run(nodeId);
   if (released.changes > 0) appendEvent(db, nodeId, "system", "claim_released", { holder: "agent", via });
 }
