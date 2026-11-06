@@ -65,21 +65,21 @@ copilot plugin install /path/to/aop/plugin
 6. At `second_human_review`, merge the PR and click **Merged**. The node is `done`.
 
 ### Taking over a session
-To work on a node yourself, take its ID from the node page's address (`/n/<id>`) and run:
+To work on a node yourself, click **Copy ID** next to its title on the node page (it's also in the address, `/n/<id>`) and run:
 ```
 aop steer <node>
 ```
-This claims the node and opens your agent session command in the project's folder, with the node set so `aop` commands work inside it. Use `--no-sandbox` to use your out of sandbox command instead. It's refused while an agent run holds the node, so stop the run first. Your claim stays until you click **Release claim** on the node page, and no agent starts on the node until then.
+This claims the node and opens your agent session command in the project's folder, with the node set so `aop` commands work inside it. Use `--no-sandbox` to use your out of sandbox command instead. It's refused while an agent run holds the node, so stop the run first. Your claim stays until you click **Release claim** on the node page or run `aop release <node>`, and no agent starts on the node until then.
 
 ### Seeing and stopping agents
 - `aop ps` lists every running agent and its node.
-- To stop one, open its node and click **Stop run** under **Details**. The node stays on its stage, claimed by you. Release the claim to start the stage again.
+- To stop one, open its node and click **Stop run** under **Details**, or run `aop stop <node>`. The node stays on its stage, claimed by you. Release the claim to start the stage again.
 - To stop working on a node for good, use **Invalidate or block** at the top of the node page. Invalidating stops agents on it and everything under it.
 - Stopping `aop serve` with Ctrl+C stops every agent and queues their nodes. They start again on the next `aop serve`.
 - `aop reap` kills any agent process that shouldn't still be running.
 
 ### Logs and settings
-- Each run's log is in `~/.aop/logs`. The node page shows the latest run's log, and a failed node links to its full log. Click **Retry** to run the stage again.
+- Each run's log is in `~/.aop/logs`. The node page shows the latest run's log, and a failed node links to its full log. `aop logs <node> [--lines N]` prints the end of the latest run's log in the terminal. Click **Retry** to run the stage again.
 - The **AOP settings** page shows your config. It's read-only: edit `~/.aop/config.yaml` to change it. Changes apply to the next agent that starts.
 
 ## Customising your process
