@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import type { EventView, NodeView, TypeView } from "../../src/shared/api.js";
 import { contrast, parseHex, readableText, visibleOn } from "../../web/src/lib/color.js";
-import { CARD_HEIGHT, CARD_WIDTH, fittedViewport, graphView, layoutGraph, smoothPath } from "../../web/src/lib/layout.js";
+import { CARD_HEIGHT, CARD_WIDTH, fittedViewport, graphView, inReadingOrder, layoutGraph, smoothPath } from "../../web/src/lib/layout.js";
 import { originalStage, stageDrawing } from "../../web/src/lib/stageGraph.js";
 import { describeEvent } from "../../web/src/lib/eventText.js";
 import {
@@ -15,7 +15,7 @@ import {
   runEnding,
   stageOptionGroups,
 } from "../../web/src/lib/format.js";
-import { cardKind, cardLook, cardType, isInvalidated, lookOf, stageColor, stageLabel } from "../../web/src/lib/stageStyle.js";
+import { cardKind, cardLook, cardName, cardType, isInvalidated, lookOf, stageColor, stageLabel } from "../../web/src/lib/stageStyle.js";
 
 const COLORS = ["#ffc107", "#cddc39", "#000000", "#ffffff", "#123", "#4263eb", "#e91e63", "#808080", "#12b886aa"];
 
@@ -311,6 +311,17 @@ describe("graph layout", () => {
     source_id,
     target_id,
     kind,
+  });
+
+  it("orders cards for Tab row by row, left to right, whatever order they were made in", () => {
+    const positions = new Map([
+      ["late-root", { x: 400, y: 0 }],
+      ["child", { x: 0, y: 120 }],
+      ["root", { x: 0, y: 0.4 }],
+      ["sibling", { x: 260, y: 120 }],
+    ]);
+    const nodes = ["child", "sibling", "late-root", "root"].map((id) => ({ id }));
+    expect(inReadingOrder(nodes, positions).map((node) => node.id)).toEqual(["root", "late-root", "child", "sibling"]);
   });
 
   it("puts parents above children and blockers above what they block", () => {
@@ -615,6 +626,20 @@ describe("waiting and hidden cards", () => {
     expect(isInvalidated(nodeAt("beta", { invalidated_by_parent: true }))).toBe(true);
     expect(isInvalidated(nodeAt("beta"))).toBe(false);
     expect(isInvalidated(nodeAt("done"))).toBe(false);
+  });
+
+  it("names a card's link with what its colour says, so a screen reader hears it too", () => {
+    expect(cardName(nodeAt("pr_review", { title: "Fix login" }))).toBe("Fix login. PR review, Flow");
+    expect(cardName(nodeAt("pr_review", { title: "Fix login", turn: "human" }))).toBe("Fix login. PR review, Flow. Needs a human");
+    expect(cardName(nodeAt("failed", { title: "Fix login", turn: "human" }))).toBe("Fix login. Failed. Needs a human");
+    expect(cardName(nodeAt("gone", { stage_exists: false }))).toBe("T. Gone: stage gone, Flow. Needs a human");
+    expect(cardName(nodeAt("beta", { turn: "human", blocked_by: ["x"] }))).toBe("T. Beta, Flow. Blocked");
+    expect(cardName(nodeAt("beta", { held: true }))).toBe("T. Beta, Flow. Held until a split finishes");
+    expect(cardName(nodeAt("beta", { invalidated_by_parent: true, blocked_by: ["x"] }))).toBe("T. Invalidated by parent, Flow");
+    expect(cardName(nodeAt("beta", { claimed_by: "agent", run_id: "r1234567890" }))).toBe(
+      "T. Beta, Flow. Claimed by agent run r1234567890",
+    );
+    expect(cardName(nodeAt("beta", { turn: "human", claimed_by: "human" }))).toBe("T. Beta, Flow. Needs a human. Claimed by human");
   });
 });
 
