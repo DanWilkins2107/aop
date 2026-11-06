@@ -1,11 +1,11 @@
-import { spawn } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { EdgeRow, EventView, LinkRow, MessageRow } from "../../src/shared/api.js";
-import { directives, fakeCommand, nodeArgs, settle, world, type World } from "./agents.helpers.js";
+import { directives, fakeCommand, settle, world, type World } from "./agents.helpers.js";
+import { aopInProcess } from "./cli.helpers.js";
 
 const TIMEOUT = { timeout: 90_000 };
 let w: World;
@@ -14,26 +14,10 @@ beforeEach(async () => {
   // A one-line script as the interactive session, so `steer` launches no agent tool.
   w = await world({ config: `out_of_sandbox_command: ${JSON.stringify(fakeCommand + " --out")}\n` });
 });
-interface Result {
-  code: number | null;
-  stdout: string;
-  stderr: string;
-}
 
-/** The real CLI, in its own process, as an agent on a node would run it. */
-function aop(args: string[], options: { node?: string; env?: Record<string, string> } = {}): Promise<Result> {
-  const { AOP_NODE_ID: _unused, ...env } = process.env;
-  const child = spawn(process.execPath, [...nodeArgs("src/cli/main.ts"), ...args], {
-    env: { ...env, AOP_URL: w.url, ...(options.node ? { AOP_NODE_ID: options.node } : {}), ...options.env },
-    stdio: ["ignore", "pipe", "pipe"],
-    windowsHide: true,
-  });
-  let stdout = "";
-  let stderr = "";
-  child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
-  child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
-  return new Promise((done) => child.once("close", (code) => done({ code, stdout, stderr })));
-}
+/** The CLI in-process, as an agent on a node would run it. `cli.smoke.test.ts` runs the real entry point. */
+const aop = (args: string[], options: { node?: string; env?: Record<string, string> } = {}) =>
+  aopInProcess(args, { AOP_URL: w.url, ...(options.node ? { AOP_NODE_ID: options.node } : {}), ...options.env });
 
 const parked = (extra: Record<string, unknown> = {}) => w.create("", { type: "dev", stage: "pr_review", ...extra });
 const eventsOf = async (id: string) => (await w.call<EventView[]>("GET", `/nodes/${id}/events`)).body;

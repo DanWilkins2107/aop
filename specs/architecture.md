@@ -43,7 +43,7 @@ A human clicks an outcome on the node page:
    - `/api/events` sends `change` to every open page, and `useLiveData` in `web/src/lib/live.ts` refetches. Events carry no data.
    - The orchestrator's `kick` runs a reconcile: `checkActiveRuns` stops any run whose node moved on, and `startQueuedNodes` launches agents on `startableNodes`.
 
-An agent's `aop next` is the same request from `src/cli/main.ts`, with `actor: agent` and the node from `AOP_NODE_ID`. Nothing calls the orchestrator directly: routes change the database, and the orchestrator makes the running agents match it.
+An agent's `aop next` is the same request from `src/cli/cli.ts`, with `actor: agent` and the node from `AOP_NODE_ID`. Nothing calls the orchestrator directly: routes change the database, and the orchestrator makes the running agents match it.
 
 ## Stages and nodes in the code
 - **Process:** `stages.ts` turns `stages.yaml` into a `StageGraph`: a pool of `StageDef`s and a `TypeDef` per type, each mapping stage to outcome to target. `config.ts` loads it on every call, so edits apply without a restart.
