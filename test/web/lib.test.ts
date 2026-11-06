@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import type { EventView, NodeView, TypeView } from "../../src/shared/api.js";
 import { contrast, parseHex, readableText, visibleOn } from "../../web/src/lib/color.js";
-import { CARD_HEIGHT, CARD_WIDTH, fittedViewport, graphView, layoutGraph, smoothPath } from "../../web/src/lib/layout.js";
+import { CARD_HEIGHT, CARD_WIDTH, fittedViewport, graphView, inReadingOrder, layoutGraph, smoothPath } from "../../web/src/lib/layout.js";
 import { originalStage, stageDrawing } from "../../web/src/lib/stageGraph.js";
 import { describeEvent } from "../../web/src/lib/eventText.js";
 import {
@@ -311,6 +311,17 @@ describe("graph layout", () => {
     source_id,
     target_id,
     kind,
+  });
+
+  it("orders cards for Tab row by row, left to right, whatever order they were made in", () => {
+    const positions = new Map([
+      ["late-root", { x: 400, y: 0 }],
+      ["child", { x: 0, y: 120 }],
+      ["root", { x: 0, y: 0.4 }],
+      ["sibling", { x: 260, y: 120 }],
+    ]);
+    const nodes = ["child", "sibling", "late-root", "root"].map((id) => ({ id }));
+    expect(inReadingOrder(nodes, positions).map((node) => node.id)).toEqual(["root", "late-root", "child", "sibling"]);
   });
 
   it("puts parents above children and blockers above what they block", () => {

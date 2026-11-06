@@ -130,6 +130,20 @@ export function graphView<N extends { id: string; created_at: string }, E extend
   return { nodes, edges, positions, routes };
 }
 
+/**
+ * The cards in the order Tab visits them: row by row from the top, left to right in each row, the
+ * way the graph reads. Without it, focus follows creation order and jumps about the canvas.
+ */
+export function inReadingOrder<N extends { id: string }>(nodes: N[], positions: Map<string, Point>): N[] {
+  const at = (node: N) => positions.get(node.id) ?? { x: 0, y: 0 };
+  return [...nodes].sort((a, b) => {
+    const [pa, pb] = [at(a), at(b)];
+    // Cards in one row share a rank, but allow for rounding.
+    if (Math.abs(pa.y - pb.y) >= CARD_HEIGHT / 2) return pa.y - pb.y;
+    return pa.x - pb.x;
+  });
+}
+
 export interface FitOptions {
   /** Kept clear on the left and right, and on the top and bottom. */
   padding: Point;

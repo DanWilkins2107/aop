@@ -6,7 +6,7 @@ import { NewNodeDialog } from "../components/NewNodeDialog.js";
 import { RoutedEdge, type RoutedEdgeType } from "../components/RoutedEdge.js";
 import { StageCard, type StageCardNode } from "../components/StageCard.js";
 import { loadProjectGraph } from "../lib/api.js";
-import { CARD_HEIGHT, CARD_WIDTH, fittedViewport, graphView, type FitOptions } from "../lib/layout.js";
+import { CARD_HEIGHT, CARD_WIDTH, fittedViewport, graphView, inReadingOrder, type FitOptions } from "../lib/layout.js";
 import { useLiveData } from "../lib/live.js";
 import { isInvalidated } from "../lib/stageStyle.js";
 
@@ -101,7 +101,7 @@ export function GraphPage() {
       (n) => hideInvalidated && isInvalidated(n),
     );
     const stageOf = new Map(nodes.map((n) => [n.id, n.stage]));
-    const flowNodes: StageCardNode[] = nodes.map((node) => ({
+    const flowNodes: StageCardNode[] = inReadingOrder(nodes, positions).map((node) => ({
       id: node.id,
       type: "stage",
       position: positions.get(node.id) ?? { x: 0, y: 0 },
@@ -186,6 +186,10 @@ export function GraphPage() {
             nodesDraggable={false}
             nodesConnectable={false}
             elementsSelectable={false}
+            // Each card's own link is its one stop for Tab. React Flow's would add an unnamed stop per
+            // card and per edge, described with select and move keys that do nothing here.
+            nodesFocusable={false}
+            edgesFocusable={false}
             proOptions={{ hideAttribution: true }}
           >
             <Controls showInteractive={false} position="bottom-left" fitViewOptions={FIT_ALL} />
