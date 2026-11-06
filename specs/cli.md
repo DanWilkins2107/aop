@@ -11,8 +11,8 @@ aop next <outcome>
 aop ask "..."
 aop message "..." [--node <id>]
 aop link pr|ticket <url>
-aop search <query>
-aop node create --title ... [--body ...] [--parent ...] [--type ... | --stage ...]
+aop search <query> [--all]
+aop node create --title ... [--body ...] [--parent ...] [--project ...] [--type ... | --stage ...]
 aop node edit [<id>] [--title ...] [--body ...]
 aop edge add blocks <from> <to>
 aop edge remove blocks <from> <to>
@@ -31,6 +31,8 @@ aop project add <path>
 aop serve
 aop steer <node>                # runs agent_session_command
 aop steer <node> --no-sandbox   # runs out_of_sandbox_command
+aop ps                          # lists agent processes, see orchestrator.md
+aop reap                        # kills agent processes that shouldn't exist
 ```
 
 - `aop steer` opens your own session on a node, in the project's path or `open_from`, with `AOP_NODE_ID` set so the commands above work. It claims the node for you, and errors if an agent run holds it. See claims in [orchestrator.md](orchestrator.md).
