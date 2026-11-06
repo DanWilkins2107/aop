@@ -245,6 +245,17 @@ export function listProposals(db: Db, nodeId: string, config: AopConfig = loadCo
   }));
 }
 
+/**
+ * The path a proposal for `path` is stored under. Windows ignores case in paths, and a new file
+ * keeps the case it was typed in, so one file could otherwise have two proposals that each write it.
+ * A path matching an existing proposal but for case keeps that proposal's spelling.
+ */
+function storedPath(db: Db, nodeId: string, path: string): string {
+  if (process.platform !== "win32") return path;
+  const wanted = path.toLowerCase();
+  return proposalRows(db, nodeId).find((row) => row.path.toLowerCase() === wanted)?.path ?? path;
+}
+
 /** An improvement whose proposals can change now, by this actor. */
 function assertCanPropose(db: Db, nodeId: string, actor: Actor): NodeRow {
   const node = getNodeRow(db, nodeId);
@@ -264,9 +275,10 @@ export function propose(
   config: AopConfig = loadConfig(),
 ): ProposalView {
   const actor = input.actor === "agent" ? "agent" : "human";
-  const path = allowedTarget(config, input.path);
-  db.transaction(() => {
+  const target = allowedTarget(config, input.path);
+  const path = db.transaction(() => {
     assertCanPropose(db, nodeId, input.actor);
+    const path = storedPath(db, nodeId, target);
     const at = now();
     db.prepare(
       `INSERT INTO proposals (id, created_at, node_id, path, content, updated_at, updated_by)
@@ -275,6 +287,7 @@ export function propose(
          updated_by = excluded.updated_by`,
     ).run(newId(), at, nodeId, path, input.content, at, actor);
     appendEvent(db, nodeId, input.actor, "proposal_saved", { path });
+    return path;
   })();
   const saved = listProposals(db, nodeId, config).find((proposal) => proposal.path === path);
   if (!saved) throw new Error(`Proposal for ${path} wasn't saved`);
@@ -283,12 +296,13 @@ export function propose(
 
 export function withdraw(db: Db, nodeId: string, input: { path: string; actor: Actor }): { path: string } {
   if (!isAbsolute(input.path)) throw notAllowed(`The path must be a full path: ${input.path}`);
-  const path = canonicalPath(input.path);
-  db.transaction(() => {
+  const path = db.transaction(() => {
     assertCanPropose(db, nodeId, input.actor);
+    const path = storedPath(db, nodeId, canonicalPath(input.path));
     const removed = db.prepare("DELETE FROM proposals WHERE node_id = ? AND path = ?").run(nodeId, path);
     if (removed.changes === 0) throw notFound(`No proposal for ${path}`);
     appendEvent(db, nodeId, input.actor, "proposal_withdrawn", { path });
+    return path;
   })();
   return { path };
 }

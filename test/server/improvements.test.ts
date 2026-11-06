@@ -280,6 +280,19 @@ describe("proposals", () => {
     expect((await propose(node.id, skill(), "late", "human")).status).toBe(409);
   });
 
+  it.runIf(process.platform === "win32")("treat a new file's path in another case as the same file on Windows", async () => {
+    const { node } = await capture({ body: "x" });
+    const typed = join(skills(), "new", "NOTES.md");
+    await propose(node.id, typed, "First.\n");
+    expect((await propose(node.id, join(skills(), "New", "notes.md"), "Second.\n")).body.path).toBe(typed);
+    const listed = (await h.call<ProposalView[]>("GET", `/api/improvements/${node.id}/proposals`)).body;
+    expect(listed.map((p) => [p.path, p.proposed])).toEqual([[typed, "Second.\n"]]);
+
+    const res = await h.call("DELETE", `/api/improvements/${node.id}/proposals`, { path: join(skills(), "NEW", "Notes.md"), actor: "agent" });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect((await h.call<ProposalView[]>("GET", `/api/improvements/${node.id}/proposals`)).body).toEqual([]);
+  });
+
   it("belong only to improvements", async () => {
     const work = await h.create("dev");
     expect((await propose(work.id, skill(), "x")).status).toBe(409);
