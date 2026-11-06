@@ -255,6 +255,17 @@ describe("open_from", () => {
     expect(statSync(join(box.root, "new", "code")).isDirectory()).toBe(true);
     expect(loadConfig(box.home).open_from).toBe(join(box.root, "new", "code"));
   });
+
+  it("isn't created when a later setting stops setup", async () => {
+    const box = sandbox();
+    const flagged = await init(box, ["--yes", "--agent-session-command", "c", "--open-from", "new", "--create-open-from", "--stages", "nope.yaml"]);
+    expect(flagged.code).toBe(1);
+    expect(existsSync(join(box.root, "new"))).toBe(false);
+
+    const asked = await init(box, ["--agent-session-command", "c", "--out-of-sandbox-command", ""], ["asked", "y"]);
+    expect(asked.err).toContain("Nothing was written");
+    expect(existsSync(join(box.root, "asked"))).toBe(false);
+  });
 });
 
 describe("asking", () => {
