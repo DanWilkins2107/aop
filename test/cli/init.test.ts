@@ -297,6 +297,7 @@ describe("asking", () => {
     expect(config.agent_timeout_minutes).toBe(60);
     expect(existsSync(join(box.root, "missing"))).toBe(false);
     expect(result.out).toContain(`/plugin install aop@aop`);
+    expect(result.out).toContain("--permission-mode auto");
     expect(result.out).toContain(`copilot plugin install ${join(ROOT, "plugin")}`);
   });
 
