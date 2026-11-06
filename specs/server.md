@@ -9,7 +9,7 @@ One TypeScript Node process per machine serves the API and the built Vite app, o
 - A node on a stage that no longer exists in `stages.yaml` is flagged for a human to move.
 
 ## Schema
-Every table has `id TEXT PRIMARY KEY` and `created_at TEXT NOT NULL`. All foreign keys are `NOT NULL`, with deletes restricted.
+Every table has `id TEXT PRIMARY KEY` and `created_at TEXT NOT NULL`. All foreign keys are `NOT NULL` except `spawned_by`, with deletes restricted.
 
 | Table | Columns and constraints |
 |---|---|
@@ -19,7 +19,8 @@ Every table has `id TEXT PRIMARY KEY` and `created_at TEXT NOT NULL`. All foreig
 | `links` | `node_id` FK; `kind` CHECK in `ticket`, `pr`; `url` NOT NULL, must start `http://` or `https://`; UNIQUE on node and url |
 | `messages` | `node_id` FK; `stage` NOT NULL; `author` CHECK in `human`, `agent`, `system`; `body` NOT NULL, not empty |
 | `events` | `node_id` FK; `actor` CHECK in `human`, `agent`, `system`; `kind` NOT NULL; `data` JSON NOT NULL. Append-only: triggers reject UPDATE and DELETE |
-| `runs` | `node_id` FK; `stage` NOT NULL; `status` CHECK in `running`, `exited`; `pid` nullable; `exit_code` nullable; `log_path` NOT NULL; `ended_at` nullable; only one `running` row per node (partial UNIQUE index) |
+| `runs` | `node_id` FK; `stage` NOT NULL; `status` CHECK in `running`, `exited`; `pid` nullable; `exit_code` nullable; `log_path` NOT NULL; `ended_at` nullable; `left_via`, `left_actor`, `left_at` nullable, set when the node leaves the stage while the run is still going; `end_reason` nullable, CHECK in `reported`, `failed`, `stopped`, `held`, `shutdown`; only one `running` row per node (partial UNIQUE index) |
+| `agent_processes` | `node_id` NOT NULL, with no foreign key, because the row must outlive its run and node until the process is known to be gone; `pid` NOT NULL, CHECK > 0; `process_start` nullable; `children` nullable JSON; `command` NOT NULL. `id` is the run's ID |
 
 `type` and `stage` are plain text because they come from config. Nodes and messages are never deleted, except when their whole project is deleted.
 
