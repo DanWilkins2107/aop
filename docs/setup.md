@@ -18,7 +18,7 @@ Then run `aop init` once to set up aop on your machine. This creates a `.aop` fo
 
 It asks for:
 1. **Agent session command** (required). What AOP runs to start an agent, such as `claude`. AOP adds `-p` and sends the prompt on stdin. AOP doesn't ship a sandbox, so point this at your own sandboxed wrapper before letting agents run unattended. Agents run headless, so they can't ask you to approve commands or edits, and anything not already allowed is refused. Run them in Claude Code's auto mode, or an equivalent permission setting: add `--permission-mode auto` to this command, or set `"defaultMode": "auto"` under `permissions` in `~/.claude/settings.json`. Set it there rather than in a repo. AOP adds no permission flags itself.
-2. **Out of sandbox command** (optional). Only used by `aop steer <node> --no-sandbox`. Leave it blank if you don't sandbox.
+2. **Out of sandbox command** (optional). Sometimes you may want to run an AOP-driven session outside a sandbox yourself. Only used by `aop steer <node> --no-sandbox`. Leave it blank if you don't sandbox.
 3. **Open from.** Where sessions start for projects with no path. Defaults to `~/code`, and offers to create it.
 4. **Agent timeout.** Minutes before a running agent is stopped and its node goes to `failed`. Defaults to 60.
 5. **Process.** Use the default process, or give the path to your own `stages.yaml`.
