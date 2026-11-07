@@ -99,7 +99,7 @@ describe("aop init with flags", () => {
     expect(config.openFromPath).toBe(box.code);
     expect(config.agent_timeout_minutes).toBe(30);
     expect(config.stagesPath).toBe(join(box.home, "stages.yaml"));
-    expect([...config.graph.types.keys()]).toEqual(["triage", "dev", "reports"]);
+    expect([...config.graph.types.keys()]).toEqual(["triage", "dev", "decisions"]);
     expect(readdirSync(join(box.home, "prompts")).sort()).toEqual(readdirSync(join(ROOT, "defaults", "prompts")).sort());
 
     const text = readFileSync(join(box.home, "config.yaml"), "utf8");

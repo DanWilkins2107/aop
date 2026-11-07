@@ -264,7 +264,7 @@ describe("proposals", () => {
       "skills/prompts/awaiting_agent_breakdown.md": "a",
       "skills/prompts/split_approved.md": "b",
       "skills/prompts/implement.md": "c",
-      "skills/prompts/generate_report.md": "d",
+      "skills/prompts/awaiting_agent_clarification.md": "d",
     });
     const { node } = await capture({ body: "x" });
     expect((await propose(node.id, join(skills(), "stages.yaml"), "evil")).status).toBe(400);

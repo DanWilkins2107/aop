@@ -22,8 +22,9 @@ export function NewNodeDialog({
   const [type, setType] = useState(stages.start);
   const { busy, error, run } = useAction();
 
-  // A node enters at its type's own start.
+  // A node enters at its type's own start. Types starting at scheduled aren't offered for now.
   const start = findType(stages, type)?.start;
+  const types = stages.types.filter((option) => option.start !== "scheduled");
 
   async function create() {
     await run(async () => onCreated(await api.createNode(projectId, { type, title: title.trim(), body })));
@@ -50,7 +51,7 @@ export function NewNodeDialog({
       <label>
         Starts in
         <select value={type} onChange={(e) => setType(e.target.value)} aria-label="Starts in">
-          {stages.types.map((option) => (
+          {types.map((option) => (
             <option key={option.name} value={option.name}>
               {humanize(option.name)}
               {option.name === stages.start ? " (default)" : ""}
@@ -61,7 +62,6 @@ export function NewNodeDialog({
       {start ? (
         <p className="field-hint">
           Type {humanize(type)}, starting at {humanize(start)}.
-          {start === "scheduled" ? " Set its schedule on the node's page." : ""}
         </p>
       ) : null}
     </Dialog>
