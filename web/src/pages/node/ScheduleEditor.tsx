@@ -47,7 +47,7 @@ function Editor({ node, reload }: { node: NodeView; reload: () => Promise<void> 
               <button
                 key={day}
                 type="button"
-                className="btn-small day-toggle"
+                className="day-toggle"
                 aria-pressed={days.includes(day)}
                 aria-label={long}
                 onClick={() => toggle(day)}
@@ -60,12 +60,11 @@ function Editor({ node, reload }: { node: NodeView; reload: () => Promise<void> 
         {days.length === 0 ? <p className="field-hint">Pick at least one day.</p> : null}
         {!fitsPicker ? <p className="field-hint">Saving replaces the cron above.</p> : null}
         <div className="action-row">
-          <button type="submit" className="btn-small" disabled={busy || !valid || unchanged}>
+          <button type="submit" disabled={busy || !valid || unchanged}>
             Save schedule
           </button>
           <button
             type="button"
-            className="btn-small"
             disabled={busy || node.cron === null}
             onClick={() => void run(() => api.setSchedule(node.id, null))}
           >

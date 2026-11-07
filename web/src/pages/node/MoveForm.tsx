@@ -55,7 +55,7 @@ export function MoveForm({
             </optgroup>
           ))}
         </select>
-        <button type="submit" className="btn-small" disabled={busy || !parsed}>
+        <button type="submit" disabled={busy || !parsed}>
           Move
         </button>
       </form>

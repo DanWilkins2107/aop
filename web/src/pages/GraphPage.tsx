@@ -150,7 +150,7 @@ export function GraphPage() {
           <Link to={`/p/${projectId}/settings`} className="quiet-link">
             Settings
           </Link>
-          <button type="button" className="btn-small" disabled={!data} onClick={() => setCreating(true)}>
+          <button type="button" disabled={!data} onClick={() => setCreating(true)}>
             New node
           </button>
         </div>

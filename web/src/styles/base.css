@@ -79,7 +79,8 @@ code {
 button {
   font: inherit;
   display: inline-block;
-  padding: 5px 12px;
+  padding: 3px 10px;
+  font-size: 13px;
   border: 1px solid var(--control);
   border-radius: 6px;
   background: var(--surface);
@@ -99,10 +100,6 @@ button:disabled {
   outline-offset: 1px;
 }
 
-.btn-small {
-  padding: 3px 10px;
-  font-size: 13px;
-}
 .btn-primary {
   background: var(--accent);
   border-color: var(--accent);

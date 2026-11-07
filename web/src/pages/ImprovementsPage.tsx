@@ -38,7 +38,7 @@ export function ImprovementsPage() {
       <HomeTabs
         action={
           list?.enabled ? (
-            <button type="button" className="btn-small" onClick={() => setAdding(true)} disabled={adding}>
+            <button type="button" onClick={() => setAdding(true)} disabled={adding}>
               New improvement
             </button>
           ) : null

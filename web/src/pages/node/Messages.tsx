@@ -32,7 +32,7 @@ function MessageBox({ node, asking, reload }: { node: NodeView; asking: boolean;
     >
       <textarea rows={asking ? 3 : 2} value={body} onChange={(e) => setBody(e.target.value)} placeholder={label} aria-label={label} aria-describedby={describedBy} />
       <div className="action-row">
-        <button type="submit" className="btn-small" disabled={busy || body.trim() === ""}>
+        <button type="submit" disabled={busy || body.trim() === ""}>
           {asking ? toTarget("Answer", node.return_stage) : "Send"}
         </button>
       </div>

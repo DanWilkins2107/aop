@@ -27,10 +27,10 @@ export function CaptureImprovement({
       <div className="capture" role="group" aria-label="Improvement created">
         <p className="action-text">Improvement created. An agent is drafting it.</p>
         <div className="action-row">
-          <button type="button" className="btn-small" onClick={() => void navigate(`/n/${created.node.id}`)}>
+          <button type="button" onClick={() => void navigate(`/n/${created.node.id}`)}>
             Go to improvement
           </button>
-          <button type="button" className="btn-small" onClick={onClose}>
+          <button type="button" onClick={onClose}>
             Close
           </button>
         </div>
@@ -63,7 +63,7 @@ export function CaptureImprovement({
         }}
       />
       <div className="action-row">
-        <button type="submit" className="btn-small" disabled={busy || text.trim() === ""}>
+        <button type="submit" disabled={busy || text.trim() === ""}>
           Confirm
         </button>
         <button type="button" className="btn-quiet" disabled={busy} onClick={onClose}>

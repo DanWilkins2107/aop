@@ -38,7 +38,7 @@ function SingleAction({
     <div>
       {text ? <p className="action-text">{text}</p> : null}
       <div className="action-row">
-        <button type="button" className="btn-small" disabled={busy} onClick={() => void run(action)}>
+        <button type="button" disabled={busy} onClick={() => void run(action)}>
           {label}
         </button>
       </div>
@@ -58,7 +58,6 @@ function Outcomes({ node, reload }: { node: NodeView; reload: Reload }) {
           <button
             key={outcome}
             type="button"
-            className="btn-small"
             disabled={busy}
             onClick={() => void run(() => api.next(node.id, outcome))}
           >

@@ -18,7 +18,7 @@ export function ProjectsPage() {
     <div className="page page-narrow">
       <HomeTabs
         action={
-          <button type="button" className="btn-small" onClick={() => setAdding(true)}>
+          <button type="button" onClick={() => setAdding(true)}>
             Add project
           </button>
         }

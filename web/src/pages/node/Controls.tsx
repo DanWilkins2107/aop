@@ -35,7 +35,7 @@ function ReasonButton({
   const { busy, error, run } = useAction(reload);
   return (
     <>
-      <button type="button" className="btn-small" onClick={() => setOpen(true)}>
+      <button type="button" onClick={() => setOpen(true)}>
         {label}
       </button>
       {open ? (
@@ -131,7 +131,7 @@ export function NodeControls({ node, stages, reload }: { node: NodeView; stages:
           </div>
         </Part>
       ) : null}
-      <Part title="Claim" status={node.claimed_by ?? "none"} defaultOpen>
+      <Part title="Claim">
         <ClaimControls node={node} reload={reload} />
       </Part>
     </>
