@@ -63,7 +63,7 @@ export function createNode(
   if (kind === "improvement" && graphs.improvement === null) {
     throw refused("Improvements are off: config.yaml has no improvement_stages");
   }
-  const graph = graphFor(graphs, kind);
+  const graph = graphFor(graphs, { kind, project_id: projectId });
   const { type, stage } = resolveStart(graph, input);
 
   const id = newId();
@@ -279,7 +279,7 @@ export function next(
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
-    const graph = graphFor(graphs, node.kind);
+    const graph = graphFor(graphs, node);
     if (input.actor === "agent" || input.runId !== undefined) assertRunStillOnNode(db, nodeId, input.runId);
     if (node.stage === "scheduled") {
       throw refused("Can't call next on a scheduled node: it stays there and creates children when it fires");
@@ -351,7 +351,7 @@ export function move(
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
-    const graph = graphFor(graphs, node.kind);
+    const graph = graphFor(graphs, node);
     const type = resolveStageType(graph, node.type, input.stage, input.type);
     assertCanEnter(db, node, input.stage);
     applyStageChange(db, node, {
@@ -369,7 +369,7 @@ export function ask(db: Db, nodeId: string, input: { question: string; runId?: s
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
-    const graph = graphFor(graphs, node.kind);
+    const graph = graphFor(graphs, node);
     assertRunStillOnNode(db, nodeId, input.runId);
     assertAgentStage(graph, node, "ask");
     applyStageChange(db, node, {
@@ -389,7 +389,7 @@ export function answer(db: Db, nodeId: string, input: { answer: string }): NodeV
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
-    const graph = graphFor(graphs, node.kind);
+    const graph = graphFor(graphs, node);
     if (node.stage !== "ask_human_question" || node.return_stage === null) {
       throw refused(`Can't answer: the node is at "${node.stage}", not ask_human_question`);
     }
@@ -414,7 +414,7 @@ export function fail(
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
-    const graph = graphFor(graphs, node.kind);
+    const graph = graphFor(graphs, node);
     if (input.actor === "agent" || input.runId !== undefined) assertRunStillOnNode(db, nodeId, input.runId);
     assertAgentStage(graph, node, "fail");
     applyStageChange(db, node, {
@@ -438,7 +438,7 @@ export function retry(db: Db, nodeId: string): NodeView {
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
-    const graph = graphFor(graphs, node.kind);
+    const graph = graphFor(graphs, node);
     if (node.stage !== "failed" || node.return_stage === null) {
       throw refused(`Can't retry: the node is at "${node.stage}", not failed`);
     }
@@ -473,7 +473,7 @@ export function restore(db: Db, nodeId: string): NodeView {
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
-    const graph = graphFor(graphs, node.kind);
+    const graph = graphFor(graphs, node);
     if (node.stage !== "invalidated") {
       throw refused(`Can't restore: the node is at "${node.stage}", not invalidated`);
     }
@@ -526,7 +526,7 @@ export function unblock(db: Db, nodeId: string, input: { actor: Actor }): NodeVi
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
-    const graph = graphFor(graphs, node.kind);
+    const graph = graphFor(graphs, node);
     if (node.stage !== "externally_blocked" || node.return_stage === null) {
       throw refused(`Can't unblock: the node is at "${node.stage}", not externally_blocked`);
     }
@@ -549,7 +549,7 @@ export function splitStart(db: Db, nodeId: string, input: { runId?: string | und
 
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
-    const graph = graphFor(graphs, node.kind);
+    const graph = graphFor(graphs, node);
     assertRunStillOnNode(db, nodeId, input.runId);
     if (node.stage === "splitting") throw refused("The node is already splitting");
     assertAgentStage(graph, node, "start a split");

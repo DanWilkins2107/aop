@@ -95,9 +95,13 @@ export function ProjectSettingsPage() {
   const [deleting, setDeleting] = useState(false);
   const { data, error, reload } = useLiveData(async () => {
     const [projects, config] = await Promise.all([api.projects(), api.config()]);
+    const settings = config.settings;
     return {
       project: projects.find((p) => p.id === projectId) ?? null,
-      openFrom: config.settings?.open_from_path ?? null,
+      openFrom: settings?.open_from_path ?? null,
+      process: settings?.project_stages.find((own) => own.project_id === projectId)?.stages_path ?? null,
+      sharedProcess: settings?.stages_path ?? null,
+      configPath: config.config_path,
     };
   }, `settings:${projectId}`, { affects: (notice) => touchesProject(notice, projectId) });
 
@@ -119,6 +123,24 @@ export function ProjectSettingsPage() {
       {project ? (
         <>
           <DetailsForm key={project.id} project={project} openFrom={data.openFrom} reload={reload} />
+          <section className="section">
+            <h2>Process</h2>
+            <p className="section-text">
+              {data.sharedProcess === null ? (
+                <>Which process this project follows is unknown while config.yaml is invalid.</>
+              ) : data.process !== null ? (
+                <>
+                  This project follows its own process, <code>{data.process}</code>.
+                </>
+              ) : (
+                <>
+                  This project follows the shared process, <code>{data.sharedProcess}</code>.
+                </>
+              )}{" "}
+              To change which, set <code>project_stages</code> for project <code>{project.id}</code> in{" "}
+              <code>{data.configPath}</code>. <Link to="/process">See the process</Link>.
+            </p>
+          </section>
           <section className="section settings-delete">
             <h2>Delete project</h2>
             <p className="section-text">Permanently deletes the project from AOP and stops its agents.</p>

@@ -82,6 +82,7 @@ describe("reading the config over the API", () => {
         agent_timeout_minutes: 30,
         stages: "./stages.yaml",
         stages_path: join(aopHome(), "stages.yaml"),
+        project_stages: [],
         improvement_stages: null,
         improvement_stages_path: null,
         improvements_path: "./skills",

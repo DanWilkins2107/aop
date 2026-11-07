@@ -262,8 +262,14 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
     return c.json(deleted);
   });
 
-  // The one process, shared by all projects. Read from disk whenever it has changed.
-  app.get(at(apiPaths.stages), (c) => c.json(describeStages(loadConfig().graph)));
+  // The shared process, or with `?project=` the one that project follows. Read from disk whenever it has changed.
+  app.get(at(apiPaths.stages), (c) => {
+    const project = c.req.query("project");
+    const config = loadConfig();
+    if (project === undefined) return c.json(describeStages(config.graph));
+    const projectId = getProject(db, project).id;
+    return c.json(describeStages(nodes.graphFor(nodes.graphsOf(config), { kind: "work", project_id: projectId })));
+  });
   // For the process page, which still answers when the config is invalid, listing the problems.
   app.get(at(apiPaths.process), (c) => c.json(describeProcess()));
 

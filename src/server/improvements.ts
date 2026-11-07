@@ -11,14 +11,13 @@ import type {
   ProposalView,
 } from "../shared/api.js";
 import { FINISHED_STAGES } from "../shared/builtInStages.js";
-import { type AopConfig, loadConfig } from "./config.js";
+import { allPromptFiles, type AopConfig, loadConfig } from "./config.js";
 import type { Db } from "./db.js";
 import { ApiError, badRequest, notFound, refused } from "./errors.js";
 import { createNode, getNode, getNodeRow, viewsOf } from "./nodes.js";
 import { aopHome, configPath, dbPath, isWithin } from "./paths.js";
 import { ensureImprovementsProject, IMPROVEMENTS_PROJECT_ID } from "./projects.js";
 import { appendEvent, newId, now, type Actor } from "./records.js";
-import { promptFiles } from "./stages.js";
 
 const TITLE_LENGTH = 80;
 const EXCERPT_LENGTH = 2000;
@@ -190,7 +189,8 @@ export const notAllowed = (message: string) => new ApiError(400, "path_not_allow
 /** Refuses AOP's own config, process files, database and logs, wherever they are. `target` must be canonical. */
 export function assertNotAopState(config: AopConfig, target: string): void {
   const home = aopHome();
-  const forbidden = [configPath(home), config.stagesPath, config.improvementStagesPath, dbPath(), `${dbPath()}-wal`, `${dbPath()}-shm`]
+  const processFiles = [config.stagesPath, ...[...config.projectStages.values()].map((own) => own.path), config.improvementStagesPath];
+  const forbidden = [configPath(home), ...processFiles, dbPath(), `${dbPath()}-wal`, `${dbPath()}-shm`]
     .filter((file): file is string => file !== null)
     .map(canonicalPath);
   if (forbidden.some((file) => isWithin(target, file)) || isWithin(target, canonicalPath(join(home, "logs")))) {
@@ -209,9 +209,7 @@ export function allowedTarget(config: AopConfig, path: string): string {
   assertNotAopState(config, target);
   if (existsSync(target) && !statSync(target).isFile()) throw notAllowed(`${target} isn't a file`);
 
-  const prompts = [...promptFiles(config.graph), ...(config.improvementGraph ? promptFiles(config.improvementGraph) : [])].map(
-    canonicalPath,
-  );
+  const prompts = allPromptFiles(config).map(canonicalPath);
   if (prompts.includes(target)) return target;
   const folder = canonicalPath(config.improvementsDir);
   if (target !== folder && isWithin(target, folder)) return target;

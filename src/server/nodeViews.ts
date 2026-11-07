@@ -172,7 +172,7 @@ function toView(db: Db, graphs: Graphs, node: NodeRow): NodeView {
 
 /** What a view adds to its row, given the holders and latest run that `toView` or `listNodes` read. */
 function deriveView(graphs: Graphs, node: NodeRow, holders: Holder[], latestRun: LatestRun | undefined): NodeView {
-  const graph = graphFor(graphs, node.kind);
+  const graph = graphFor(graphs, node);
   const holdersVia = (via: Holder["via"]) => holders.filter((holder) => holder.via === via).map((holder) => holder.id);
   const invalidatedParents = holdersVia("invalidated_parent");
   const heldBy = holdersVia("split");
@@ -251,7 +251,7 @@ export function startableNodes(db: Db, graphs: Graphs): NodeRow[] {
         ORDER BY rowid`,
     )
     .all() as NodeRow[];
-  const agentTurn = rows.filter((node) => turnOf(graphFor(graphs, node.kind), node) === "agent");
+  const agentTurn = rows.filter((node) => turnOf(graphFor(graphs, node), node) === "agent");
   if (agentTurn.length === 0) return [];
   // A holder can be any node in the project, claimed or not, so read every node of those projects.
   const projectIds = [...new Set(agentTurn.map((node) => node.project_id))];

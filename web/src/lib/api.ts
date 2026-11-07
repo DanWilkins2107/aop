@@ -81,7 +81,8 @@ export const api = {
   deleteProject: (id: string) => send<ProjectRow>("DELETE", apiPaths.project(id)),
   nodes: (projectId: string) => send<NodeView[]>("GET", apiPaths.projectAction(projectId, "nodes")),
   projectEdges: (projectId: string) => send<EdgeRow[]>("GET", apiPaths.projectAction(projectId, "edges")),
-  stages: () => send<StagesView>("GET", apiPaths.stages),
+  /** The process a project's nodes follow. */
+  stages: (projectId: string) => send<StagesView>("GET", `${apiPaths.stages}?project=${encodeURIComponent(projectId)}`),
   config: () => send<ConfigView>("GET", apiPaths.config),
   process: () => send<ProcessView>("GET", apiPaths.process),
   createNode: (projectId: string, body: CreateNodeRequest) =>
@@ -133,7 +134,7 @@ export async function loadProjectGraph(projectId: string) {
   const [nodes, edges, stages, projects] = await Promise.all([
     api.nodes(projectId),
     api.projectEdges(projectId),
-    api.stages(),
+    api.stages(projectId),
     api.projects(),
   ]);
   return { nodes, edges, stages, project: projects.find((p) => p.id === projectId) ?? null };
