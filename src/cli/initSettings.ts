@@ -171,7 +171,7 @@ async function stagesSetting({ values, ask, cwd, say }: Sources): Promise<string
   let own = values.stages?.trim() || undefined;
   if (values.stages === undefined && ask) {
     say(`\nProcess. The default: an agent triages each task and may split it, then an agent implements it and raises a PR for your review.`);
-    const useDefault = !/^n(o)?$/i.test(await ask("Use the default process? [Y/n]: "));
+    const useDefault = !/^n(o)?$/i.test(await ask("Start with the default setup? [Y/n]: "));
     while (!useDefault && own === undefined) {
       const answer = await ask("Path to your stages.yaml: ");
       if (answer === "") continue;

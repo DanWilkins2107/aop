@@ -25,7 +25,7 @@ To update, run `git pull` in the clone and restart `aop serve`. It rebuilds itse
 2. **Out of sandbox command** (optional). Sometimes you may want to run an AOP-driven session outside a sandbox yourself. This is the command `aop steer <node> --no-sandbox` runs. Leave it blank if you don't sandbox.
 3. **Open from.** Where sessions start for projects with no path. Defaults to `~/code`, and offers to create it.
 4. **Agent timeout.** Minutes before a running agent is stopped and its node goes to `failed`. Defaults to 60.
-5. **Process.** Use the default process, or give the path to your own `stages.yaml`.
+5. **Process.** Start with the default setup, or give the path to your own `stages.yaml`.
 
 Other ways to run it:
 - `aop init --yes --agent-session-command <cmd>` skips the questions and uses defaults for everything else.
@@ -44,19 +44,24 @@ Set `AOP_HOME` to keep everything somewhere other than `~/.aop`.
 - `logs/`: one log per agent run.
 
 ## The plugin
-The plugin teaches agents how to behave on AOP stages. `aop init` prints these steps with your clone's real path.
+The plugin teaches agents how to behave on AOP stages. Use `./plugin` if you're running the tool from inside your AOP clone, or the clone's full path otherwise.
 
 **Claude Code**, inside a `claude` session:
 ```
-/plugin marketplace add /path/to/aop/plugin
+/plugin marketplace add ./plugin
 /plugin install aop@aop
 ```
-Or for one session only: `claude --plugin-dir /path/to/aop/plugin`.
+From anywhere else: `/plugin marketplace add /path/to/aop/plugin`.
+
+Turn on auto-update for the aop marketplace (`/plugin` → Marketplaces) so agents get plugin updates.
+
+Or for one session only: `claude --plugin-dir ./plugin`, or `claude --plugin-dir /path/to/aop/plugin`.
 
 **GitHub Copilot CLI** (untested):
 ```
-copilot plugin install /path/to/aop/plugin
+copilot plugin install ./plugin
 ```
+From anywhere else: `copilot plugin install /path/to/aop/plugin`.
 
 ## Your first node
 For what nodes, stages and types are, see [features.md](features.md).
