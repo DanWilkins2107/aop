@@ -35,12 +35,6 @@ function commandKeys(tokens: string[]): string[] {
 const tokensOf = (text: string) => text.replaceAll("\\|", "|").trim().split(/\s+/).slice(1);
 
 describe("the default improvement pipeline", () => {
-  it("is the one the demo uses", () => {
-    expect(readFileSync(join(ROOT, "demo", "config", "improvement_stages.yaml"), "utf8")).toBe(
-      readFileSync(join(DEFAULTS, "improvement_stages.yaml"), "utf8"),
-    );
-  });
-
   it("loads with the shipped config, starting in the skills folder", () => {
     const home = installDefaults();
     const config = loadConfig(home);

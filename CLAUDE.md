@@ -15,7 +15,7 @@ Read the code for the area you change. `docs/` is written by humans: don't edit 
 
 ## Testing
 - `npm run typecheck`, then `npx vitest run <file> [-t "name"]`. Don't run the whole suite unless asked.
-- Never run `npm start`, `npm run demo`, `npm run dev:web` or `aop serve`. Never bind 4317 or 4318, never touch the real `~/.aop`, and never launch real `claude` or `copilot` (agents are `test/fixtures/fake-agent.mjs`).
+- Never run `npm start`, `npm run dev:web` or `aop serve`. Never bind 4317 or 4318, never touch the real `~/.aop`, and never launch real `claude` or `copilot` (agents are `test/fixtures/fake-agent.mjs`).
 - `harness()` is the app in-process, for API and node rules. `world()` is a real server with fake agents, only for launching, stopping and recovering them; wait with `until()` or `expect.poll`. `aopInProcess()` is the CLI.
 - A new test file that spawns processes goes in the `integration` list in `vitest.config.ts`.
 

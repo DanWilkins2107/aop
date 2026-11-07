@@ -101,9 +101,9 @@ describe("run history", () => {
 });
 
 describe("default stage colours", () => {
-  const demo = parse(readFileSync("demo/config/stages.yaml", "utf8")) as { stages: Record<string, { color: string }> };
+  const shipped = parse(readFileSync("defaults/stages.yaml", "utf8")) as { stages: Record<string, { color: string }> };
   const BUILT_INS = ["done", "broken_down", "invalidated", "scheduled", "ask_human_question", "failed", "externally_blocked", "splitting"];
-  const defaults = [...Object.values(demo.stages).map((s) => s.color), ...BUILT_INS.map((s) => stageColor(s, null))];
+  const defaults = [...Object.values(shipped.stages).map((s) => s.color), ...BUILT_INS.map((s) => stageColor(s, null))];
 
   it("stay legible on every card", () => {
     for (const color of defaults) {
