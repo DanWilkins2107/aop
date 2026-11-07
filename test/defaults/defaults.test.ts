@@ -46,22 +46,26 @@ describe("the default improvement pipeline", () => {
 describe("shipped defaults", () => {
   it("pass the real config and stages validators", () => {
     const config = loadConfig(installDefaults());
-    expect([...config.graph.types.keys()]).toEqual(["triage", "dev", "reports"]);
+    expect([...config.graph.types.keys()]).toEqual(["triage", "dev", "decisions"]);
     for (const [, stage] of config.graph.stages) if (stage.turn === "agent") expect(stage.prompt).toBeDefined();
   });
 
-  it("have one scheduled example, standing on its own", () => {
+  it("have no scheduled type", () => {
     const config = loadConfig(installDefaults());
-    const scheduledTypes = [...config.graph.types].filter(([, type]) => type.stages.has("scheduled")).map(([name]) => name);
-    expect(scheduledTypes).toEqual(["reports"]);
+    expect([...config.graph.types.values()].some((type) => type.stages.has("scheduled"))).toBe(false);
+  });
 
-    const reports = config.graph.types.get("reports")!;
-    expect(reports.start).toBe("scheduled");
-    expect(Object.fromEntries([...reports.stages].map(([stage, next]) => [stage, Object.fromEntries(next)]))).toEqual({
-      scheduled: { fire: "generate_report" },
-      generate_report: { done: "done" },
+  it("go between a human's decision and an agent's clarification, and triage can route there", () => {
+    const config = loadConfig(installDefaults());
+    const decisions = config.graph.types.get("decisions")!;
+    expect(decisions.start).toBe("decision");
+    expect(Object.fromEntries([...decisions.stages].map(([stage, next]) => [stage, Object.fromEntries(next)]))).toEqual({
+      decision: { decided: "done", clarify: "awaiting_agent_clarification" },
+      awaiting_agent_clarification: { clarified: "decision" },
     });
-    expect(config.graph.stages.get("generate_report")?.turn).toBe("agent");
+    expect(config.graph.stages.get("decision")?.turn).toBe("human");
+    expect(config.graph.stages.get("awaiting_agent_clarification")?.turn).toBe("agent");
+    expect(config.graph.types.get("triage")?.stages.get("awaiting_agent_breakdown")?.get("decision")).toBe("decisions");
   });
 
   it("have a prompt for every agent stage and nothing else", () => {
