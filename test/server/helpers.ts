@@ -7,7 +7,7 @@ import type { NodeView } from "../../src/server/nodes.js";
 import { aopHome } from "../../src/server/paths.js";
 import { addProject } from "../../src/server/projects.js";
 
-/** The demo's process, plus a stage reused by two types. */
+/** A sample process, with a stage reused by two types. */
 export const STAGES_YAML = `
 start: triage
 

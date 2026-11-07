@@ -53,15 +53,6 @@ describe("where a project's agents start", () => {
   });
 });
 
-describe("the demo's process", () => {
-  it("starts new nodes on the renamed stage, with its prompt file", () => {
-    const graph = loadConfig(join(ROOT, "demo", "config")).graph;
-    expect(graph.types.get("triage")?.start).toBe("awaiting_agent_breakdown");
-    expect(readdirSync(join(ROOT, "demo", "config", "prompts"))).toContain("awaiting_agent_breakdown.md");
-    expect(readdirSync(join(ROOT, "demo", "config", "prompts"))).not.toContain("assess.md");
-  });
-});
-
 describe("reading the config over the API", () => {
   let h: Harness;
   beforeEach(() => {

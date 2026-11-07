@@ -121,7 +121,7 @@ export interface AppOptions {
   changes?: ChangeFeed;
   /** The built web app. Skipped if the folder doesn't exist, so the API runs without a build. */
   webDir?: string;
-  /** Runs agents. The demo has none, so the routes that need it refuse there. */
+  /** Runs agents. Without one, the routes that need it refuse. */
   orchestrator?: Orchestrator;
 }
 

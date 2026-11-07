@@ -1,10 +1,9 @@
-import { type ChildProcess, execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync } from "node:fs";
+import { type ChildProcess, spawn } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { loadConfig } from "../../src/server/config.js";
 import { aopHome } from "../../src/server/paths.js";
-import type { NodeView, ProjectRow, StagesView } from "../../src/shared/api.js";
+import type { StagesView } from "../../src/shared/api.js";
 import { makeHome } from "./helpers.js";
 
 const ROOT = resolve(import.meta.dirname, "../..");
@@ -84,33 +83,5 @@ describe("starting the server", () => {
     const url = await urlFrom(output, exited);
     expect(await (await fetch(`${url}/api/projects`)).json()).toEqual([]);
     expect(((await (await fetch(`${url}/api/stages`)).json()) as StagesView).start).toBe("triage");
-  });
-});
-
-describe("the demo", () => {
-  it("runs on one command in a throwaway AOP_HOME, never the real one", { timeout: 60_000 }, async () => {
-    const { home, env } = fakeUser();
-    const { output, exited } = run("demo/start.ts", [], env);
-    const url = await urlFrom(output, exited);
-
-    const projects = (await (await fetch(`${url}/api/projects`)).json()) as ProjectRow[];
-    expect(projects.map((p) => p.name)).toEqual(["Demo project"]);
-    const nodes = (await (await fetch(`${url}/api/projects/${projects[0]?.id}/nodes`)).json()) as NodeView[];
-    expect(nodes.length).toBeGreaterThan(0);
-    const report = nodes.find((n) => n.title === "Weekly status report");
-    expect(report).toMatchObject({ type: "reports", stage: "scheduled", cron: "0 7 * * 1" });
-    expect(report?.next_fire_at).toEqual(expect.any(String));
-    expect(((await (await fetch(`${url}/api/stages`)).json()) as StagesView).types.length).toBeGreaterThan(0);
-
-    expect(existsSync(join(home, ".aop"))).toBe(false);
-    const [throwaway] = readdirSync(join(home, "temp"));
-    expect(existsSync(join(home, "temp", throwaway ?? "", "config.yaml"))).toBe(true);
-  });
-
-  it("ships a valid config, and no .aop among its tracked files", () => {
-    expect(loadConfig(join(ROOT, "demo", "config")).graph.start).toBe("triage");
-    const tracked = execFileSync("git", ["ls-files", "demo"], { cwd: ROOT, encoding: "utf8" });
-    expect(tracked).toContain("demo/config/config.yaml");
-    expect(tracked).not.toContain(".aop");
   });
 });
