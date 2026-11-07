@@ -4,7 +4,7 @@
 import { type AopConfig, loadConfig } from "./config.js";
 import type { Db } from "./db.js";
 import { notFound } from "./errors.js";
-import type { NodeKind, NodeRow, Turn } from "../shared/api.js";
+import type { NodeRow, Turn } from "../shared/api.js";
 import { AGENT_TURN_STAGES, HUMAN_TURN_STAGES, isBuiltIn } from "../shared/builtInStages.js";
 import { EMPTY_GRAPH, type StageGraph } from "./stages.js";
 
@@ -14,9 +14,11 @@ export function getNodeRow(db: Db, id: string): NodeRow {
   return node;
 }
 
-/** Work nodes follow `stages.yaml`, and improvements their own pipeline. */
+/** Work nodes follow their project's own process or `stages.yaml`, and improvements their own pipeline. */
 export interface Graphs {
   work: StageGraph;
+  /** Projects with a process of their own, by project ID. */
+  projects: Map<string, StageGraph>;
   /** Null while improvements are off, which leaves every improvement on a stage that doesn't exist. */
   improvement: StageGraph | null;
   /** Whether outcomes leading to `raise_pr` are offered: `improvements_path` is inside a git repo. */
@@ -27,11 +29,18 @@ export interface Graphs {
 export const RAISE_PR_STAGE = "raise_pr";
 
 export function graphsOf(config: AopConfig): Graphs {
-  return { work: config.graph, improvement: config.improvementGraph, raisePrAvailable: config.improvementsRepo !== null };
+  return {
+    work: config.graph,
+    projects: new Map([...config.projectStages].map(([id, own]) => [id, own.graph])),
+    improvement: config.improvementGraph,
+    raisePrAvailable: config.improvementsRepo !== null,
+  };
 }
 
-export function graphFor(graphs: Graphs, kind: NodeKind): StageGraph {
-  return kind === "improvement" ? (graphs.improvement ?? EMPTY_GRAPH) : graphs.work;
+/** The process a node follows, or a new node in that project would. */
+export function graphFor(graphs: Graphs, node: Pick<NodeRow, "kind" | "project_id">): StageGraph {
+  if (node.kind === "improvement") return graphs.improvement ?? EMPTY_GRAPH;
+  return graphs.projects.get(node.project_id) ?? graphs.work;
 }
 
 /** Read from disk whenever they have changed, so edits to the process files apply without a restart. */
@@ -39,7 +48,7 @@ export function currentGraphs(): Graphs {
   return graphsOf(loadConfig());
 }
 
-/** Whether a node of this type can sit on this stage under the current `stages.yaml`. */
+/** Whether a node of this type can sit on this stage under its current process. */
 export function stageIsLive(graph: StageGraph, type: string, stage: string): boolean {
   if (isBuiltIn(stage) && stage !== "scheduled") return true;
   return graph.types.get(type)?.stages.has(stage) ?? false;
@@ -60,7 +69,7 @@ function outcomesOf(graph: StageGraph, node: NodeRow): Map<string, string> {
 
 /** The outcomes a node offers now. An improvement can't head for `raise_pr` without a git repo. */
 export function availableOutcomes(graphs: Graphs, node: NodeRow): Map<string, string> {
-  const outcomes = outcomesOf(graphFor(graphs, node.kind), node);
+  const outcomes = outcomesOf(graphFor(graphs, node), node);
   if (node.kind !== "improvement" || graphs.raisePrAvailable) return outcomes;
   return new Map([...outcomes].filter(([, target]) => target !== RAISE_PR_STAGE));
 }

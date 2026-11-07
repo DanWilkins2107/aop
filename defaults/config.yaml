@@ -20,6 +20,11 @@ agent_timeout_minutes: 60
 # The process: stages, types and their prompts. Can live anywhere.
 stages: ./stages.yaml
 
+# Optional. Projects that follow a process of their own instead, by project ID (shown in the project's
+# settings). Each file is checked like the one above, and its prompts live in its own folder.
+# project_stages:
+#   <project id>: ./other-stages.yaml
+
 # The improvement pipeline: how changes to your skills and stage prompts are drafted, reviewed and
 # applied. Leave it out to turn improvements off.
 improvement_stages: ./improvement_stages.yaml

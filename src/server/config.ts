@@ -1,11 +1,11 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { existsSync, statSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { z } from "zod";
-import type { ConfigView } from "../shared/api.js";
+import { IMPROVEMENTS_PROJECT_ID, type ConfigView } from "../shared/api.js";
 import { ConfigError } from "./errors.js";
 import { aopHome, configPath, isWithin, repoAround, resolveConfigPath } from "./paths.js";
-import { loadStagesFile, type StageGraph } from "./stages.js";
+import { loadStagesFile, promptFiles, type StageGraph } from "./stages.js";
 import { parseYamlFile } from "./yamlFile.js";
 
 const command = z.string().trim().min(1);
@@ -19,6 +19,7 @@ const settingsSchema = z.strictObject({
   open_from: z.string().trim().min(1).default("~/code"),
   agent_timeout_minutes: z.number().positive().default(60),
   stages: z.string().min(1),
+  project_stages: z.record(z.string().min(1), z.string().min(1)).optional(),
   improvement_stages: z.string().min(1).optional(),
   improvements_path: z.string().trim().min(1).default("./skills"),
 });
@@ -31,6 +32,8 @@ export interface AopConfig extends Settings {
   /** Absolute path of `open_from`, where agents start for projects with no path. May not exist. */
   openFromPath: string;
   graph: StageGraph;
+  /** Projects with a process of their own, by project ID. Every other project follows `graph`. */
+  projectStages: Map<string, { path: string; graph: StageGraph }>;
   /** Absolute path to `improvement_stages.yaml`, or null when improvements are off. */
   improvementStagesPath: string | null;
   /** The improvement pipeline, or null when improvements are off. */
@@ -45,7 +48,8 @@ const mappingSchema = z.record(z.string(), z.unknown());
 
 /**
  * Reads a linked process file, adding its problems, and calls `watch` on it and each prompt file it
- * names. Returns null if it can't be found.
+ * names. Returns null if it can't be found. `key` is the setting naming it, and `label` how its
+ * problems name it.
  */
 function loadLinkedStages(
   home: string,
@@ -54,19 +58,44 @@ function loadLinkedStages(
   setting: string,
   problems: string[],
   watch: (path: string) => void,
+  label?: string,
 ): { path: string; graph: StageGraph } | null {
   const path = resolveConfigPath(home, setting);
   watch(path);
   if (!existsSync(path)) {
-    problems.push(`${path}: file not found. Create it, or point "${key}" in ${file} at your ${key} file.`);
+    problems.push(`${path}: file not found. Create it, or point "${key}" in ${file} at your process file.`);
     return null;
   }
-  const label = key === "stages" ? undefined : `${key}.yaml`;
   const { graph, problems: stageProblems } = loadStagesFile(path, label);
   // Whether each prompt file exists is part of the result, found or not.
   for (const stage of graph.stages.values()) if (stage.prompt !== undefined) watch(stage.prompt);
   problems.push(...stageProblems);
   return { path, graph };
+}
+
+/** Each `project_stages` entry's process. Its problems name the project, since stage problems don't name the file. */
+function loadProjectStages(
+  home: string,
+  file: string,
+  raw: unknown,
+  problems: string[],
+  watch: (path: string) => void,
+): Map<string, { path: string; graph: StageGraph }> {
+  const loaded = new Map<string, { path: string; graph: StageGraph }>();
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return loaded;
+  for (const [projectId, setting] of Object.entries(raw)) {
+    const key = `project_stages.${projectId}`;
+    if (projectId === IMPROVEMENTS_PROJECT_ID) {
+      problems.push(`${file}: ${key}: improvements follow improvement_stages, not a project's process`);
+      continue;
+    }
+    if (typeof setting !== "string" || setting.length === 0) continue; // The settings schema reports it.
+    const own: string[] = [];
+    const stages = loadLinkedStages(home, file, key, setting, own, watch, `${key} (${basename(resolveConfigPath(home, setting))})`);
+    problems.push(...own.map((problem) => (problem.startsWith(key) ? problem : `${key}: ${problem}`)));
+    if (stages !== null) loaded.set(projectId, stages);
+  }
+  return loaded;
 }
 
 type Loaded = { config: AopConfig } | { error: ConfigError };
@@ -202,11 +231,12 @@ function readConfig(home: string, watch: (path: string) => void): AopConfig {
   if (typeof stagesSetting !== "string" || stagesSetting.length === 0) throw new ConfigError(problems);
   const stages = loadLinkedStages(home, file, "stages", stagesSetting, problems, watch);
   if (stages === null) throw new ConfigError(problems);
+  const projectStages = loadProjectStages(home, file, raw["project_stages"], problems, watch);
 
   const improvementSetting = raw["improvement_stages"];
   const improvements =
     typeof improvementSetting === "string" && improvementSetting.length > 0
-      ? loadLinkedStages(home, file, "improvement_stages", improvementSetting, problems, watch)
+      ? loadLinkedStages(home, file, "improvement_stages", improvementSetting, problems, watch, "improvement_stages.yaml")
       : null;
 
   if (!settings.success || problems.length > 0) throw new ConfigError(problems);
@@ -221,11 +251,18 @@ function readConfig(home: string, watch: (path: string) => void): AopConfig {
     stagesPath: stages.path,
     openFromPath: resolveConfigPath(home, settings.data.open_from),
     graph: stages.graph,
+    projectStages,
     improvementStagesPath: improvements?.path ?? null,
     improvementGraph: improvements?.graph ?? null,
     improvementsDir,
     improvementsRepo: watchedRepoAround(improvementsDir, watch),
   };
+}
+
+/** Every prompt file of every process: the shared one, each project's own and the improvement pipeline. */
+export function allPromptFiles(config: AopConfig): string[] {
+  const graphs = [config.graph, ...[...config.projectStages.values()].map((own) => own.graph), config.improvementGraph];
+  return [...new Set(graphs.flatMap((graph) => (graph === null ? [] : promptFiles(graph))))];
 }
 
 /** `repoAround`, watching each `.git` it looks for, so a repo made or removed later shows. */
@@ -253,6 +290,11 @@ export function describeConfig(home: string = aopHome()): ConfigView {
         agent_timeout_minutes: config.agent_timeout_minutes,
         stages: config.stages,
         stages_path: config.stagesPath,
+        project_stages: [...config.projectStages].map(([project_id, own]) => ({
+          project_id,
+          stages: config.project_stages?.[project_id] ?? "",
+          stages_path: own.path,
+        })),
         improvement_stages: config.improvement_stages ?? null,
         improvement_stages_path: config.improvementStagesPath,
         improvements_path: config.improvements_path,

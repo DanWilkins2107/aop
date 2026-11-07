@@ -1,13 +1,12 @@
 // The text agents read: `aop context` for a node, and the prompt each launched agent gets on stdin.
 
 import { readFileSync } from "node:fs";
-import { type AopConfig, loadConfig } from "./config.js";
+import { allPromptFiles, type AopConfig, loadConfig } from "./config.js";
 import type { Db } from "./db.js";
 import { ConfigError } from "./errors.js";
 import { getImprovement, listProposals } from "./improvements.js";
 import { getNode, graphFor, graphsOf, listLinks, listMessages, type NodeRow } from "./nodes.js";
 import { getProject } from "./projects.js";
-import { promptFiles } from "./stages.js";
 
 interface Neighbour {
   id: string;
@@ -128,7 +127,7 @@ function improvementSections(db: Db, nodeId: string): string[] {
   }
   const improvement = getImprovement(db, nodeId, config);
   const source = improvement.source;
-  const prompts = [...promptFiles(config.graph), ...(config.improvementGraph ? promptFiles(config.improvementGraph) : [])];
+  const prompts = allPromptFiles(config);
   return [
     ...section(
       "Source message",
@@ -157,7 +156,7 @@ function improvementSections(db: Db, nodeId: string): string[] {
 /** Everything a launched agent gets on stdin. Throws if the stage's prompt can't be read. */
 export function buildPrompt(db: Db, config: AopConfig, node: NodeRow): string {
   const stage = promptStage(node);
-  const promptFile = graphFor(graphsOf(config), node.kind).stages.get(stage)?.prompt;
+  const promptFile = graphFor(graphsOf(config), node).stages.get(stage)?.prompt;
   if (promptFile === undefined) throw new Error(`Stage "${stage}" has no prompt in its process file`);
   return [LOAD_SKILLS, nodeContext(db, node.id), readFileSync(promptFile, "utf8").trimEnd()].join("\n\n") + "\n";
 }

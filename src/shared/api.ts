@@ -77,6 +77,8 @@ export interface ConfigView {
     agent_timeout_minutes: number;
     stages: string;
     stages_path: string;
+    /** Projects with a process of their own, from `project_stages`. Every other project follows `stages`. */
+    project_stages: ProjectStagesSetting[];
     /** Null when improvements are off. */
     improvement_stages: string | null;
     improvement_stages_path: string | null;
@@ -86,6 +88,13 @@ export interface ConfigView {
     /** The git repo holding it, which Raise PR needs. */
     improvements_repo: string | null;
   } | null;
+}
+
+export interface ProjectStagesSetting {
+  project_id: string;
+  /** As written in `config.yaml`. */
+  stages: string;
+  stages_path: string;
 }
 
 /** The reserved project improvements live in. It's never listed, and project routes can't reach it. */
@@ -309,7 +318,7 @@ export interface SteerSession {
   cwd: string;
 }
 
-/** The shared `stages.yaml`, in file order. Built-in stages aren't listed unless a type uses one. */
+/** A process file (the shared `stages.yaml` or a project's own), in file order. Built-in stages aren't listed unless a type uses one. */
 export interface StagesView {
   /** The type new nodes enter. */
   start: string;
@@ -329,6 +338,8 @@ export interface ProcessView {
   stages_path: string | null;
   problems: string[];
   process: StagesView | null;
+  /** Projects with a process of their own, when the config is valid. */
+  project_processes: { project_id: string; stages_path: string; process: StagesView }[];
   /** The improvement pipeline, when the config is valid and improvements are on. */
   improvement_stages_path: string | null;
   improvement_process: StagesView | null;

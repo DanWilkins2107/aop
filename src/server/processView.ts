@@ -28,6 +28,11 @@ export function describeProcess(home: string = aopHome()): ProcessView {
       stages_path: config.stagesPath,
       problems: [],
       process: describeStages(config.graph),
+      project_processes: [...config.projectStages].map(([project_id, own]) => ({
+        project_id,
+        stages_path: own.path,
+        process: describeStages(own.graph),
+      })),
       improvement_stages_path: config.improvementStagesPath,
       improvement_process: config.improvementGraph === null ? null : describeStages(config.improvementGraph),
     };
@@ -39,6 +44,7 @@ export function describeProcess(home: string = aopHome()): ProcessView {
       stages_path: stagesPath,
       problems: error.problems,
       process: graph !== null && graph.types.size > 0 ? describeStages(graph) : null,
+      project_processes: [],
       improvement_stages_path: null,
       improvement_process: null,
     };

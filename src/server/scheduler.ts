@@ -6,9 +6,8 @@ import { FINISHED_STAGES } from "../shared/builtInStages.js";
 import { parseCron } from "./cron.js";
 import type { Db } from "./db.js";
 import { ConfigError } from "./errors.js";
-import { createNode, getNodeRow, holdersOf, type NodeRow } from "./nodes.js";
+import { createNode, getNodeRow, graphFor, graphsOf, holdersOf, type Graphs, type NodeRow } from "./nodes.js";
 import { appendEvent } from "./records.js";
-import type { StageGraph } from "./stages.js";
 
 /** Stages a previous child can be at for the next run to go ahead. */
 const PREVIOUS_DONE_STAGES: readonly string[] = [...FINISHED_STAGES, "invalidated"];
@@ -103,9 +102,9 @@ export class Scheduler {
 
   /** Handles every node that's due now. Public so tests can drive it with their own clock. */
   tick(): TickResult[] {
-    let graph: StageGraph;
+    let graphs: Graphs;
     try {
-      graph = loadConfig().graph;
+      graphs = graphsOf(loadConfig());
     } catch (error) {
       // As with agents, an invalid stages.yaml means nothing new starts until it's fixed.
       if (error instanceof ConfigError) return [];
@@ -118,7 +117,7 @@ export class Scheduler {
       for (const node of this.scheduledNodes()) {
         const due = this.lastDueSlot(node, now);
         if (due === null) continue;
-        const result = this.db.transaction(() => this.handle(graph, node.id, due))();
+        const result = this.db.transaction(() => this.handle(graphs, node.id, due))();
         if (result !== null) results.push(result);
       }
     } finally {
@@ -191,9 +190,10 @@ export class Scheduler {
   }
 
   /** Fires the node for one slot, or logs why not. Runs in a transaction. */
-  private handle(graph: StageGraph, nodeId: string, due: Date): TickResult | null {
+  private handle(graphs: Graphs, nodeId: string, due: Date): TickResult | null {
     const node = getNodeRow(this.db, nodeId);
     if (node.stage !== "scheduled") return null;
+    const graph = graphFor(graphs, node);
     const dueAt = due.toISOString();
     const skip = (detail: ScheduleSkip): TickResult => {
       appendEvent(this.db, node.id, "system", SKIP_EVENT, { due_at: dueAt, ...detail });
