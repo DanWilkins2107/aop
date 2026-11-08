@@ -111,7 +111,7 @@ export function NodeControls({ node, stages, reload }: { node: NodeView; stages:
             <ReasonButton
               label="Invalidate"
               title="Invalidate this node"
-              hint="Its descendants will read as invalidated by parent. It can be restored later."
+              hint="Its descendants will read as invalidated by parent, and anything it blocks is free to start. It can be restored later."
               placeholder="Why is this no longer valid?"
               submitLabel="Invalidate"
               action={(reason) => api.invalidate(node.id, reason)}

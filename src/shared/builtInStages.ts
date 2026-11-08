@@ -27,6 +27,12 @@ export type FinishedStage = (typeof finished)[number];
 /** The built-ins that finish a node. They're also the only built-ins `next` can target. */
 export const FINISHED_STAGES: readonly string[] = finished;
 
+/**
+ * A blocker at one of these holds nothing, so its `blocks` edges stop counting. A `broken_down` one
+ * isn't here: it only has blocks left if a human moved it there.
+ */
+export const NON_BLOCKING_STAGES: readonly string[] = ["done", "invalidated"] as const satisfies readonly BuiltInStage[];
+
 /** Reachable from anywhere, so they live outside every type's pipeline. */
 export const GLOBAL_STAGES: readonly string[] = [
   "invalidated",

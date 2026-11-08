@@ -64,16 +64,19 @@ async function variedGraph(h: Harness) {
   await ok(failer, "fail", { reason: "Crashed" });
   await ok(failer, "block", { reason: "Waiting" });
 
-  // Blocks: one live, one done, one removed.
+  // Blocks: one live, one done, one invalidated, one removed.
   const target = await make("blocked target", "dev");
   const liveBlocker = await make("live blocker", "hotfix");
   const doneBlocker = await make("done blocker", "hotfix");
+  const invalidBlocker = await make("invalidated blocker", "hotfix");
   const removedBlocker = await make("removed blocker", "hotfix");
   await edge(liveBlocker, target, "blocks");
   await edge(doneBlocker, target, "blocks");
+  await edge(invalidBlocker, target, "blocks");
   const removed = await edge(removedBlocker, target, "blocks");
   await h.call("DELETE", `/api/edges/${removed}`, {});
   await ok(doneBlocker, "move", { stage: "done" });
+  await ok(invalidBlocker, "invalidate", { reason: "Not needed" });
   await edge(target, await make("downstream", "dev"), "blocks");
 
   // Invalidated ancestors: two of them over a diamond, made out of rowid order, plus an invalidated node itself.

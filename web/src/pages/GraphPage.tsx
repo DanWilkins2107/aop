@@ -1,6 +1,7 @@
 import { Controls, MarkerType, ReactFlow, useReactFlow, type Viewport } from "@xyflow/react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { NON_BLOCKING_STAGES } from "../../../src/shared/builtInStages.js";
 import { ErrorNotice } from "../components/ErrorNotice.js";
 import { NewNodeDialog } from "../components/NewNodeDialog.js";
 import { RoutedEdge, type RoutedEdgeType } from "../components/RoutedEdge.js";
@@ -114,8 +115,8 @@ export function GraphPage() {
       data: { node, stages: data.stages },
     }));
     const flowEdges: RoutedEdgeType[] = edges.map((edge) => {
-      // A finished blocker holds nothing any more, so its edge fades.
-      const holding = stageOf.get(edge.source_id) !== "done";
+      // A done or invalidated blocker holds nothing any more, so its edge fades.
+      const holding = !NON_BLOCKING_STAGES.includes(stageOf.get(edge.source_id) ?? "");
       const stroke = edge.kind === "subtask" ? SUBTASK_STROKE : BLOCKS_STROKE;
       return {
         id: edge.id,
