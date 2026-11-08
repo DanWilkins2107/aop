@@ -34,6 +34,11 @@ export function isInvalidated(node: NodeView): boolean {
   return node.stage === "invalidated" || node.invalidated_by_parent;
 }
 
+/** What the Improvements page's "Hide done and invalidated" toggle hides. */
+export function isFinished(node: NodeView): boolean {
+  return node.stage === "done" || isInvalidated(node);
+}
+
 /**
  * `inactive` is what isn't for picking up right now: blocked or held. `done` is as faded, with a
  * green tint so finished work tells apart from stuck work. `broken_down` and `invalidated` recede
