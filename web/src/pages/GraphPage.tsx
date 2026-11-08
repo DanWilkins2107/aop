@@ -1,11 +1,12 @@
 import { Controls, MarkerType, ReactFlow, useReactFlow, type Viewport } from "@xyflow/react";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { NON_BLOCKING_STAGES } from "../../../src/shared/builtInStages.js";
 import { ErrorNotice } from "../components/ErrorNotice.js";
 import { NewNodeDialog } from "../components/NewNodeDialog.js";
 import { RoutedEdge, type RoutedEdgeType } from "../components/RoutedEdge.js";
 import { StageCard, type StageCardNode } from "../components/StageCard.js";
+import { withDescendants } from "../lib/ancestry.js";
 import { loadProjectGraph } from "../lib/api.js";
 import { CARD_HEIGHT, CARD_WIDTH, fittedViewport, graphView, inReadingOrder, type FitOptions } from "../lib/layout.js";
 import { touchesProject } from "../lib/changes.js";
@@ -29,6 +30,43 @@ const WIDE_FIT: FitOptions = { padding: { x: 56, y: 24 }, minZoom: 0.5, maxZoom:
 const NARROW_FIT: FitOptions = { padding: { x: 16, y: 16 }, minZoom: 0.7, maxZoom: 1 };
 // What the fit button does: the whole graph, however small.
 const FIT_ALL = { padding: "16px", maxZoom: 1 } as const;
+
+function readHidden(key: string): string[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(key) ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The nodes hidden with a card's "Hide" button, remembered per project. Each takes its subtasks
+ * with it. Like "Hide invalidated" it's only this browser's view: nothing about the node changes.
+ */
+function useHiddenNodes(projectId: string) {
+  const key = `aop:hiddenNodes:${projectId}`;
+  const [stored, setStored] = useState(() => ({ key, ids: readHidden(key) }));
+  const ids = useMemo(() => (stored.key === key ? stored.ids : readHidden(key)), [stored, key]);
+  const save = useCallback(
+    (change: (ids: string[]) => string[]) => {
+      setStored((current) => {
+        const next = change(current.key === key ? current.ids : readHidden(key));
+        try {
+          localStorage.setItem(key, JSON.stringify(next));
+        } catch {
+          // Only a convenience: hiding still works until the page reloads.
+        }
+        return { key, ids: next };
+      });
+    },
+    [key],
+  );
+  const hide = useCallback((id: string) => save((ids) => (ids.includes(id) ? ids : [...ids, id])), [save]);
+  const show = useCallback((id: string) => save((ids) => ids.filter((other) => other !== id)), [save]);
+  const showAll = useCallback(() => save(() => []), [save]);
+  return { ids, hide, show, showAll };
+}
 
 /** The canvas's size, known before anything paints. */
 function useSize() {
@@ -69,6 +107,7 @@ export function GraphPage() {
   const [creating, setCreating] = useState(false);
   // Remembered per project.
   const [hideInvalidated, setHideInvalidated] = useStoredFlag(`aop:hideInvalidated:${projectId}`);
+  const hidden = useHiddenNodes(projectId);
   const { ref: canvasRef, size } = useSize();
   // React Flow applies its starting view just after it mounts, so it stays hidden until then.
   const [readyFor, setReadyFor] = useState<string | null>(null);
@@ -78,13 +117,24 @@ export function GraphPage() {
     affects: (notice) => touchesProject(notice, projectId),
   });
 
+  // The nodes hidden by hand that still exist, each with how many cards go with it.
+  const { hiddenRoots, hiddenIds } = useMemo(() => {
+    if (!data) return { hiddenRoots: [], hiddenIds: new Set<string>() };
+    const byId = new Map(data.nodes.map((n) => [n.id, n]));
+    const hiddenRoots = hidden.ids.flatMap((id) => {
+      const node = byId.get(id);
+      return node ? [{ node, under: withDescendants([id], data.edges).size - 1 }] : [];
+    });
+    return { hiddenRoots, hiddenIds: withDescendants(hidden.ids, data.edges) };
+  }, [data, hidden.ids]);
+
   const { flowNodes, flowEdges, viewport } = useMemo(() => {
     const none: Viewport = { x: 0, y: 0, zoom: 1 };
     if (!data || !size) return { flowNodes: [] as StageCardNode[], flowEdges: [] as RoutedEdgeType[], viewport: none };
     const { nodes, edges, positions, routes } = graphView(
       data.nodes,
       data.edges,
-      (n) => hideInvalidated && isInvalidated(n),
+      (n) => hiddenIds.has(n.id) || (hideInvalidated && isInvalidated(n)),
     );
     const stageOf = new Map(nodes.map((n) => [n.id, n.stage]));
     const flowNodes: StageCardNode[] = inReadingOrder(nodes, positions).map((node) => ({
@@ -93,7 +143,7 @@ export function GraphPage() {
       position: positions.get(node.id) ?? { x: 0, y: 0 },
       width: CARD_WIDTH,
       height: CARD_HEIGHT,
-      data: { node, stages: data.stages },
+      data: { node, stages: data.stages, onHide: hidden.hide },
     }));
     const flowEdges: RoutedEdgeType[] = edges.map((edge) => {
       // A done or invalidated blocker holds nothing any more, so its edge fades.
@@ -115,7 +165,7 @@ export function GraphPage() {
     });
     const shownAt = flowNodes.map((node) => node.position);
     return { flowNodes, flowEdges, viewport: fittedViewport(shownAt, size, narrow ? NARROW_FIT : WIDE_FIT) };
-  }, [data, hideInvalidated, size, narrow]);
+  }, [data, hideInvalidated, hiddenIds, hidden.hide, size, narrow]);
 
   return (
     <div className="graph-page">
@@ -126,6 +176,29 @@ export function GraphPage() {
           <h1>{data?.project?.name ?? ""}</h1>
         </nav>
         <div className="graph-tools">
+          {hiddenRoots.length > 0 ? (
+            <details className="graph-hidden">
+              <summary>Hidden ({hiddenRoots.length})</summary>
+              <div className="graph-hidden-menu">
+                <ul>
+                  {hiddenRoots.map(({ node, under }) => (
+                    <li key={node.id}>
+                      <span className="graph-hidden-name">
+                        <Link to={`/n/${node.id}`}>{node.title}</Link>
+                        {under > 0 ? <span className="muted"> and {under} under it</span> : null}
+                      </span>
+                      <button type="button" onClick={() => hidden.show(node.id)} aria-label={`Show "${node.title}"`}>
+                        Show
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <button type="button" onClick={hidden.showAll}>
+                  Show all
+                </button>
+              </div>
+            </details>
+          ) : null}
           <label className="graph-filter">
             <input type="checkbox" checked={hideInvalidated} onChange={(e) => setHideInvalidated(e.target.checked)} />
             Hide invalidated
@@ -154,7 +227,7 @@ export function GraphPage() {
           <div className="graph-empty">
             <strong>Every node here is hidden</strong>
             <span className="muted">
-              They're all invalidated or invalidated by a parent. Turn off "Hide invalidated" to see them.
+              Turn off "Hide invalidated", or show nodes from the "Hidden" list, to see them.
             </span>
           </div>
         ) : null}

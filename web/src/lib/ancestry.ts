@@ -17,3 +17,23 @@ export function ancestorsOf<N extends { id: string }>(node: N, nodes: N[], edges
     current = parent.id;
   }
 }
+
+/**
+ * `roots` and everything under them through `subtask` edges, however deep. A node with several
+ * parents is in if any of them is.
+ */
+export function withDescendants(roots: Iterable<string>, edges: ParentEdge[]): Set<string> {
+  const children = new Map<string, string[]>();
+  for (const edge of edges) {
+    if (edge.kind !== "subtask") continue;
+    children.set(edge.source_id, [...(children.get(edge.source_id) ?? []), edge.target_id]);
+  }
+  const found = new Set<string>();
+  const queue = [...roots];
+  for (let id = queue.pop(); id !== undefined; id = queue.pop()) {
+    if (found.has(id)) continue;
+    found.add(id);
+    queue.push(...(children.get(id) ?? []));
+  }
+  return found;
+}
