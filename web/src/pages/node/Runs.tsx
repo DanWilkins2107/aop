@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { LogTail, NodeView, RunView } from "../../../../src/shared/api.js";
 import { api, failureText, urls } from "../../lib/api.js";
+import { Part } from "./Part.js";
 import { formatDuration, formatStart, formatTokens, humanize, runEnding, shortRunId } from "../../lib/format.js";
 
 /** How often a running run's row and log tail are read again. Its output doesn't go through the change feed. */
@@ -40,7 +41,7 @@ function RunRow({ run, now }: { run: RunView; now: number }) {
   );
 }
 
-/** Every agent run on the node, newest first, then the end of the latest one's log. */
+/** Every agent run on the node, newest first, then the end of the latest one's log, collapsed until wanted. */
 export function Runs({ node }: { node: NodeView }) {
   const [state, setState] = useState<{ nodeId: string; loaded: Loaded } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -107,23 +108,24 @@ export function Runs({ node }: { node: NodeView }) {
           </tbody>
         </table>
       </div>
-      <div className="log-tail-head">
-        <h3>Latest log, run {shortRunId(latest.id)}</h3>
-        <a href={urls.runLog(latest.id)} target="_blank" rel="noreferrer" className="muted">
-          Full log
-        </a>
-      </div>
-      {loaded.tail ? (
-        loaded.tail.lines.length > 0 ? (
-          <pre className="log-tail" aria-label="Last 20 lines of the latest run's log">
-            {loaded.tail.lines.join("\n")}
-          </pre>
+      <Part title={`Latest log, run ${shortRunId(latest.id)}`}>
+        <p className="log-tail-head">
+          <a href={urls.runLog(latest.id)} target="_blank" rel="noreferrer" className="muted">
+            Full log
+          </a>
+        </p>
+        {loaded.tail ? (
+          loaded.tail.lines.length > 0 ? (
+            <pre className="log-tail" aria-label="Last 20 lines of the latest run's log">
+              {loaded.tail.lines.join("\n")}
+            </pre>
+          ) : (
+            <p className="muted runs-note">Nothing logged yet.</p>
+          )
         ) : (
-          <p className="muted runs-note">Nothing logged yet.</p>
-        )
-      ) : (
-        <p className="muted runs-note">{loaded.tailError ?? "No log."}</p>
-      )}
+          <p className="muted runs-note">{loaded.tailError ?? "No log."}</p>
+        )}
+      </Part>
     </div>
   );
 }
