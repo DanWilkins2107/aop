@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { IMPROVEMENTS_PROJECT_ID, type ImprovementSource } from "../../../src/shared/api.js";
 import { CaptureImprovement } from "../components/CaptureImprovement.js";
+import { ClaimMark } from "../components/ClaimMark.js";
 import { ErrorNotice } from "../components/ErrorNotice.js";
 import { HomeTabs } from "../components/HomeTabs.js";
 import { api } from "../lib/api.js";
@@ -69,7 +70,7 @@ export function ImprovementsPage() {
             <Link to={`/n/${node.id}`} className="project-card">
               <span className="project-name">{node.title}</span>
               <span className="project-path">
-                {humanize(node.stage)} · {sourceText(source)}
+                {humanize(node.stage)} · {sourceText(source)} <ClaimMark node={node} />
               </span>
             </Link>
           </li>
