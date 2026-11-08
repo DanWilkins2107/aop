@@ -15,7 +15,7 @@ import {
   runEnding,
   stageOptionGroups,
 } from "../../web/src/lib/format.js";
-import { cardKind, cardLook, cardName, cardType, isInvalidated, lookOf, stageColor, stageLabel } from "../../web/src/lib/stageStyle.js";
+import { cardKind, cardLook, cardName, cardType, isFinished, isInvalidated, lookOf, stageColor, stageLabel } from "../../web/src/lib/stageStyle.js";
 
 const COLORS = ["#ffc107", "#cddc39", "#000000", "#ffffff", "#123", "#4263eb", "#e91e63", "#808080", "#12b886aa"];
 
@@ -632,6 +632,14 @@ describe("waiting and hidden cards", () => {
     expect(isInvalidated(nodeAt("beta", { invalidated_by_parent: true }))).toBe(true);
     expect(isInvalidated(nodeAt("beta"))).toBe(false);
     expect(isInvalidated(nodeAt("done"))).toBe(false);
+  });
+
+  it("counts a node as finished if it's done or invalidated", () => {
+    expect(isFinished(nodeAt("done"))).toBe(true);
+    expect(isFinished(nodeAt("invalidated"))).toBe(true);
+    expect(isFinished(nodeAt("beta", { invalidated_by_parent: true }))).toBe(true);
+    expect(isFinished(nodeAt("beta"))).toBe(false);
+    expect(isFinished(nodeAt("broken_down"))).toBe(false);
   });
 
   it("names a card's link with what its colour says, so a screen reader hears it too", () => {

@@ -10,6 +10,7 @@ import { CARD_HEIGHT, CARD_WIDTH, fittedViewport, graphView, inReadingOrder, typ
 import { touchesProject } from "../lib/changes.js";
 import { useLiveData } from "../lib/live.js";
 import { isInvalidated } from "../lib/stageStyle.js";
+import { useStoredFlag } from "../lib/storedFlag.js";
 
 const nodeTypes = { stage: StageCard };
 const edgeTypes = { routed: RoutedEdge };
@@ -27,27 +28,6 @@ const WIDE_FIT: FitOptions = { padding: { x: 56, y: 24 }, minZoom: 0.5, maxZoom:
 const NARROW_FIT: FitOptions = { padding: { x: 16, y: 16 }, minZoom: 0.7, maxZoom: 1 };
 // What the fit button does: the whole graph, however small.
 const FIT_ALL = { padding: "16px", maxZoom: 1 } as const;
-
-/** "Hide invalidated", remembered per project. */
-function useHideInvalidated(projectId: string) {
-  const key = `aop:hideInvalidated:${projectId}`;
-  const [hide, setHide] = useState(() => {
-    try {
-      return localStorage.getItem(key) === "1";
-    } catch {
-      return false;
-    }
-  });
-  const change = (next: boolean) => {
-    try {
-      localStorage.setItem(key, next ? "1" : "0");
-    } catch {
-      // Only a convenience: the toggle still works until the page reloads.
-    }
-    setHide(next);
-  };
-  return [hide, change] as const;
-}
 
 /** The canvas's size, known before anything paints. */
 function useSize() {
@@ -86,7 +66,8 @@ export function GraphPage() {
   const { projectId = "" } = useParams();
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
-  const [hideInvalidated, setHideInvalidated] = useHideInvalidated(projectId);
+  // Remembered per project.
+  const [hideInvalidated, setHideInvalidated] = useStoredFlag(`aop:hideInvalidated:${projectId}`);
   const { ref: canvasRef, size } = useSize();
   // React Flow applies its starting view just after it mounts, so it stays hidden until then.
   const [readyFor, setReadyFor] = useState<string | null>(null);

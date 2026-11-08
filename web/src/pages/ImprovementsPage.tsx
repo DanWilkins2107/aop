@@ -9,7 +9,8 @@ import { api } from "../lib/api.js";
 import { touchesProject } from "../lib/changes.js";
 import { humanize } from "../lib/format.js";
 import { useLiveData } from "../lib/live.js";
-import { stageColor } from "../lib/stageStyle.js";
+import { isFinished, stageColor } from "../lib/stageStyle.js";
+import { useStoredFlag } from "../lib/storedFlag.js";
 
 async function load() {
   const [list, stages] = await Promise.all([api.improvements(), api.improvementStages()]);
@@ -32,16 +33,24 @@ export function ImprovementsPage() {
       ),
   });
   const [adding, setAdding] = useState(false);
+  const [hideFinished, setHideFinished] = useStoredFlag("aop:hideFinishedImprovements");
   const list = data?.list;
+  const shown = (list?.improvements ?? []).filter(({ node }) => !hideFinished || !isFinished(node));
 
   return (
     <div className="page page-narrow">
       <HomeTabs
         action={
           list?.enabled ? (
-            <button type="button" onClick={() => setAdding(true)} disabled={adding}>
-              New improvement
-            </button>
+            <div className="home-tools">
+              <label className="graph-filter">
+                <input type="checkbox" checked={hideFinished} onChange={(e) => setHideFinished(e.target.checked)} />
+                Hide done and invalidated
+              </label>
+              <button type="button" onClick={() => setAdding(true)} disabled={adding}>
+                New improvement
+              </button>
+            </div>
           ) : null
         }
       />
@@ -58,8 +67,14 @@ export function ImprovementsPage() {
           <p className="muted">Add one from the + beside any message, or with New improvement.</p>
         </div>
       ) : null}
+      {list?.enabled && list.improvements.length > 0 && shown.length === 0 && !adding ? (
+        <div className="empty">
+          <strong>Every improvement here is hidden</strong>
+          <p className="muted">They're all done or invalidated. Turn off "Hide done and invalidated" to see them.</p>
+        </div>
+      ) : null}
       <ul className="project-list">
-        {list?.improvements.map(({ node, source }) => (
+        {shown.map(({ node, source }) => (
           <li
             key={node.id}
             className="project-row improvement-row"
