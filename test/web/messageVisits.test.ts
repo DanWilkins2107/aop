@@ -16,8 +16,8 @@ function log(start: string) {
   return {
     events,
     messages,
-    move(to: string) {
-      event("stage_changed", { from_stage: stage, to_stage: to });
+    move(to: string, extra: Record<string, unknown> = {}) {
+      event("stage_changed", { via: "next", from_stage: stage, from_type: "dev", to_stage: to, to_type: "dev", ...extra });
       stage = to;
     },
     say(body: string, author: "human" | "agent" = "agent") {
@@ -29,7 +29,10 @@ function log(start: string) {
 }
 
 const shape = (events: EventView[], messages: MessageRow[]) =>
-  messageVisits(events, messages).map((visit) => [visit.stage, visit.messages.map((m) => m.body)]);
+  messageVisits(events, messages).map((visit) => [
+    visit.stage,
+    visit.entries.map((entry) => (entry.kind === "message" ? entry.message.body : `(${entry.text})`)),
+  ]);
 
 describe("messageVisits", () => {
   it("has no visits without messages", () => {
@@ -82,6 +85,33 @@ describe("messageVisits", () => {
     expect(shape(l.events, l.messages)).toEqual([["implement", ["after", "before"]]]);
   });
 
+  it("notes a forced move at the start of the visit it leads into, even with no messages there", () => {
+    const l = log("implement");
+    l.say("a");
+    l.move("pr_review", { via: "move" });
+    l.move("implement", { via: "move", to_type: "hotfix" });
+    l.say("b");
+    expect(shape(l.events, l.messages)).toEqual([
+      ["implement", ["b", "(Moved to Implement in Hotfix (forced))"]],
+      ["pr_review", ["(Moved to PR review (forced))"]],
+      ["implement", ["a"]],
+    ]);
+  });
+
+  it("notes an outcome that jumps type, but not one within a type", () => {
+    const l = log("awaiting_agent_breakdown");
+    l.say("a");
+    l.move("write_spec", { from_type: "triage", to_type: "dev" });
+    l.say("b");
+    l.move("spec_review");
+    l.say("c");
+    expect(shape(l.events, l.messages)).toEqual([
+      ["spec_review", ["c"]],
+      ["write_spec", ["b", "(Moved from Triage into Dev)"]],
+      ["awaiting_agent_breakdown", ["a"]],
+    ]);
+  });
+
   it("never loses a message whose event hasn't loaded yet", () => {
     const l = log("implement");
     l.say("seen");
@@ -126,6 +156,17 @@ describe("messageVisits", () => {
         ["write_spec", ["carrying on"]],
         ["ask_human_question", ["That way.", "Which way?"]],
         ["write_spec", ["starting"]],
+      ]);
+    });
+
+    it("notes a human's forced move and a jump between types, and nothing else", async () => {
+      const node = await h.create("triage");
+      await h.post(node.id, "next", { outcome: "ready" });
+      await h.post(node.id, "next", { outcome: "done" });
+      await h.post(node.id, "move", { stage: "implement" });
+      expect(await visitsOf(node.id)).toEqual([
+        ["implement", ["(Moved to Implement (forced))"]],
+        ["write_spec", ["(Moved from Triage into Dev)"]],
       ]);
     });
 
