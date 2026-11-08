@@ -6,7 +6,10 @@ import { CARD_HEIGHT, CARD_WIDTH } from "../lib/layout.js";
 import { cardKind, cardLook, cardName, cardType, stageLabel } from "../lib/stageStyle.js";
 import { ClaimMark } from "./ClaimMark.js";
 
-export type StageCardNode = Node<{ node: NodeView; stages: StagesView | null }, "stage">;
+export type StageCardNode = Node<
+  { node: NodeView; stages: StagesView | null; onHide?: (nodeId: string) => void },
+  "stage"
+>;
 
 /**
  * Brings a card into view when Tab reaches it off screen, without zooming or animating. A click
@@ -25,7 +28,7 @@ function usePanToFocused(x: number, y: number) {
 }
 
 export function StageCard({ data, positionAbsoluteX, positionAbsoluteY }: NodeProps<StageCardNode>) {
-  const { node, stages } = data;
+  const { node, stages, onHide } = data;
   const look = cardLook(node, stages);
   const kind = cardKind(node);
   const panToFocused = usePanToFocused(positionAbsoluteX, positionAbsoluteY);
@@ -53,6 +56,19 @@ export function StageCard({ data, positionAbsoluteX, positionAbsoluteY }: NodePr
       </div>
       {/* A real link, so that keyboard focus and open-in-new-tab work. */}
       <Link to={`/n/${node.id}`} className="card-link" draggable={false} aria-label={cardName(node)} onFocus={panToFocused} />
+      {onHide ? (
+        <button
+          type="button"
+          className="card-hide"
+          style={{ background: look.background, color: look.text }}
+          aria-label={`Hide "${node.title}" and its subtasks in the graph`}
+          title="Hide this and its subtasks in the graph"
+          onFocus={panToFocused}
+          onClick={() => onHide(node.id)}
+        >
+          Hide
+        </button>
+      ) : null}
       <Handle type="source" position={Position.Bottom} className="card-handle" isConnectable={false} />
     </div>
   );
