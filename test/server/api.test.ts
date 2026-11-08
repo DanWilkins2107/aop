@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { holdersOf, type EventView, type MessageRow, type NodeView } from "../../src/server/nodes.js";
+import { loadConfig } from "../../src/server/config.js";
+import { graphsOf, holdersOf, listNodes, startableNodes, type EventView, type MessageRow, type NodeView } from "../../src/server/nodes.js";
 import { harness, makeRepo, STAGES_YAML, type Harness } from "./helpers.js";
 
 let h: Harness;
@@ -699,12 +700,19 @@ describe("blocks helper", () => {
     expect(holdersOf(h.db, held.id)).toEqual([]);
   });
 
-  it("keeps holding when the blocker is invalidated", async () => {
+  it("stops holding when the blocker is invalidated, and holds again when it's restored", async () => {
     const blocker = await h.create("dev");
     const held = await h.create("dev");
     await h.call("POST", `/api/nodes/${blocker.id}/edges`, { target_id: held.id, kind: "blocks" });
     await h.post(blocker.id, "invalidate", { reason: "x" });
-    expect(holdersOf(h.db, held.id)).toEqual([{ id: blocker.id, stage: "invalidated", via: "blocks" }]);
+    expect(holdersOf(h.db, held.id)).toEqual([]);
+    expect((await h.node(held.id)).blocked_by).toEqual([]);
+    expect(listNodes(h.db, h.projectId).find((node) => node.id === held.id)?.blocked_by).toEqual([]);
+    expect(startableNodes(h.db, graphsOf(loadConfig())).map((node) => node.id)).toContain(held.id);
+
+    await h.post(blocker.id, "restore");
+    expect(holdersOf(h.db, held.id)).toEqual([{ id: blocker.id, stage: "write_spec", via: "blocks" }]);
+    expect(startableNodes(h.db, graphsOf(loadConfig())).map((node) => node.id)).not.toContain(held.id);
   });
 
   it("ignores subtask edges", async () => {

@@ -4,6 +4,7 @@
 import { nextFireAt } from "./cron.js";
 import type { Db } from "./db.js";
 import type { HolderVia, NodeRow, NodeView } from "../shared/api.js";
+import { NON_BLOCKING_STAGES } from "../shared/builtInStages.js";
 import { availableOutcomes, currentGraphs, getNodeRow, graphFor, stageIsLive, turnOf, type Graphs } from "./nodeCore.js";
 
 /** Invalidated ancestors of a node. Derived at read time; being invalidated by a parent is never stored. */
@@ -33,8 +34,7 @@ export interface Holder {
 /**
  * Everything stopping an agent starting on this node. Empty means nothing is.
  *
- * - `blocks`: a blocker that isn't `done`. An `invalidated` one still blocks, so that a human has
- *   to decide, and a `broken_down` one only has blocks left if a human moved it there.
+ * - `blocks`: a blocker that isn't at one of `NON_BLOCKING_STAGES` (`done` or `invalidated`).
  * - `split`: a parent part-way through a split. That includes one waiting on a human: its
  *   `return_stage` is `splitting`, or it's externally blocked from a question or failure that was.
  * - `invalidated_parent`: an invalidated ancestor, through `subtask` edges.
@@ -44,7 +44,7 @@ export function holdersOf(db: Db, nodeId: string): Holder[] {
     .prepare(
       `SELECT n.id, n.stage, 'blocks' AS via FROM edges e JOIN nodes n ON n.id = e.source_id
         WHERE e.target_id = @id AND e.kind = 'blocks' AND e.removed_at IS NULL
-          AND n.stage <> 'done'
+          AND n.stage NOT IN (SELECT value FROM json_each(@nonBlocking))
        UNION ALL
        SELECT n.id, n.stage, 'split' AS via FROM edges e JOIN nodes n ON n.id = e.source_id
         WHERE e.target_id = @id AND e.kind = 'subtask' AND e.removed_at IS NULL
@@ -55,7 +55,7 @@ export function holdersOf(db: Db, nodeId: string): Holder[] {
                       AND json_extract(ev.data, '$.via') = 'block'
                     ORDER BY ev.rowid DESC LIMIT 1) = 'splitting'))`,
     )
-    .all({ id: nodeId }) as Holder[];
+    .all({ id: nodeId, nonBlocking: JSON.stringify(NON_BLOCKING_STAGES) }) as Holder[];
   const ancestors = invalidatedAncestors(db, nodeId).map(
     (id): Holder => ({ id, stage: "invalidated", via: "invalidated_parent" }),
   );
@@ -150,7 +150,7 @@ function holdersIn(db: Db, nodes: HolderState[], projectIds: string[]): Map<stri
   for (const node of nodes) {
     const into = incoming.get(node.id) ?? [];
     const blocks = into
-      .filter(({ source, kind }) => kind === "blocks" && source.stage !== "done")
+      .filter(({ source, kind }) => kind === "blocks" && !NON_BLOCKING_STAGES.includes(source.stage))
       .map(({ source }): Holder => ({ id: source.id, stage: source.stage, via: "blocks" }));
     const split = into
       .filter(({ source, kind }) => kind === "subtask" && splits(source))
