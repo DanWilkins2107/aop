@@ -110,24 +110,45 @@ export function layoutGraph(nodeIds: string[], edges: LayoutEdge[]): GraphLayout
   return { positions, routes };
 }
 
+/** The shown nodes oldest first, and the edges between them. */
+export function shownGraph<N extends { id: string; created_at: string }, E extends LayoutEdge>(
+  allNodes: N[],
+  allEdges: E[],
+  hidden: (node: N) => boolean,
+): { nodes: N[]; edges: E[] } {
+  // Nodes made in the same millisecond fall back to their ID, so the order never depends on arrival.
+  const nodes = allNodes
+    .filter((node) => !hidden(node))
+    .sort((a, b) =>
+      a.created_at !== b.created_at ? (a.created_at < b.created_at ? -1 : 1) : a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+    );
+  const shown = new Set(nodes.map((node) => node.id));
+  const edges = allEdges.filter((edge) => shown.has(edge.source_id) && shown.has(edge.target_id));
+  return { nodes, edges };
+}
+
 /**
- * What the graph shows. Positions always come from every node, oldest first, so that hiding a node
- * leaves a gap instead of moving the others, and a new unconnected node lands at the right end.
+ * Everything `layoutGraph` reads from a shown graph, as one string: the same string always gives
+ * the same layout, so a refetch or a stage change can't move a card or the view. Nodes oldest first.
+ */
+export function structureKey(nodes: { id: string }[], edges: LayoutEdge[]): string {
+  const ids = nodes.map((node) => node.id);
+  const links = stableEdges(ids, edges).map((e) => `${e.id}:${e.source_id}>${e.target_id}:${e.kind}`);
+  return `${ids.join(",")}|${links.join(",")}`;
+}
+
+/**
+ * What the graph shows, laid out from the shown nodes alone. Hiding a node closes its gap, and a new
+ * unconnected node lands at the right end. Nothing hidden can move a card, so neither can a hidden
+ * part of the graph growing.
  */
 export function graphView<N extends { id: string; created_at: string }, E extends LayoutEdge>(
   allNodes: N[],
   allEdges: E[],
   hidden: (node: N) => boolean,
 ): GraphLayout & { nodes: N[]; edges: E[] } {
-  // Nodes made in the same millisecond fall back to their ID, so the order never depends on arrival.
-  const oldestFirst = [...allNodes].sort((a, b) =>
-    a.created_at !== b.created_at ? (a.created_at < b.created_at ? -1 : 1) : a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
-  );
-  const { positions, routes } = layoutGraph(oldestFirst.map((node) => node.id), allEdges);
-  const nodes = oldestFirst.filter((node) => !hidden(node));
-  const shown = new Set(nodes.map((node) => node.id));
-  const edges = allEdges.filter((edge) => shown.has(edge.source_id) && shown.has(edge.target_id));
-  return { nodes, edges, positions, routes };
+  const { nodes, edges } = shownGraph(allNodes, allEdges, hidden);
+  return { nodes, edges, ...layoutGraph(nodes.map((node) => node.id), edges) };
 }
 
 /**
