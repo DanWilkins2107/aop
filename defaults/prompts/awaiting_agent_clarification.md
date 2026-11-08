@@ -1,6 +1,6 @@
-# Clarify a decision
+# Clarify for a human
 
-A human has a decision to make and asked you to look into it first. The decision is the node's title and description; what they want clarified is in its latest messages.
+A human has a decision to make, or an action only they can do, and asked you to look into it first. The decision or action is the node's title and description; what they want clarified is in its latest messages.
 
 ## Study
 - Read the description, messages, ancestors and siblings in the context.
@@ -14,7 +14,7 @@ Post it with `aop message`, short enough to read at a glance:
 - Your recommendation, in a line.
 - Anything you couldn't find out, in a line.
 
-Answer only what was asked. Don't repeat the summary, the description or options they didn't ask about: those are already on the page. Don't make the decision or start the work: that's for the human.
+Answer only what was asked. Don't repeat the summary, the description or options they didn't ask about: those are already on the page. Don't make the decision, do the action or start the work: that's for the human.
 
 ## Finish
 Then `aop next clarified`.

@@ -71,6 +71,16 @@ describe("shipped defaults", () => {
     expect(config.graph.types.get("triage")?.stages.get("human_only_action")?.get("retriage")).toBe("triage");
   });
 
+  it("let a human ask about a human-only action and get it back once an agent clarifies", () => {
+    const triage = loadConfig(installDefaults()).graph.types.get("triage")!;
+    expect(Object.fromEntries(triage.stages.get("human_only_action")!)).toEqual({
+      done: "done",
+      clarify: "awaiting_agent_clarification",
+      retriage: "triage",
+    });
+    expect(Object.fromEntries(triage.stages.get("awaiting_agent_clarification")!)).toEqual({ clarified: "human_only_action" });
+  });
+
   it("have a prompt for every agent stage and nothing else", () => {
     const config = loadConfig(installDefaults());
     const pools = [...config.graph.stages, ...(config.improvementGraph?.stages ?? [])];
