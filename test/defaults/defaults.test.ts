@@ -55,17 +55,20 @@ describe("shipped defaults", () => {
     expect([...config.graph.types.values()].some((type) => type.stages.has("scheduled"))).toBe(false);
   });
 
-  it("go between a human's decision and an agent's clarification, and triage can route there", () => {
+  it("start decisions with an agent's summary, go between a human's decision and an agent's clarification, and triage can route there", () => {
     const config = loadConfig(installDefaults());
     const decisions = config.graph.types.get("decisions")!;
-    expect(decisions.start).toBe("decision");
+    expect(decisions.start).toBe("awaiting_agent_summary");
     expect(Object.fromEntries([...decisions.stages].map(([stage, next]) => [stage, Object.fromEntries(next)]))).toEqual({
-      decision: { decided: "done", clarify: "awaiting_agent_clarification" },
+      awaiting_agent_summary: { summarised: "decision" },
+      decision: { decided: "done", clarify: "awaiting_agent_clarification", retriage: "triage" },
       awaiting_agent_clarification: { clarified: "decision" },
     });
+    expect(config.graph.stages.get("awaiting_agent_summary")?.turn).toBe("agent");
     expect(config.graph.stages.get("decision")?.turn).toBe("human");
     expect(config.graph.stages.get("awaiting_agent_clarification")?.turn).toBe("agent");
     expect(config.graph.types.get("triage")?.stages.get("awaiting_agent_breakdown")?.get("decision")).toBe("decisions");
+    expect(config.graph.types.get("triage")?.stages.get("human_only_action")?.get("retriage")).toBe("triage");
   });
 
   it("have a prompt for every agent stage and nothing else", () => {

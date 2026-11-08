@@ -20,6 +20,7 @@ stages:                       # pool of every stage
   implement:           { turn: agent, color: "#35a98b", prompt: ./prompts/implement.md }
   pr_review:           { turn: human, color: "#a48be6" }
   second_human_review: { turn: human, color: "#d96aa6" }
+  awaiting_agent_summary: { turn: agent, color: "#8a6fd1", prompt: ./prompts/awaiting_agent_summary.md }
   decision:            { turn: human, color: "#c084d8" }
   awaiting_agent_clarification: { turn: agent, color: "#4fa9b8", prompt: ./prompts/awaiting_agent_clarification.md }
 
@@ -28,7 +29,7 @@ types:                        # a mini graph for each part of the workflow
     start: awaiting_agent_breakdown
     stages:
       awaiting_agent_breakdown: { next: { ready: dev, split: split_proposed, human_only: human_only_action, decision: decisions } }
-      human_only_action: { next: { done: done } }
+      human_only_action: { next: { done: done, retriage: triage } }
       split_proposed:    { next: { approve: split_approved, reject: awaiting_agent_breakdown } }
       split_approved:    { next: { done: broken_down } }
   dev:
@@ -37,8 +38,9 @@ types:                        # a mini graph for each part of the workflow
       implement:           { next: { pr_raised: pr_review } }
       pr_review:           { next: { approve: second_human_review, changes: implement } }
       second_human_review: { next: { merged: done, changes: implement } }
-  decisions:                  # a choice for a human, who can ask an agent to look into it first
-    start: decision
+  decisions:                  # an agent sets out the choice, then a human makes it or asks for more
+    start: awaiting_agent_summary
     stages:
-      decision:                     { next: { decided: done, clarify: awaiting_agent_clarification } }
+      awaiting_agent_summary:       { next: { summarised: decision } }
+      decision:                     { next: { decided: done, clarify: awaiting_agent_clarification, retriage: triage } }
       awaiting_agent_clarification: { next: { clarified: decision } }
