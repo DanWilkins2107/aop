@@ -36,10 +36,13 @@
   gap: 6px;
   align-items: center;
 }
+/* Sized like the buttons beside them, not like form fields. */
 .inline-form select,
 .inline-form input {
   flex: 1 1 140px;
   width: auto;
+  padding: 3px 8px;
+  font-size: 13px;
 }
 .inline-form button {
   flex: 0 0 auto;
