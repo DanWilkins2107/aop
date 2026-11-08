@@ -16,7 +16,7 @@ stages:                       # pool of every stage
   awaiting_agent_breakdown: { turn: agent, color: "#7088e0", prompt: ./prompts/awaiting_agent_breakdown.md }
   split_proposed:      { turn: human, color: "#f0c84f" }
   split_approved:      { turn: agent, color: "#4a63c4", prompt: ./prompts/split_approved.md }
-  human_only_action:   { turn: human, color: "#b8c25c" }
+  human_only_action:   { turn: human, color: "#c9a27a" }
   implement:           { turn: agent, color: "#35a98b", prompt: ./prompts/implement.md }
   pr_review:           { turn: human, color: "#a48be6" }
   second_human_review: { turn: human, color: "#d96aa6" }
