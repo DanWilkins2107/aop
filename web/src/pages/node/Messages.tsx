@@ -4,7 +4,7 @@ import type { EventView, MessageRow, NodeView, StagesView } from "../../../../sr
 import { CaptureImprovement } from "../../components/CaptureImprovement.js";
 import { api } from "../../lib/api.js";
 import { FormError, useFormError } from "../../components/FormError.js";
-import { messageVisits } from "../../lib/messageVisits.js";
+import { messageVisits, type VisitEntry } from "../../lib/messageVisits.js";
 import { humanize, timeAgo, toTarget } from "../../lib/format.js";
 import { accentOf, stageColor } from "../../lib/stageStyle.js";
 import { useAction } from "../../lib/useAction.js";
@@ -41,10 +41,13 @@ function MessageBox({ node, asking, reload }: { node: NodeView; asking: boolean;
   );
 }
 
+const entryId = (entry: VisitEntry) => (entry.kind === "message" ? entry.message.id : entry.id);
+
 /**
  * Every message in one outer card, under the single message box. Inside it, one card per
  * continuous visit to a stage, newest visit first, each holding that visit's messages newest
  * first. The inner card carries the stage, so the messages themselves only show who wrote them.
+ * A stage change the messages wouldn't explain sits among them as a small centred note.
  */
 export function Messages({
   node,
@@ -79,44 +82,54 @@ export function Messages({
       {visits.length === 0 ? <p className="muted section-text">No messages yet.</p> : null}
       {visits.map((visit) => (
         <section
-          // A visit's oldest message never changes, so it keys the card steadily as new ones arrive.
-          key={visit.messages.at(-1)?.id}
+          // A visit's oldest entry never changes, so it keys the card steadily as new ones arrive.
+          key={entryId(visit.entries.at(-1)!)}
           className="visit"
           aria-label={`Messages in ${humanize(visit.stage)}`}
           data-stage={visit.stage}
           style={{ borderLeftColor: accentOf(stageColor(visit.stage, stages)) }}
         >
           <h3 className="visit-stage">{humanize(visit.stage)}</h3>
-          {visit.messages.map((message) => (
-            <article
-              key={message.id}
-              id={`m-${message.id}`}
-              className={`message message-${message.author}${`#m-${message.id}` === hash ? " message-target" : ""}`}
-            >
-              <div className="message-meta">
-                <span className="message-author">{humanize(message.author)}</span>
-                <span className="message-context" title={message.created_at}>
-                  {timeAgo(message.created_at)}
-                </span>
-                {canCapture ? (
-                  <button
-                    type="button"
-                    className="btn-quiet message-capture"
-                    aria-label="Add an improvement from this message"
-                    title="Add an improvement from this message"
-                    aria-expanded={capturing === message.id}
-                    onClick={() => setCapturing(capturing === message.id ? null : message.id)}
-                  >
-                    +
-                  </button>
+          {visit.entries.map((entry) => {
+            if (entry.kind === "note") {
+              return (
+                <p key={entry.id} className="message-note" title={entry.at}>
+                  {entry.text} · {timeAgo(entry.at)}
+                </p>
+              );
+            }
+            const { message } = entry;
+            return (
+              <article
+                key={message.id}
+                id={`m-${message.id}`}
+                className={`message message-${message.author}${`#m-${message.id}` === hash ? " message-target" : ""}`}
+              >
+                <div className="message-meta">
+                  <span className="message-author">{humanize(message.author)}</span>
+                  <span className="message-context" title={message.created_at}>
+                    {timeAgo(message.created_at)}
+                  </span>
+                  {canCapture ? (
+                    <button
+                      type="button"
+                      className="btn-quiet message-capture"
+                      aria-label="Add an improvement from this message"
+                      title="Add an improvement from this message"
+                      aria-expanded={capturing === message.id}
+                      onClick={() => setCapturing(capturing === message.id ? null : message.id)}
+                    >
+                      +
+                    </button>
+                  ) : null}
+                </div>
+                <div className="message-body">{message.body}</div>
+                {capturing === message.id ? (
+                  <CaptureImprovement key={message.id} sourceMessageId={message.id} onClose={() => setCapturing(null)} />
                 ) : null}
-              </div>
-              <div className="message-body">{message.body}</div>
-              {capturing === message.id ? (
-                <CaptureImprovement key={message.id} sourceMessageId={message.id} onClose={() => setCapturing(null)} />
-              ) : null}
-            </article>
-          ))}
+              </article>
+            );
+          })}
         </section>
       ))}
     </section>

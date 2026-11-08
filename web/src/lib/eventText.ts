@@ -58,6 +58,24 @@ function unlisted<T>(_value: never, fallback: T): T {
   return fallback;
 }
 
+/**
+ * The line a stage change gets among the messages, or null for one the messages already explain.
+ * Only a human's forced move and a jump into another type get one; an outcome within a type doesn't.
+ */
+export function stageChangeNote(event: EventView): string | null {
+  if (!isNodeEvent(event) || event.kind !== "stage_changed") return null;
+  const { data } = event;
+  const fromType = text(data.from_type);
+  const toType = text(data.to_type);
+  const changesType = fromType !== "" && toType !== "" && fromType !== toType;
+  if (data.via === "move") {
+    const into = changesType ? ` in ${humanize(toType)}` : "";
+    return `Moved to ${humanize(text(data.to_stage))}${into} (forced)`;
+  }
+  if (changesType) return `Moved from ${humanize(fromType)} into ${humanize(toType)}`;
+  return null;
+}
+
 /** One line of history. `titleOf` names the other end of an edge. */
 export function describeEvent(event: EventView, titleOf: (id: string) => string): string {
   if (!isNodeEvent(event)) return humanize(event.kind);

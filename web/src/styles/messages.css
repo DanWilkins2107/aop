@@ -46,3 +46,11 @@
 .composer + .section-text {
   margin-top: 12px;
 }
+/* AOP's own line about a stage change: no card, so it never reads as someone speaking. */
+.message-note {
+  margin: 8px 0 0;
+  text-align: center;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--muted);
+}
