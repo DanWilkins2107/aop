@@ -66,7 +66,7 @@ Your process is defined in one `stages.yaml`, shared by all projects. You edit t
 - A node stays the same node as it moves between types.
 
 #### The default process
-- **triage:** an agent reads the new node at `awaiting_agent_breakdown` and routes it. Work that fits one PR goes to `dev`. Bigger work goes to `split_proposed`, where you approve or reject the proposed split. Once approved, the agent creates the children at `split_approved` and the node becomes `broken_down`. Work an agent can't do goes to `human_only_action`, and a choice for you to make goes to `decisions`.
+- **triage:** an agent reads the new node at `awaiting_agent_breakdown` and routes it. Work that fits one PR goes to `dev`. Bigger work goes to `split_proposed`, where you approve or reject the proposed split. Once approved, the agent creates the children at `split_approved` and the node becomes `broken_down`. Work an agent can't do goes to `human_only_action`, where you do it, or ask a question and **Clarify** sends it to an agent at `awaiting_agent_clarification` that answers and hands it back. A choice for you to make goes to `decisions`.
 - **dev:** an agent implements the work and raises a PR, then the node waits at `pr_review` and `second_human_review`. Approve moves it on, changes sends it back to the agent, and merged finishes it.
 - **decisions:** an agent sets out the choice at `awaiting_agent_summary`, then you decide at `decision`. Clarify sends it back to the agent for more, and retriage sends it back to `triage`.
 

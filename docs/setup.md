@@ -73,7 +73,7 @@ For what nodes, stages and types are, see [features.md](features.md).
    - **Asks a question:** the node goes to `ask_human_question`. Type your reply in the message box and click **Answer**. The agent starts again with your answer.
    - **Proposes a split:** the node goes to `split_proposed`, with the proposed children in its messages. Click **Approve** or **Reject**, adding a message first if you want changes. Once approved, an agent creates the children and the node becomes `broken_down`. Each child goes through its own stages.
    - **Says it's ready:** the node moves to `dev` and an agent implements it.
-   - **Says only a human can do it:** the node goes to `human_only_action`. Do the work, then click **Done**.
+   - **Says only a human can do it:** the node goes to `human_only_action`. Do the work, then click **Done**. To ask about it first, type your question in the message box and click **Clarify**: an agent answers in the messages and the node comes back to you.
 5. When the agent raises a PR, the link appears at the top of the node page and the node goes to `pr_review`. Review the PR, then click **Approve**, or **Changes** to send it back. Leave comments on the PR or in the node's messages.
 6. At `second_human_review`, merge the PR and click **Merged**. The node is `done`.
 
