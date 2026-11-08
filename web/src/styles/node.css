@@ -39,6 +39,11 @@
 .header-parts > .detail-part:first-child {
   border-top: 0;
 }
+.parents-list {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13px;
+}
 .pipeline-note {
   margin: 0 0 8px;
   font-size: 13px;

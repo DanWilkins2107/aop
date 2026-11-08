@@ -130,7 +130,7 @@ function Links({ links }: { links: LinkRow[] }) {
 export function NodePage() {
   const { nodeId = "" } = useParams();
   const { data, error, reload } = useLiveData<NodeData>((refresh) => loadNode(nodeId, refresh), nodeId, {
-    // The node's view depends on the rest of its project: its holders, and its ancestors' titles. An
+    // The node's view depends on the rest of its project: its holders, and its parents' titles. An
     // improvement's also shows its source, in another project.
     affects: (notice, shown) =>
       shown === null ||
@@ -167,12 +167,6 @@ export function NodePage() {
           ) : (
             <Link to={`/p/${node.project_id}`}>{data.project?.name ?? "Graph"}</Link>
           )}
-          {ancestors.map((ancestor) => (
-            <span key={ancestor.id}>
-              <span className="crumb-sep">›</span>
-              <Link to={`/n/${ancestor.id}`}>{ancestor.title}</Link>
-            </span>
-          ))}
         </nav>
 
         {error ? <ErrorNotice error={error} /> : null}
@@ -222,6 +216,15 @@ export function NodePage() {
                 returnTo={onGlobalStage ? originalStage(node, events) : null}
               />
             </Part>
+            {ancestors.length > 0 ? (
+              <Part title="Parents" status={ancestors.length}>
+                <ol className="parents-list">
+                  {ancestors.map((ancestor) => (
+                    <li key={ancestor.id}>{nodeLink(ancestor.id)}</li>
+                  ))}
+                </ol>
+              </Part>
+            ) : null}
             <NodeControls node={node} stages={stages} reload={reload} />
           </div>
         </header>
