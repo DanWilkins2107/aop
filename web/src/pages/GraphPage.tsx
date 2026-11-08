@@ -8,7 +8,16 @@ import { RoutedEdge, type RoutedEdgeType } from "../components/RoutedEdge.js";
 import { StageCard, type StageCardNode } from "../components/StageCard.js";
 import { withDescendants } from "../lib/ancestry.js";
 import { loadProjectGraph } from "../lib/api.js";
-import { CARD_HEIGHT, CARD_WIDTH, fittedViewport, graphView, inReadingOrder, type FitOptions } from "../lib/layout.js";
+import {
+  CARD_HEIGHT,
+  CARD_WIDTH,
+  fittedViewport,
+  inReadingOrder,
+  layoutGraph,
+  shownGraph,
+  structureKey,
+  type FitOptions,
+} from "../lib/layout.js";
 import { touchesProject } from "../lib/changes.js";
 import { useLiveData } from "../lib/live.js";
 import { isInvalidated } from "../lib/stageStyle.js";
@@ -84,20 +93,31 @@ function useSize() {
   return { ref, size };
 }
 
+const sameView = (a: Viewport, b: Viewport) =>
+  Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) < 0.5 && Math.abs(a.zoom - b.zoom) < 1e-3;
+
 /**
- * Fits the view once, the first time there are cards to fit. React Flow's `defaultViewport` covers
- * a graph that has cards from the start, but one that starts empty has nothing to fit until later.
- * After that only the user and the fit button move the view: hiding or live updates never do.
+ * Fits the view to the cards, but only when which cards are shown changes: the first cards, a node
+ * hidden or shown, or nodes added or removed. A change the user made by hiding or showing always
+ * refits. One that arrives live refits only if the user hasn't moved the view since the last fit.
+ * A refetch with the same cards, a stage change or a resize never moves the view.
  */
-function FitFirstCards({ hasCards, viewport }: { hasCards: boolean; viewport: Viewport }) {
-  const { setViewport } = useReactFlow();
-  const fitted = useRef(false);
+function FitOnNewCards({ structure, choice, viewport }: { structure: string; choice: string; viewport: Viewport }) {
+  const { setViewport, getViewport } = useReactFlow();
+  const last = useRef<{ structure: string; choice: string; fit: Viewport } | null>(null);
   useLayoutEffect(() => {
-    if (!hasCards || fitted.current) return;
-    fitted.current = true;
-    void setViewport(viewport);
-    // Only on `hasCards`: a viewport that changed for any other reason mustn't move the user's view.
-  }, [hasCards, setViewport]);
+    const before = last.current;
+    if (structure === "") return;
+    if (before?.structure === structure) {
+      last.current = { ...before, choice };
+    } else if (before === null || before.choice !== choice || sameView(getViewport(), before.fit)) {
+      void setViewport(viewport);
+      last.current = { structure, choice, fit: viewport };
+    } else {
+      last.current = { ...before, structure, choice };
+    }
+    // Not on `viewport`: one that changed for any other reason, like a resize, mustn't move the view.
+  }, [structure, choice, setViewport, getViewport]);
   return null;
 }
 
@@ -128,14 +148,25 @@ export function GraphPage() {
     return { hiddenRoots, hiddenIds: withDescendants(hidden.ids, data.edges) };
   }, [data, hidden.ids]);
 
+  const shown = useMemo(
+    () =>
+      data
+        ? shownGraph(data.nodes, data.edges, (n) => hiddenIds.has(n.id) || (hideInvalidated && isInvalidated(n)))
+        : null,
+    [data, hiddenIds, hideInvalidated],
+  );
+  const structure = shown ? structureKey(shown.nodes, shown.edges) : "";
+  // Laid out again only when `structure`, which is everything the layout reads from `shown`, changes.
+  const layout = useMemo(() => (shown ? layoutGraph(shown.nodes.map((n) => n.id), shown.edges) : null), [structure]);
+  // The user's own hiding choices: when these change, the view refits even if they'd moved it.
+  const choice = `${projectId}|${hideInvalidated ? 1 : 0}|${hidden.ids.join(",")}`;
+
   const { flowNodes, flowEdges, viewport } = useMemo(() => {
     const none: Viewport = { x: 0, y: 0, zoom: 1 };
-    if (!data || !size) return { flowNodes: [] as StageCardNode[], flowEdges: [] as RoutedEdgeType[], viewport: none };
-    const { nodes, edges, positions, routes } = graphView(
-      data.nodes,
-      data.edges,
-      (n) => hiddenIds.has(n.id) || (hideInvalidated && isInvalidated(n)),
-    );
+    if (!data || !size || !shown || !layout)
+      return { flowNodes: [] as StageCardNode[], flowEdges: [] as RoutedEdgeType[], viewport: none };
+    const { nodes, edges } = shown;
+    const { positions, routes } = layout;
     const stageOf = new Map(nodes.map((n) => [n.id, n.stage]));
     const flowNodes: StageCardNode[] = inReadingOrder(nodes, positions).map((node) => ({
       id: node.id,
@@ -165,7 +196,7 @@ export function GraphPage() {
     });
     const shownAt = flowNodes.map((node) => node.position);
     return { flowNodes, flowEdges, viewport: fittedViewport(shownAt, size, narrow ? NARROW_FIT : WIDE_FIT) };
-  }, [data, hideInvalidated, hiddenIds, hidden.hide, size, narrow]);
+  }, [data, shown, layout, hidden.hide, size, narrow]);
 
   return (
     <div className="graph-page">
@@ -252,7 +283,7 @@ export function GraphPage() {
             proOptions={{ hideAttribution: true }}
           >
             <Controls showInteractive={false} position="bottom-left" fitViewOptions={FIT_ALL} />
-            <FitFirstCards hasCards={flowNodes.length > 0} viewport={viewport} />
+            <FitOnNewCards structure={flowNodes.length > 0 ? structure : ""} choice={choice} viewport={viewport} />
           </ReactFlow>
         ) : null}
       </div>

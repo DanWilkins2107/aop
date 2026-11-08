@@ -3,7 +3,17 @@ import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import type { EventView, NodeView, TypeView } from "../../src/shared/api.js";
 import { contrast, parseHex, readableText, visibleOn } from "../../web/src/lib/color.js";
-import { CARD_HEIGHT, CARD_WIDTH, fittedViewport, graphView, inReadingOrder, layoutGraph, smoothPath } from "../../web/src/lib/layout.js";
+import {
+  CARD_HEIGHT,
+  CARD_WIDTH,
+  fittedViewport,
+  graphView,
+  inReadingOrder,
+  layoutGraph,
+  shownGraph,
+  smoothPath,
+  structureKey,
+} from "../../web/src/lib/layout.js";
 import { originalStage, stageDrawing } from "../../web/src/lib/stageGraph.js";
 import { describeEvent } from "../../web/src/lib/eventText.js";
 import {
@@ -383,13 +393,56 @@ describe("graph layout", () => {
     const edges = [edge("1", "p", "c1", "subtask"), edge("2", "p", "c2", "subtask"), edge("3", "b1", "b2", "blocks")];
     const everything = graphView(nodes, edges, () => false);
 
-    it("gives the same positions and routes to what's left when nodes are hidden", () => {
+    it("lays out what's left as if hidden nodes weren't there, closing their gaps", () => {
       const hidden = new Set(["old", "c1", "b1"]);
       const view = graphView(nodes, edges, (node) => hidden.has(node.id));
       expect(view.nodes.map((node) => node.id)).toEqual(["p", "c2", "solo", "b2", "late"]);
       expect(view.edges.map((e) => e.id)).toEqual(["2"]);
-      for (const node of view.nodes) expect(view.positions.get(node.id)).toEqual(everything.positions.get(node.id));
-      expect(view.routes.get("2")).toEqual(everything.routes.get("2"));
+      const without = graphView(
+        nodes.filter((node) => !hidden.has(node.id)),
+        edges.filter((e) => !hidden.has(e.source_id) && !hidden.has(e.target_id)),
+        () => false,
+      );
+      expect(view.positions).toEqual(without.positions);
+      expect(view.routes).toEqual(without.routes);
+      expect(view.positions.get("p")!.x).toBe(0);
+    });
+
+    it("doesn't move a shown card when a hidden part of the graph grows", () => {
+      const hidden = (node: { id: string }) => node.id === "p" || node.id.startsWith("c");
+      const before = graphView(nodes, edges, hidden);
+      const after = graphView([...nodes, made("c3", 30)], [...edges, edge("4", "p", "c3", "subtask")], hidden);
+      expect(after.positions).toEqual(before.positions);
+      expect(after.routes).toEqual(before.routes);
+    });
+
+    describe("structure key", () => {
+      const keyOf = (ns: typeof nodes, es: typeof edges) => {
+        const shown = shownGraph(ns, es, () => false);
+        return structureKey(shown.nodes, shown.edges);
+      };
+      const key = keyOf(nodes, edges);
+
+      it("stays the same for the same cards and edges, whatever order or extra fields they arrive with", () => {
+        const refetched = [...nodes].reverse().map((node) => ({ ...node, stage: "done" }));
+        expect(keyOf(refetched, [...edges].reverse())).toBe(key);
+      });
+
+      it("changes when a node is hidden, shown, added or removed, or an edge changes", () => {
+        const hiddenKey = (() => {
+          const shown = shownGraph(nodes, edges, (node) => node.id === "c1");
+          return structureKey(shown.nodes, shown.edges);
+        })();
+        const changed = [
+          hiddenKey,
+          keyOf([...nodes, made("new", 30)], edges),
+          keyOf(nodes.slice(1), edges),
+          keyOf(nodes, [...edges, edge("4", "solo", "late", "blocks")]),
+          keyOf(nodes, [edge("1", "p", "c1", "blocks"), ...edges.slice(1)]),
+        ];
+        for (const other of changed) expect(other).not.toBe(key);
+        expect(new Set(changed).size).toBe(changed.length);
+      });
     });
 
     it("puts a new unconnected node at the right end without moving anything", () => {
