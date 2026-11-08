@@ -91,7 +91,7 @@ aop steer <node>
 ### Seeing and stopping agents
 - `aop ps` lists every running agent and its node.
 - **Stop run** under **Details**, or `aop stop <node>`, stops one. The node stays on its stage, claimed by you. Release the claim to start the stage again.
-- **Invalidate or block**, at the top of the node page, stops work on a node for good. Invalidating stops agents on it and everything under it.
+- **Invalidate or externally block**, at the top of the node page, stops work on a node for good. Invalidating stops agents on it and everything under it.
 - Ctrl+C on `aop serve` stops every agent and queues their nodes. They start again on the next `aop serve`.
 - `aop reap` kills any agent process that shouldn't still be running.
 

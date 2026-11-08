@@ -30,7 +30,7 @@ A node is one piece of work. It has a title, a description, a type and a stage. 
 - **Header.** The stage in its colour, the title, **Copy ID** (for `aop steer` and the other commands), any ticket and PR links the agent attached, and a button for each outcome of the current stage. The breadcrumb shows the node's ancestors.
 - **Pipeline.** A drawing of the node's current type, with its stage outlined.
 - **Force stage.** Move the node to any stage, skipping the outcomes. Use it as an escape hatch.
-- **Invalidate or block.** See below.
+- **Invalidate or externally block.** See below.
 - **Claim.** Claim the node, release your claim, or stop a running agent.
 - **Description.** Edit it in place.
 - **Messages.** The send box, then the messages grouped by each visit to a stage, newest first. Agent messages have a light blue background.
@@ -66,9 +66,9 @@ Your process is defined in one `stages.yaml`, shared by all projects. You edit t
 - A node stays the same node as it moves between types.
 
 #### The default process
-- **triage:** an agent reads the new node at `awaiting_agent_breakdown` and routes it. Work that fits one PR goes to `dev`. Bigger work goes to `split_proposed`, where you approve or reject the proposed split. Once approved, the agent creates the children at `split_approved` and the node becomes `broken_down`. Work an agent can't do goes to `human_only_action`.
+- **triage:** an agent reads the new node at `awaiting_agent_breakdown` and routes it. Work that fits one PR goes to `dev`. Bigger work goes to `split_proposed`, where you approve or reject the proposed split. Once approved, the agent creates the children at `split_approved` and the node becomes `broken_down`. Work an agent can't do goes to `human_only_action`, and a choice for you to make goes to `decisions`.
 - **dev:** an agent implements the work and raises a PR, then the node waits at `pr_review` and `second_human_review`. Approve moves it on, changes sends it back to the agent, and merged finishes it.
-- **reports:** a scheduled report. See below.
+- **decisions:** an agent sets out the choice at `awaiting_agent_summary`, then you decide at `decision`. Clarify sends it back to the agent for more, and retriage sends it back to `triage`.
 
 #### Built-in stages
 These have fixed behaviour and reserved names:
@@ -80,7 +80,6 @@ These have fixed behaviour and reserved names:
 #### Scheduled nodes
 A scheduled node stays where it is and creates a new child node each time its schedule fires. The child carries out the task described on the scheduled node. The default stages don't include one, so add the built-in `scheduled` stage to a type in your `stages.yaml` to use it.
 
-- The default `reports` type is an example: its `scheduled` stage fires into `generate_report`.
 - A new scheduled node has no schedule and doesn't fire. On its page, pick a time and the days of the week to fire on, and save. Each node has its own, so nodes of one type can run at different times.
 - Times are in the server's time zone. The page shows when the node next fires.
 - Clear the schedule to stop it firing. A new schedule fires from the next matching time, with no catch-up.
