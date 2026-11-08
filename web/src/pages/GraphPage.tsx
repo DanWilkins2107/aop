@@ -15,7 +15,8 @@ const nodeTypes = { stage: StageCard };
 const edgeTypes = { routed: RoutedEdge };
 
 const SUBTASK_STROKE = "#adb5bd";
-const BLOCKS_STROKE = "#495057";
+/** Red, so a blocker reads apart from parent-to-child links. Matches `--danger` in base.css. */
+const BLOCKS_STROKE = "#c92a2a";
 
 /** Below this the canvas is a small window, so cards stay big enough to read. */
 const NARROW_WIDTH = 640;

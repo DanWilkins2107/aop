@@ -35,10 +35,11 @@ export function isInvalidated(node: NodeView): boolean {
 }
 
 /**
- * `inactive` is what isn't for picking up right now: blocked, held or done. `broken_down` and
- * `invalidated` recede further, because nothing more will happen on those cards.
+ * `inactive` is what isn't for picking up right now: blocked or held. `done` is as faded, with a
+ * green tint so finished work tells apart from stuck work. `broken_down` and `invalidated` recede
+ * further, because nothing more will happen on those cards.
  */
-export type CardKind = "human" | "agent" | "inactive" | "broken_down" | "invalidated";
+export type CardKind = "human" | "agent" | "inactive" | "done" | "broken_down" | "invalidated";
 
 export interface CardLook {
   background: string;
@@ -76,6 +77,8 @@ export function lookOf(kind: CardKind, color: string): CardLook {
     }
     case "inactive":
       return { background: "#e9ecef", border: "#ced4da", borderWidth: 1, accent: null, text: "#343a40", opacity: INACTIVE_OPACITY, struck: false };
+    case "done":
+      return { ...lookOf("inactive", color), background: "#e3f2e6", border: "#57b56f" };
     case "broken_down":
       return { ...lookOf("inactive", color), opacity: RECEDED_OPACITY };
     case "invalidated":
@@ -88,6 +91,7 @@ export function cardKind(node: NodeView): CardKind {
   if (isInvalidated(node)) return "invalidated";
   if (!node.stage_exists) return "human";
   if (node.stage === "broken_down") return "broken_down";
+  if (node.stage === "done") return "done";
   if (FINISHED_STAGES.includes(node.stage) || node.blocked_by.length > 0 || node.held) return "inactive";
   return node.turn === "human" ? "human" : "agent";
 }
