@@ -109,4 +109,11 @@ Your process is `~/.aop/stages.yaml`, and each agent stage's prompt is a file in
 - **Add or change stages:** add a stage to the `stages` pool, then use it in a type's `next`. Agent stages need a `prompt`.
 - **Use your own file:** point `stages` in `config.yaml` at it. It can live anywhere.
 
+### Built-in stages
+Every process has these, whatever your `stages.yaml` says. You don't define them, and you can't remove them, rename them or change their colour. Their names are reserved, so no stage or type of yours can use one.
+- `done` and `broken_down` finish a node. They're the only built-ins a `next` can lead to.
+- `ask_human_question`, `failed`, `externally_blocked` and `invalidated` can be reached from any stage, through asking, failing, blocking and invalidating. They don't appear in types.
+- `splitting` holds the children an agent is creating until the split finishes.
+- `scheduled` is the only one you list in a type, with exactly one outcome, saying where its children start. See [Scheduled nodes](features.md#scheduled-nodes).
+
 You don't need to restart `aop serve`. If the file is invalid, AOP shows the problems in the UI and starts no new agents until it's fixed. The **Process** page draws each type so you can check the result. The rules agents follow on every stage are the plugin's skills, in `plugin/skills`.
