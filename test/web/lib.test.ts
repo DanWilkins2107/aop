@@ -40,7 +40,7 @@ describe("colour", () => {
 
   it("keeps every card's text legible, whatever the colour", () => {
     for (const color of COLORS) {
-      for (const kind of ["human", "agent", "inactive", "broken_down", "invalidated"] as const) {
+      for (const kind of ["human", "agent", "inactive", "done", "broken_down", "invalidated"] as const) {
         const look = lookOf(kind, color);
         expect(contrast(look.text, look.background)).toBeGreaterThanOrEqual(4.5);
       }
@@ -71,6 +71,10 @@ describe("colour", () => {
     const brokenDown = lookOf("broken_down", "#57b56f");
     expect(brokenDown.opacity).toBe(invalidated.opacity);
     expect(brokenDown.accent).toBeNull();
+    const done = lookOf("done", "#57b56f");
+    expect(done.opacity).toBe(inactive.opacity);
+    expect(done.background).not.toBe(inactive.background);
+    expect(done.border).not.toBe(inactive.border);
   });
 
   it("gives cards that are live a stronger border in the stage's colour family", () => {
@@ -86,7 +90,7 @@ describe("colour", () => {
 
   it("uses a stage's colour as a fill only when a human needs to act", () => {
     expect(lookOf("human", "#e91e63").background).not.toBe(lookOf("human", "#12b886").background);
-    for (const kind of ["agent", "inactive", "broken_down", "invalidated"] as const) {
+    for (const kind of ["agent", "inactive", "done", "broken_down", "invalidated"] as const) {
       expect(lookOf(kind, "#e91e63").background).toBe(lookOf(kind, "#12b886").background);
     }
   });
@@ -107,7 +111,7 @@ describe("default stage colours", () => {
 
   it("stay legible on every card", () => {
     for (const color of defaults) {
-      for (const kind of ["human", "agent", "inactive", "broken_down", "invalidated"] as const) {
+      for (const kind of ["human", "agent", "inactive", "done", "broken_down", "invalidated"] as const) {
         const look = lookOf(kind, color);
         expect(contrast(look.text, look.background)).toBeGreaterThanOrEqual(4.5);
       }
@@ -294,7 +298,7 @@ describe("card kind", () => {
   });
 
   it("greys out what isn't for picking up, even on a human's turn, and strikes out dead ones", () => {
-    expect(cardKind(nodeAt("done", { turn: null }))).toBe("inactive");
+    expect(cardKind(nodeAt("done", { turn: null }))).toBe("done");
     expect(cardKind(nodeAt("broken_down", { turn: null }))).toBe("broken_down");
     expect(cardKind(nodeAt("beta", { turn: "human", blocked_by: ["x"] }))).toBe("inactive");
     expect(cardKind(nodeAt("beta", { turn: "human", held: true }))).toBe("inactive");
