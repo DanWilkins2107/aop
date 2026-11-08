@@ -38,15 +38,13 @@
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
-.log-tail-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0 12px;
-  margin-top: 14px;
+/* The log's collapsible sits under the table, with its own top rule. */
+.runs > .detail-part {
+  margin-top: 12px;
+  padding-bottom: 0;
 }
-.log-tail-head a {
+.log-tail-head {
+  margin: 0 0 6px;
   font-size: 12px;
 }
 .log-tail {
