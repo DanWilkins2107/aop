@@ -94,7 +94,7 @@ function ClaimControls({ node, reload }: { node: NodeView; reload: Reload }) {
   );
 }
 
-/** The Header card's controls, collapsed beside the pipeline: force stage, invalidate or block, and claim. */
+/** The Header card's controls, collapsed beside the pipeline: force stage, invalidate or externally block, and claim. */
 export function NodeControls({ node, stages, reload }: { node: NodeView; stages: StagesView; reload: Reload }) {
   const invalidated = node.stage === "invalidated";
   const canBlock = !FINISHED_STAGES.includes(node.stage) && !invalidated && node.stage !== "externally_blocked";
@@ -106,7 +106,7 @@ export function NodeControls({ node, stages, reload }: { node: NodeView; stages:
         </Part>
       ) : null}
       {!invalidated ? (
-        <Part title="Invalidate or block">
+        <Part title="Invalidate or externally block">
           <div className="action-row">
             <ReasonButton
               label="Invalidate"
