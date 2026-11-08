@@ -32,4 +32,4 @@ Blocks: 1 blocks 2 (2 builds on 1's schema).
 - Split out work that needs careful review (migrations, security, auth, config) from work that doesn't, so the human sees which PRs need attention.
 - Name human-only steps as their own children, and block the work they hold up.
 - Say which of the parent's blocks move to which child.
-- Propose only the blocks that are needed.
+- Propose only the blocks that are needed. A block means none of a node's work can start until the other finishes. If any part can start now, don't block it.
