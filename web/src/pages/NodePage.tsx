@@ -14,7 +14,6 @@ import type {
 } from "../../../src/shared/api.js";
 import { GLOBAL_STAGES } from "../../../src/shared/builtInStages.js";
 import { ClaimMark } from "../components/ClaimMark.js";
-import { CopyId } from "../components/CopyId.js";
 import { ErrorNotice } from "../components/ErrorNotice.js";
 import { PipelineGraph } from "../components/PipelineGraph.js";
 import { ancestorsOf } from "../lib/ancestry.js";
@@ -183,10 +182,7 @@ export function NodePage() {
             <span>{humanize(node.stage)}</span>
             <ClaimMark node={node} />
           </p>
-          <div className="node-title-row">
-            <h1 className={node.stage === "invalidated" || byParent ? "title-dead" : undefined}>{node.title}</h1>
-            <CopyId id={node.id} />
-          </div>
+          <h1 className={node.stage === "invalidated" || byParent ? "title-dead" : undefined}>{node.title}</h1>
           {data.improvement ? <SourceLink source={data.improvement.source} /> : null}
           {!node.stage_exists ? (
             <p className="meta-note meta-note-alert" role="alert">
