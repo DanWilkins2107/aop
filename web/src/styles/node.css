@@ -32,7 +32,7 @@
   color: var(--muted);
   user-select: none;
 }
-/* The Header card's collapsibles: pipeline, force stage, invalidate or block, and claim. */
+/* The Header card's collapsibles: pipeline, force stage, invalidate or externally block, and claim. */
 .header-parts {
   padding-top: 0;
 }
