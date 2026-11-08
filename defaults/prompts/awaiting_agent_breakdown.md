@@ -28,6 +28,7 @@ Blocks: 1 blocks 2 (2 builds on 1's schema).
 ```
 
 - Give each child a title and one line of scope. Detail belongs in the child's own stages.
+- Children can be big chunks that get their own breakdown later. You don't have to split all the way down to single PRs now.
 - Split out work that needs careful review (migrations, security, auth, config) from work that doesn't, so the human sees which PRs need attention.
 - Name human-only steps as their own children, and block the work they hold up.
 - Say which of the parent's blocks move to which child.
