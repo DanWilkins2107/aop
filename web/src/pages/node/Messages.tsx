@@ -4,11 +4,10 @@ import type { EventView, MessageRow, NodeView, StagesView } from "../../../../sr
 import { CaptureImprovement } from "../../components/CaptureImprovement.js";
 import { api } from "../../lib/api.js";
 import { FormError, useFormError } from "../../components/FormError.js";
-import { messageVisits, splitForReply, type StageVisit, type VisitEntry } from "../../lib/messageVisits.js";
+import { messageVisits, type StageVisit, type VisitEntry } from "../../lib/messageVisits.js";
 import { humanize, timeAgo, toTarget } from "../../lib/format.js";
 import { accentOf, stageColor } from "../../lib/stageStyle.js";
 import { useAction } from "../../lib/useAction.js";
-import { Part } from "./Part.js";
 
 /** The page's one message box. While the agent is waiting on a question, what's written here is the answer. */
 function MessageBox({ node, asking, reload }: { node: NodeView; asking: boolean; reload: () => Promise<void> }) {
@@ -43,9 +42,6 @@ function MessageBox({ node, asking, reload }: { node: NodeView; asking: boolean;
 }
 
 const entryId = (entry: VisitEntry) => (entry.kind === "message" ? entry.message.id : entry.id);
-
-const messageCount = (visits: StageVisit[]) =>
-  visits.reduce((sum, visit) => sum + visit.entries.filter((entry) => entry.kind === "message").length, 0);
 
 /** One continuous visit to a stage, its entries newest first. */
 function Visit({
@@ -120,9 +116,6 @@ function Visit({
  * continuous visit to a stage, newest visit first, each holding that visit's messages newest
  * first. The inner card carries the stage, so the messages themselves only show who wrote them.
  * A stage change the messages wouldn't explain sits among them as a small centred note.
- *
- * On a human's turn, such as an agent's question, only the agent's latest word and what came
- * after it stay open. Older visits fold into "Earlier messages".
  */
 export function Messages({
   node,
@@ -139,15 +132,13 @@ export function Messages({
 }) {
   const asking = node.stage === "ask_human_question";
   const visits = messageVisits(events, messages);
-  const { recent, earlier } = asking || node.turn === "human" ? splitForReply(visits) : { recent: visits, earlier: [] };
   // Improvements come from project work, so an improvement's own messages have no +.
   const canCapture = node.kind === "work";
   const [capturing, setCapturing] = useState<string | null>(null);
   const { hash } = useLocation();
 
-  // "From:" on an improvement links here, to one message, which may be among the earlier ones.
+  // "From:" on an improvement links here, to one message.
   const hasTarget = messages.some((m) => `#m-${m.id}` === hash);
-  const targetEarlier = earlier.some((visit) => visit.entries.some((entry) => `#m-${entryId(entry)}` === hash));
   useEffect(() => {
     if (hasTarget) document.getElementById(hash.slice(1))?.scrollIntoView({ block: "center" });
   }, [hash, hasTarget]);
@@ -171,14 +162,7 @@ export function Messages({
       {/* Keyed so that a half-written message can't go out as an answer to a question that just arrived. */}
       <MessageBox key={asking ? "answer" : "message"} node={node} asking={asking} reload={reload} />
       {visits.length === 0 ? <p className="muted section-text">No messages yet.</p> : null}
-      {recent.map(render)}
-      {earlier.length > 0 ? (
-        <div className="earlier-messages">
-          <Part title="Earlier messages" status={messageCount(earlier)} defaultOpen={targetEarlier}>
-            {earlier.map(render)}
-          </Part>
-        </div>
-      ) : null}
+      {visits.map(render)}
     </section>
   );
 }

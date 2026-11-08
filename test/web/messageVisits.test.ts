@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { EventView, MessageRow } from "../../src/shared/api.js";
-import { messageVisits, splitForReply } from "../../web/src/lib/messageVisits.js";
+import { messageVisits } from "../../web/src/lib/messageVisits.js";
 import { harness, type Harness } from "../server/helpers.js";
 
 const SAME_TIME = "2026-01-01T00:00:00.000Z";
@@ -183,44 +183,5 @@ describe("messageVisits", () => {
         ["write_spec", ["spec v1"]],
       ]);
     });
-  });
-});
-
-describe("splitForReply", () => {
-  const stagesOf = (visits: ReturnType<typeof messageVisits>) => visits.map((visit) => visit.stage);
-
-  it("keeps the newest agent message's visit in view and sets older ones aside", () => {
-    const l = log("awaiting_agent_summary");
-    l.say("summary");
-    l.move("decision");
-    l.say("what about cost?", "human");
-    l.move("awaiting_agent_clarification");
-    l.say("clarification");
-    l.move("decision");
-    const { recent, earlier } = splitForReply(messageVisits(l.events, l.messages));
-    expect(stagesOf(recent)).toEqual(["awaiting_agent_clarification"]);
-    expect(stagesOf(earlier)).toEqual(["decision", "awaiting_agent_summary"]);
-  });
-
-  it("keeps a human's newer messages in view too", () => {
-    const l = log("implement");
-    l.say("old");
-    l.move("ask_human_question");
-    l.say("which port?");
-    l.move("pr_review");
-    l.say("draft", "human");
-    const { recent, earlier } = splitForReply(messageVisits(l.events, l.messages));
-    expect(stagesOf(recent)).toEqual(["pr_review", "ask_human_question"]);
-    expect(stagesOf(earlier)).toEqual(["implement"]);
-  });
-
-  it("sets nothing aside without an agent message", () => {
-    const l = log("implement");
-    l.say("a", "human");
-    l.move("pr_review");
-    l.say("b", "human");
-    const { recent, earlier } = splitForReply(messageVisits(l.events, l.messages));
-    expect(stagesOf(recent)).toEqual(["pr_review", "implement"]);
-    expect(earlier).toEqual([]);
   });
 });

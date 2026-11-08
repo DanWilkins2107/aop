@@ -59,15 +59,3 @@ export function messageVisits(events: EventView[], messages: MessageRow[]): Stag
     .map((visit) => ({ stage: visit.stage, entries: [...visit.entries].reverse() }))
     .reverse();
 }
-
-/**
- * For a human who's to reply: the newest visit with an agent message, and any newer, stay in view,
- * and the older visits are set aside. With no agent message, nothing is.
- */
-export function splitForReply(visits: StageVisit[]): { recent: StageVisit[]; earlier: StageVisit[] } {
-  const latest = visits.findIndex((visit) =>
-    visit.entries.some((entry) => entry.kind === "message" && entry.message.author === "agent"),
-  );
-  if (latest === -1) return { recent: visits, earlier: [] };
-  return { recent: visits.slice(0, latest + 1), earlier: visits.slice(latest + 1) };
-}
