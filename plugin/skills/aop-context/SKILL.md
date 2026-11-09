@@ -24,7 +24,6 @@ Commands act on your own node (`AOP_NODE_ID`) unless they take an ID. You can on
 | `aop search <query> [--all]` | Search this project's nodes, or every project with `--all` |
 | `aop link pr\|ticket <url>` | Attach a PR or ticket link to your node |
 | `aop node create --title ... [--body ...] [--parent <id>] [--project ...] [--type ... \| --stage ...]` | Create a node. `--type` starts it at that type's first stage; `--stage` starts it exactly there |
-| `aop node edit [<id>] [--title ...] [--body ...]` | Edit a title or description |
 | `aop edge add blocks <from> <to>` | `<from>` must finish before `<to>` starts |
 | `aop edge remove blocks <from> <to>` | Remove that block |
 | `aop split start` | Begin a split. Children you create are held until it finishes |
@@ -39,6 +38,7 @@ These come from AOP's MCP server. Each takes your node's ID as `node_id`: the `N
 | `message` tool with `body` | Post a message. Any node's ID as `node_id` posts it there instead |
 | `fail` tool with `reason` | Mark your node failed, only when the work can't be done and asking won't help. Then exit |
 | `ask` tool with `question` | Ask a human. The node waits, and this stage restarts with the answer. Then exit |
+| `node_edit` tool with `title` and/or `body` | Edit a title or description. Any node's ID as `node_id` edits that one instead |
 
 ### Improvements
 An **improvement** is a node that changes how agents work: a skill or a stage prompt. It belongs to no project. You start in the improvements folder, and you never edit real files: you propose their new contents, a human reviews the diff, and a later stage applies it.
