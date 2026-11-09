@@ -6,7 +6,7 @@ Decide what this node is, then take exactly one outcome.
 - Read the description, messages, ancestors and siblings in the context.
 - `aop search` for related nodes and earlier decisions.
 - Look at the repo enough to judge the size of the change.
-- Direction unclear, or the description too thin to size? `aop ask "..."` rather than guessing.
+- Direction unclear, or the description too thin to size? Use the `ask` tool rather than guessing.
 
 ## Route
 - **One PR:** one coherent change, roughly 200-300 changed lines or fewer. Post a 1-line handover, then the `next` tool with outcome `ready`.

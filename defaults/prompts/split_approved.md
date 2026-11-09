@@ -13,4 +13,4 @@ A human approved the split proposed in this node's messages. Read their reply: a
 
 Keep each other child to a title and a one-line body, or a few bullets at most. Detail belongs in the child's own stages, and writing it twice means the human reads it twice.
 
-If the approved split no longer makes sense, `aop ask "..."` instead of improvising. Children already created are kept, and this stage restarts with them in its context.
+If the approved split no longer makes sense, use the `ask` tool instead of improvising. Children already created are kept, and this stage restarts with them in its context.

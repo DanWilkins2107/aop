@@ -5,7 +5,7 @@ This node asks for a change to how agents work: a skill, or a stage prompt. Draf
 ## Study first
 - Read the description, the source message, and any earlier proposals and review messages in the context.
 - Read the files you might change. "What can change" in the context says where they are.
-- Request unclear, or several very different changes would fit? `aop ask "..."` rather than guessing.
+- Request unclear, or several very different changes would fit? Use the `ask` tool rather than guessing.
 
 ## Draft
 - Make the smallest change that does what was asked. Match the file's existing style and length.
