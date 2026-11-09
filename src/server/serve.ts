@@ -11,7 +11,7 @@ import { configPath, dbPath } from "./paths.js";
 import { Scheduler } from "./scheduler.js";
 import { HOSTNAME, startServer, type RunningServer } from "./server.js";
 import { MCP_PATH, startMcpServer } from "../mcp/server.js";
-import { DEFAULT_PORT, MCP_PORT } from "../shared/port.js";
+import { DEFAULT_PORT, MCP_PORT, TEST_MCP_PORT_ENV } from "../shared/port.js";
 import { acquireServerLock, ServerAlreadyRunning, type ServerLock } from "./serverLock.js";
 
 /** Runs the server and its agents in the foreground until it's told to stop. */
@@ -53,7 +53,7 @@ export async function runServer(argv: string[], usage: string): Promise<void> {
     lock.setUrl(url);
     console.log(`AOP listening on ${url}`);
     // Before the agents, which reach AOP through it. Always the same port, so a sandbox can allow just that.
-    const mcp = await startMcpServer(db, MCP_PORT, { changes, orchestrator });
+    const mcp = await startMcpServer(db, Number(process.env[TEST_MCP_PORT_ENV] ?? MCP_PORT), { changes, orchestrator });
     mcpServer = mcp;
     console.log(`AOP MCP listening on http://${HOSTNAME}:${mcp.port}${MCP_PATH}`);
     console.log(`Config: ${configPath()}`);
