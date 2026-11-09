@@ -11,6 +11,7 @@ const INTEGRATION = [
   "test/cli/cli.smoke.test.ts",
   "test/cli/init.test.ts",
   "test/cli/improvements.test.ts",
+  "test/mcp/server.test.ts",
 ];
 
 export default defineConfig({
