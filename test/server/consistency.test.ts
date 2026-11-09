@@ -11,9 +11,10 @@ import { Orchestrator } from "../../src/server/orchestrator.js";
 import { isAlive, waitGone } from "../../src/server/osProcesses.js";
 import { addProject } from "../../src/server/projects.js";
 import { beginRun } from "../../src/server/runs.js";
-import type { NodeView } from "../../src/shared/api.js";
+import { RUN_ID_HEADER, type AskRequest, type NodeView } from "../../src/shared/api.js";
+import { API_PREFIX, apiPaths } from "../../src/shared/paths.js";
 import { aopInProcess } from "../cli/cli.helpers.js";
-import { directives, fakeConfig, settle, toolCall, world } from "./agents.helpers.js";
+import { directives, fakeConfig, settle, toolCall, world, type World } from "./agents.helpers.js";
 import { harness, makeHome, makeRepo, STAGES_YAML } from "./helpers.js";
 
 const TIMEOUT = { timeout: 90_000 };
@@ -22,6 +23,16 @@ const TIMEOUT = { timeout: 90_000 };
 async function aop(args: string[], env: Record<string, string>): Promise<{ code: number | null; output: string }> {
   const res = await aopInProcess(args, env);
   return { code: res.code, output: res.stdout + res.stderr };
+}
+
+/** An ask straight to the API, saying it comes from `runId`, as an agent run's requests do. */
+async function askAs(w: World, nodeId: string, runId: string, question: string): Promise<{ status: number; text: string }> {
+  const response = await fetch(`${w.url}${API_PREFIX}${apiPaths.nodeAction(nodeId, "ask")}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", [RUN_ID_HEADER]: runId },
+    body: JSON.stringify({ question } satisfies AskRequest),
+  });
+  return { status: response.status, text: await response.text() };
 }
 
 describe("an invalid stages.yaml", () => {
@@ -70,17 +81,17 @@ describe("agent identity", () => {
     expect(first).toMatchObject({ status: "exited", end_reason: "reported" });
 
     // What a process the first run left behind would run: it still carries that run's marker.
-    const stale = await aop(["ask", "Still here?"], { AOP_URL: w.url, AOP_NODE_ID: node.id, AOP_RUN_ID: first!.id });
-    expect(stale.code).toBe(1);
-    expect(stale.output).toContain("has ended");
+    const stale = await askAs(w, node.id, first!.id, "Still here?");
+    expect(stale.status).toBe(409);
+    expect(stale.text).toContain("has ended");
     expect(w.node(node.id).stage).toBe("write_spec");
     expect(w.runs(node.id)[1]).toMatchObject({ id: second.id, status: "running", left_via: null });
 
     // Its other writes are refused too, while the current run's go through.
     const message = await aop(["message", "stale"], { AOP_URL: w.url, AOP_NODE_ID: node.id, AOP_RUN_ID: first!.id });
     expect(message.code).toBe(1);
-    const current = await aop(["ask", "Which way?"], { AOP_URL: w.url, AOP_NODE_ID: node.id, AOP_RUN_ID: second.id });
-    expect(current.code).toBe(0);
+    const current = await askAs(w, node.id, second.id, "Which way?");
+    expect(current.status).toBe(200);
     expect(w.node(node.id).stage).toBe("ask_human_question");
   });
 
@@ -92,8 +103,8 @@ describe("agent identity", () => {
     const parent = await w.create("", { type: "dev", stage: "pr_review" });
     await w.call("POST", `/nodes/${parent.id}/invalidate`, { reason: "Hold the child" });
     const other = await w.create("", { parent_id: parent.id });
-    const res = await aop(["ask", "Which way?"], { AOP_URL: w.url, AOP_NODE_ID: other.id, AOP_RUN_ID: run.id });
-    expect(res.code).toBe(1);
+    const res = await askAs(w, other.id, run.id, "Which way?");
+    expect(res.status).toBe(409);
     expect((w.node(other.id) as NodeView).stage).toBe("implement");
     expect(w.runs(other.id)).toEqual([]);
   });

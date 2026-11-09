@@ -6,7 +6,7 @@ A human has a decision to make, or an action only they can do, and asked you to 
 - Read the description, messages, ancestors and siblings in the context.
 - `aop search` for related nodes and earlier decisions.
 - Investigate the repo, docs or anything else the question needs. Don't change anything: this stage only researches.
-- Can't tell what they're asking? `aop ask "..."` rather than guessing.
+- Can't tell what they're asking? Use the `ask` tool rather than guessing.
 
 ## Write it up
 Post it with `aop message`, short enough to read at a glance:

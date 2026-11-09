@@ -11,4 +11,4 @@ Never work in the repo's own checkout. Make a git worktree of it in a temporary 
 3. `aop link pr <url>`, post a 1-line handover, then the `next` tool with outcome `done`.
 4. Remove the worktree once the branch is pushed.
 
-Anything refused or unclear? `aop ask "..."` rather than improvising.
+Anything refused or unclear? Use the `ask` tool rather than improvising.

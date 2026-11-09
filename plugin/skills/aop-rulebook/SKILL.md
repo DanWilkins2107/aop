@@ -18,14 +18,14 @@ Apply these on every stage, on top of the stage prompt.
 - Read the human's messages on the node. Approvals often come with small changes.
 
 ## While working
-- Unsure of direction or a decision? `aop ask "..."` rather than guessing. A cheap question beats rework.
+- Unsure of direction or a decision? Use the `ask` tool rather than guessing. A cheap question beats rework.
 - Attach every PR or ticket you create with `aop link pr <url>` or `aop link ticket <url>`.
 - Stay inside the node's scope. Leave other work to other nodes.
 
 ## Finishing
 - Post a short handover with `aop message "..."` first: what changed, any decisions, anything the next person must know. 1-3 lines.
 - Then report exactly one outcome with the `next` tool (or end a split with `aop split finish`), and exit.
-- If you need a human instead, `aop ask "..."` is your one ending, then exit.
+- If you need a human instead, the `ask` tool is your one ending, then exit.
 - If the work can't be done and asking won't help, `aop fail "<reason>"` is your one ending, then exit.
 
 ## Splitting

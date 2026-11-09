@@ -6,7 +6,7 @@ This node is a choice for a human, not work. Set it out so they can decide quick
 - Read the description, messages, ancestors and siblings in the context.
 - `aop search` for related nodes and earlier decisions.
 - Look at the repo or docs enough to make the options concrete. Don't change anything.
-- Can't tell what the choice is? `aop ask "..."` rather than guessing.
+- Can't tell what the choice is? Use the `ask` tool rather than guessing.
 
 ## Write it up
 Post it with `aop message`:

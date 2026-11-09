@@ -547,7 +547,7 @@ describe("splitting", () => {
     const parent = await w.create(
       directives(
         'ifnot Stage: splitting :: aop ["split","start"]',
-        'ifnot Stage: splitting :: aop ["ask","Which way?"]',
+        `ifnot Stage: splitting :: ${toolCall("ask", { question: "Which way?" })}`,
         `if Stage: splitting :: record ${w.file("second.json")}`,
         'if Stage: splitting :: aop ["split","finish"]',
       ),
@@ -575,7 +575,7 @@ describe("asking", () => {
     w = await world();
     const node = await w.create(
       directives(
-        `ifnot Use the blue one :: aop ["ask","Which colour?"]`,
+        `ifnot Use the blue one :: ${toolCall("ask", { question: "Which colour?" })}`,
         `ifnot Use the blue one :: exit 0`,
         `record ${w.file("second.json")}`,
         toolCall("next", { outcome: "fixed" }),

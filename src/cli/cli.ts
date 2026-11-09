@@ -13,7 +13,6 @@ import {
   type ApiErrorBody,
   type ApplyRequest,
   type ApplyResult,
-  type AskRequest,
   type CreateNodeRequest,
   type EdgeRequest,
   type EdgeRow,
@@ -60,7 +59,6 @@ interface Ctx {
 /** Each command's usage, for both the help and its own usage errors, so the two can't drift apart. */
 export const AGENT_COMMANDS = {
   context: ["aop context [<id>]"],
-  ask: ['aop ask "..."'],
   fail: ['aop fail "<reason>"'],
   message: ['aop message "..." [--node <id>]'],
   link: ["aop link pr|ticket <url>"],
@@ -462,11 +460,6 @@ async function run(c: Ctx, argv: string[]): Promise<number | void> {
       const { positionals } = args(rest, COMMANDS.context, {});
       if (positionals.length > 1) throw usageError(COMMANDS.context);
       c.log(await sendForText(c, apiPaths.nodeAction(positionals[0] ?? ownNode(c), "context")));
-      return;
-    }
-    case "ask": {
-      const question = only(args(rest, COMMANDS.ask, {}).positionals, COMMANDS.ask);
-      movedTo(c, await send(c, "POST", apiPaths.nodeAction(ownNode(c), "ask"), { question } satisfies AskRequest));
       return;
     }
     case "fail": {
