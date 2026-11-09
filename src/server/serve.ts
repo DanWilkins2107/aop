@@ -1,5 +1,5 @@
 // `aop serve` and `npm start`: loads the config, takes the lock, opens the database, and starts the
-// API, orchestrator and scheduler in that order. Also owns clean shutdown.
+// API, the agents' MCP server, the orchestrator and the scheduler in that order. Also owns clean shutdown.
 
 import { parseArgs } from "node:util";
 import { ChangeFeed } from "./changes.js";
@@ -9,8 +9,9 @@ import { ConfigError } from "./errors.js";
 import { Orchestrator } from "./orchestrator.js";
 import { configPath, dbPath } from "./paths.js";
 import { Scheduler } from "./scheduler.js";
-import { HOSTNAME, startServer } from "./server.js";
-import { DEFAULT_PORT } from "../shared/port.js";
+import { HOSTNAME, startServer, type RunningServer } from "./server.js";
+import { MCP_PATH, startMcpServer } from "../mcp/server.js";
+import { DEFAULT_PORT, MCP_PORT } from "../shared/port.js";
 import { acquireServerLock, ServerAlreadyRunning, type ServerLock } from "./serverLock.js";
 
 /** Runs the server and its agents in the foreground until it's told to stop. */
@@ -34,6 +35,8 @@ export async function runServer(argv: string[], usage: string): Promise<void> {
 
   let db: Db | undefined;
   let lock: ServerLock | undefined;
+  let api: RunningServer | undefined;
+  let mcpServer: RunningServer | undefined;
   try {
     // First, because a missing config is how a machine with no AOP_HOME folder stops here.
     loadConfig();
@@ -45,9 +48,14 @@ export async function runServer(argv: string[], usage: string): Promise<void> {
     const scheduler = new Scheduler(db, { changes });
     // Binding the port comes before touching any agent, so a second server on this port stops here.
     const server = await startServer(db, port, { changes, orchestrator });
+    api = server;
     const url = `http://${HOSTNAME}:${server.port}`;
     lock.setUrl(url);
     console.log(`AOP listening on ${url}`);
+    // Before the agents, which reach AOP through it. Always the same port, so a sandbox can allow just that.
+    const mcp = await startMcpServer(db, MCP_PORT, { changes, orchestrator });
+    mcpServer = mcp;
+    console.log(`AOP MCP listening on http://${HOSTNAME}:${mcp.port}${MCP_PATH}`);
     console.log(`Config: ${configPath()}`);
     console.log(`Database: ${dbPath()}`);
 
@@ -59,7 +67,7 @@ export async function runServer(argv: string[], usage: string): Promise<void> {
       console.log("Stopping agents...");
       void orchestrator
         .shutdown()
-        .then(() => server.close())
+        .then(() => Promise.all([mcp.close(), server.close()]))
         .catch((error: unknown) => console.error(error))
         .finally(() => {
           db?.close();
@@ -75,6 +83,8 @@ export async function runServer(argv: string[], usage: string): Promise<void> {
     // After the orchestrator, so the first children it creates are picked up straight away.
     if (!stopping) scheduler.start();
   } catch (error) {
+    // Such as the MCP port being taken: neither port should keep the process alive.
+    await Promise.all([api?.close(), mcpServer?.close()]).catch(() => undefined);
     db?.close();
     lock?.release();
     // A bad config or a running server is the expected failure here: say so, without a stack trace.
