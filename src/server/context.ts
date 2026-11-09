@@ -76,7 +76,7 @@ export function nodeContext(db: Db, nodeId: string): string {
   if (node.turn === "agent") {
     moves.push(
       '- `aop ask "..."` asks a human, and this stage starts again with the answer',
-      '- `aop fail "<reason>"` marks this node failed, only when the work can\'t be done and asking won\'t help',
+      "- the `fail` tool with a reason marks this node failed, only when the work can't be done and asking won't help",
     );
   }
 

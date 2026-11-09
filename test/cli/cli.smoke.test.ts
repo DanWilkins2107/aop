@@ -12,7 +12,7 @@ describe("the aop entry point", () => {
     const help = await aop(["help"]);
     expect(help.code).toBe(0);
     expect(help.stdout).toContain('\n  aop ask "..."\n');
-    for (const args of [["fail"], ["nonsense"]]) {
+    for (const args of [["logs"], ["nonsense"]]) {
       const res = await aop(args);
       expect(res.code, args.join(" ")).toBe(2);
       expect(res.stderr).toContain("aop ");

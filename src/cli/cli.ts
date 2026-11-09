@@ -18,7 +18,6 @@ import {
   type EdgeRequest,
   type EdgeRow,
   type EditNodeRequest,
-  type FailRequest,
   type LinkRequest,
   type LogTail,
   type NodeView,
@@ -59,7 +58,6 @@ interface Ctx {
 export const AGENT_COMMANDS = {
   context: ["aop context [<id>]"],
   ask: ['aop ask "..."'],
-  fail: ['aop fail "<reason>"'],
   link: ["aop link pr|ticket <url>"],
   search: ["aop search <query> [--all]"],
   "node create": ["aop node create --title ... [--body ...] [--parent ...] [--project ...] [--type ... | --stage ...]"],
@@ -464,11 +462,6 @@ async function run(c: Ctx, argv: string[]): Promise<number | void> {
     case "ask": {
       const question = only(args(rest, COMMANDS.ask, {}).positionals, COMMANDS.ask);
       movedTo(c, await send(c, "POST", apiPaths.nodeAction(ownNode(c), "ask"), { question } satisfies AskRequest));
-      return;
-    }
-    case "fail": {
-      const reason = only(args(rest, COMMANDS.fail, {}).positionals, COMMANDS.fail);
-      movedTo(c, await send(c, "POST", apiPaths.nodeAction(ownNode(c), "fail"), { reason, actor: ACTOR } satisfies FailRequest));
       return;
     }
     case "link": {

@@ -41,8 +41,8 @@ describe("the agent commands", () => {
     expect((await aop(["context", node.id])).stdout).toBe(fromEnv.stdout);
   });
 
-  it("ask, fail and split need a node from the environment", async () => {
-    for (const args of [["ask", "x"], ["fail", "x"], ["split", "start"], ["split", "finish"], ["context"]]) {
+  it("ask and split need a node from the environment", async () => {
+    for (const args of [["ask", "x"], ["split", "start"], ["split", "finish"], ["context"]]) {
       const res = await aop(args);
       expect(res.code).toBe(1);
       expect(res.stderr).toContain("AOP_NODE_ID");
@@ -55,20 +55,6 @@ describe("the agent commands", () => {
     expect(res.code).toBe(1);
     expect(res.stderr).toContain("not an agent stage");
     expect(w.node(node.id).stage).toBe("pr_review");
-  });
-
-  it("fail marks the agent's own node failed as the agent, posting the reason", async () => {
-    const node = await w.create(directives("hang"));
-    await w.runStarted(node.id);
-    const res = await aop(["fail", "The service it needs is gone"], { node: node.id });
-    expect(res.code).toBe(0);
-    expect(res.stdout).toContain("failed");
-    expect(w.node(node.id)).toMatchObject({ stage: "failed" });
-    const changed = (await eventsOf(node.id)).filter((e) => e.kind === "stage_changed").at(-1);
-    expect(changed).toMatchObject({ actor: "agent", data: { via: "fail", reason: "The service it needs is gone" } });
-    const messages = (await w.call<MessageRow[]>("GET", `/nodes/${node.id}/messages`)).body;
-    expect(messages.at(-1)).toMatchObject({ author: "agent", stage: "failed", body: "The service it needs is gone" });
-    expect((await aop(["fail"], { node: node.id })).code).toBe(2);
   });
 
   it("everything it writes says actor agent", async () => {
@@ -151,14 +137,14 @@ describe("the agent commands", () => {
   });
 
   it("bad usage is a clear message and exit code 2, with no stack trace", async () => {
-    const bad = [["fail"], ["node", "create"], ["edge", "add", "subtask", "a", "b"], ["link", "x", "y"], ["nonsense"], ["ask", "--bad"], ["search"], ["ps", "x"], ["reap", "--bad"]];
+    const bad = [["logs"], ["node", "create"], ["edge", "add", "subtask", "a", "b"], ["link", "x", "y"], ["nonsense"], ["ask", "--bad"], ["search"], ["ps", "x"], ["reap", "--bad"]];
     for (const args of bad) {
       const res = await aop(args, { node: "n" });
       expect(res.code, args.join(" ")).toBe(2);
       expect(res.stderr).not.toContain("    at ");
     }
     // Usage comes before the node, so it's the usage that's reported without one.
-    for (const args of [["fail"], ["ask", "a", "b"], ["split", "sideways"]]) {
+    for (const args of [["logs"], ["ask", "a", "b"], ["split", "sideways"]]) {
       const res = await aop(args);
       expect(res.code, args.join(" ")).toBe(2);
       expect(res.stderr).toContain("Usage: aop ");

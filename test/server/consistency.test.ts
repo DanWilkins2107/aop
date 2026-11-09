@@ -127,7 +127,7 @@ describe("claims", () => {
 describe("an agent's own fail", () => {
   it("is a report like next or ask: the agent gets its grace period to exit", TIMEOUT, async () => {
     const w = await world({ graceMs: 5_000 });
-    const node = await w.create(directives('aop ["fail","The repo is gone"]', "sleep 1500"));
+    const node = await w.create(directives(toolCall("fail", { reason: "The repo is gone" }), "sleep 1500"));
     await w.atStage(node.id, "failed");
     const [run] = await w.runsEnded(node.id);
     expect(run).toMatchObject({ left_via: "fail", left_actor: "agent", end_reason: "reported" });
