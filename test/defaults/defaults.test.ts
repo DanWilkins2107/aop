@@ -24,7 +24,7 @@ function markdownFiles(): string[] {
 }
 
 /** Commands whose second word picks the action, such as `aop node create`. */
-const WITH_ACTION = new Set(["node", "edge", "split", "project"]);
+const WITH_ACTION = new Set(["node", "split", "project"]);
 
 function commandKeys(tokens: string[]): string[] {
   const [command, action] = tokens;

@@ -57,20 +57,6 @@ describe("the agent commands", () => {
     expect(w.node(node.id).stage).toBe("pr_review");
   });
 
-  it("everything it writes says actor agent", async () => {
-    const node = await parked();
-    const other = await parked();
-    await aop(["edge", "add", "blocks", node.id, other.id], { node: node.id });
-    await aop(["edge", "remove", "blocks", node.id, other.id], { node: node.id });
-    expect((await w.call<EdgeRow[]>("GET", `/nodes/${node.id}/edges`)).body).toEqual([]);
-
-    const written = (await eventsOf(node.id)).filter((event) => event.kind !== "node_created");
-    expect(written.map((event) => event.kind)).toEqual(
-      expect.arrayContaining(["edge_added", "edge_removed"]),
-    );
-    expect(new Set(written.map((event) => event.actor))).toEqual(new Set(["agent"]));
-  });
-
   it("node create goes in the session's project, with a parent, type and stage", async () => {
     const parent = await parked();
     const made = await aop(["node", "create", "--title", "A child", "--body", "b", "--parent", parent.id, "--type", "dev", "--stage", "pr_review"], {
@@ -101,13 +87,6 @@ describe("the agent commands", () => {
     expect(unknown.stderr).toContain('No project "no-such-project"');
   });
 
-  it("edge remove says when there's no such edge", async () => {
-    const [a, b] = [await parked(), await parked()];
-    const res = await aop(["edge", "remove", "blocks", a.id, b.id]);
-    expect(res.code).toBe(1);
-    expect(res.stderr).toContain(`${a.id} doesn't block ${b.id}`);
-  });
-
   it("a new child can't start before its parent holds it", async () => {
     const parent = await w.create(directives('ifnot Stage: splitting :: aop ["split","start"]', "hang"), { type: "triage", stage: "split_approved" });
     await w.atStage(parent.id, "splitting");
@@ -118,7 +97,7 @@ describe("the agent commands", () => {
   });
 
   it("bad usage is a clear message and exit code 2, with no stack trace", async () => {
-    const bad = [["logs"], ["node", "create"], ["edge", "add", "subtask", "a", "b"], ["nonsense"], ["logs", "x", "--bad"], ["ps", "x"], ["reap", "--bad"]];
+    const bad = [["logs"], ["node", "create"], ["nonsense"], ["logs", "x", "--bad"], ["ps", "x"], ["reap", "--bad"]];
     for (const args of bad) {
       const res = await aop(args, { node: "n" });
       expect(res.code, args.join(" ")).toBe(2);
@@ -137,9 +116,9 @@ describe("the agent commands", () => {
     const option = await aop(["logs", "x", "--bad"], { node: "n" });
     expect(option.stderr).toContain("--bad");
     expect(option.stderr).toContain("Usage: aop logs <node> [--lines N]");
-    const edge = await aop(["edge", "add"]);
-    expect(edge.stderr).toBe("Usage: aop edge add blocks <from> <to>\n       aop edge remove blocks <from> <to>\n");
-    for (const line of ["aop logs <node> [--lines N]", "aop edge add blocks <from> <to>", "aop edge remove blocks <from> <to>", "aop ps"]) {
+    const split = await aop(["split", "sideways"]);
+    expect(split.stderr).toBe("Usage: aop split start\n       aop split finish\n");
+    for (const line of ["aop logs <node> [--lines N]", "aop split start", "aop split finish", "aop ps"]) {
       expect(help).toContain(`\n  ${line}\n`);
     }
   });

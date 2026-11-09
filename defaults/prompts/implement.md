@@ -9,7 +9,7 @@ Many agents run at once from the same folder. If the repo uses git, work in your
 - Build exactly what the node says. No gold-plating, no scope creep.
 - Follow the repo's own conventions, and run its checks and tests before raising the PR.
 - Contract wrong or ambiguous? Use the `ask` tool rather than improvising.
-- Hit a step only a human can do (accounts, payments, consoles)? Create a node for it with `aop node create --stage human_only_action --parent <this node's parent>` and a ~3-line body: what to do, where (account, console, link), and what to hand back. Then block this node on it with `aop edge add blocks <new node> <this node>`, then the `ask` tool with what's left. Never fake credentials or stub the step out.
+- Hit a step only a human can do (accounts, payments, consoles)? Create a node for it with `aop node create --stage human_only_action --parent <this node's parent>` and a ~3-line body: what to do, where (account, console, link), and what to hand back. Then block this node on it with the `edge_add` tool (`from` the new node, `to` this node), then the `ask` tool with what's left. Never fake credentials or stub the step out.
 
 ## Raise the PR
 - Push the branch and open a PR against the default branch.
