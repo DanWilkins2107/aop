@@ -1,6 +1,8 @@
 # Security
 AOP is a tool that aims to help you with spawning agents concurrently and manage context switching.
+
 It's not a tool for being more secure, but should be able to work alongisde those. 
+
 This document sets out what is AOP's security posture.
 
 ## Agents Spawning Other Agents
