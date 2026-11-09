@@ -8,6 +8,7 @@ import { fail } from "./fail.js";
 import { link } from "./link.js";
 import { message } from "./message.js";
 import { next } from "./next.js";
+import { nodeEdit } from "./node_edit.js";
 
 export const TOOLS: readonly AopTool[] = [
   ask,
@@ -16,4 +17,5 @@ export const TOOLS: readonly AopTool[] = [
   link,
   message,
   next,
+  nodeEdit,
 ];
