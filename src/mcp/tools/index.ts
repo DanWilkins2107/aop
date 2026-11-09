@@ -13,6 +13,8 @@ import { next } from "./next.js";
 import { nodeCreate } from "./node_create.js";
 import { nodeEdit } from "./node_edit.js";
 import { search } from "./search.js";
+import { splitFinish } from "./split_finish.js";
+import { splitStart } from "./split_start.js";
 
 export const TOOLS: readonly AopTool[] = [
   ask,
@@ -26,4 +28,6 @@ export const TOOLS: readonly AopTool[] = [
   nodeCreate,
   nodeEdit,
   search,
+  splitFinish,
+  splitStart,
 ];
