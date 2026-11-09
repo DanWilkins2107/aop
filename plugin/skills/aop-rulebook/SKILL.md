@@ -14,7 +14,7 @@ Apply these on every stage, on top of the stage prompt.
 
 ## Before starting
 - Run `aop context`.
-- Run `aop search <query>` for related work, decisions and earlier attempts. Invalidated nodes are useful: they say what was tried and why it was wrong.
+- Use the `search` tool for related work, decisions and earlier attempts. Invalidated nodes are useful: they say what was tried and why it was wrong.
 - Read the human's messages on the node. Approvals often come with small changes.
 
 ## While working

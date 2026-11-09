@@ -95,21 +95,11 @@ describe("the agent commands", () => {
     expect(named.code).toBe(0);
   });
 
-  it("search keeps to the session's project unless --all, and --project takes a name", async () => {
+  it("node create's --project takes a name", async () => {
     const added = await aop(["project", "add", makeRepo()]);
     const otherName = /^Added project "(.+)"/.exec(added.stdout)?.[1] as string;
-    const here = await parked({ title: "Zebra here" });
-    const there = await aop(["node", "create", "--title", "Zebra there", "--project", otherName, "--stage", "pr_review"]);
+    const there = await aop(["node", "create", "--title", "Elsewhere", "--project", otherName, "--stage", "pr_review"]);
     expect(there.code).toBe(0);
-
-    const scoped = await aop(["search", "Zebra"], { node: here.id });
-    expect(scoped.stdout).toContain(`${here.id}  [pr_review]  Zebra here`);
-    expect(scoped.stdout).not.toContain("Zebra there");
-    for (const res of [await aop(["search", "Zebra", "--all"], { node: here.id }), await aop(["search", "Zebra"])]) {
-      expect(res.stdout).toContain("Zebra here");
-      expect(res.stdout).toContain("Zebra there");
-    }
-    expect((await aop(["search", "Quagga"])).stdout).toBe("No matches.\n");
 
     const unknown = await aop(["node", "create", "--title", "x", "--project", "no-such-project"]);
     expect(unknown.code).toBe(1);
@@ -133,7 +123,7 @@ describe("the agent commands", () => {
   });
 
   it("bad usage is a clear message and exit code 2, with no stack trace", async () => {
-    const bad = [["logs"], ["node", "create"], ["edge", "add", "subtask", "a", "b"], ["link", "x", "y"], ["nonsense"], ["logs", "x", "--bad"], ["search"], ["ps", "x"], ["reap", "--bad"]];
+    const bad = [["logs"], ["node", "create"], ["edge", "add", "subtask", "a", "b"], ["link", "x", "y"], ["nonsense"], ["logs", "x", "--bad"],["ps", "x"], ["reap", "--bad"]];
     for (const args of bad) {
       const res = await aop(args, { node: "n" });
       expect(res.code, args.join(" ")).toBe(2);

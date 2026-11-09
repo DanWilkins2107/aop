@@ -4,7 +4,7 @@ Decide what this node is, then take exactly one outcome.
 
 ## Study first
 - Read the description, messages, ancestors and siblings in the context.
-- `aop search` for related nodes and earlier decisions.
+- The `search` tool for related nodes and earlier decisions.
 - Look at the repo enough to judge the size of the change.
 - Direction unclear, or the description too thin to size? Use the `ask` tool rather than guessing.
 

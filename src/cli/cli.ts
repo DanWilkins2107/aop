@@ -23,7 +23,6 @@ import {
   type ProposalRequest,
   type ProposalView,
   type ReapResult,
-  type SearchResult,
   type SteerRequest,
   type SteerSession,
   type WithdrawRequest,
@@ -56,7 +55,6 @@ interface Ctx {
 export const AGENT_COMMANDS = {
   context: ["aop context [<id>]"],
   link: ["aop link pr|ticket <url>"],
-  search: ["aop search <query> [--all]"],
   "node create": ["aop node create --title ... [--body ...] [--parent ...] [--project ...] [--type ... | --stage ...]"],
   edge: ["aop edge add blocks <from> <to>", "aop edge remove blocks <from> <to>"],
   split: ["aop split start", "aop split finish"],
@@ -267,25 +265,6 @@ async function edgeCommand(c: Ctx, argv: string[]): Promise<void> {
   throw usageError(usage);
 }
 
-async function searchCommand(c: Ctx, argv: string[]): Promise<void> {
-  const { values, positionals } = args(argv, COMMANDS.search, { all: { type: "boolean" } });
-  if (positionals.length === 0) throw usageError(COMMANDS.search);
-  const query = new URLSearchParams({ q: positionals.join(" ") });
-  const own = c.env["AOP_NODE_ID"];
-  // With no node there's no current project to narrow to.
-  if (values.all !== true && own) {
-    const node = await send<NodeView>(c, "GET", apiPaths.node(own));
-    // An improvement belongs to no project, so it searches them all.
-    if (node.kind !== "improvement") query.set("project", node.project_id);
-  }
-  const results = await send<SearchResult[]>(c, "GET", `${apiPaths.search}?${query}`);
-  if (results.length === 0) c.log("No matches.");
-  for (const result of results) {
-    c.log(`${result.node_id}  [${result.stage}]  ${result.title}`);
-    c.log(`    ${result.snippet.replace(/\s+/g, " ")}`);
-  }
-}
-
 async function steerCommand(c: Ctx, argv: string[]): Promise<number> {
   const { values, positionals } = args(argv, COMMANDS.steer, { "no-sandbox": { type: "boolean" } });
   const id = only(positionals, COMMANDS.steer);
@@ -449,8 +428,6 @@ async function run(c: Ctx, argv: string[]): Promise<number | void> {
       c.log(`Linked ${kind} ${url}`);
       return;
     }
-    case "search":
-      return searchCommand(c, rest);
     case "node":
       return nodeCommand(c, rest);
     case "edge":

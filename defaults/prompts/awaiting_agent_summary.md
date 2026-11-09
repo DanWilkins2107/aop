@@ -4,7 +4,7 @@ This node is a choice for a human, not work. Set it out so they can decide quick
 
 ## Study
 - Read the description, messages, ancestors and siblings in the context.
-- `aop search` for related nodes and earlier decisions.
+- The `search` tool for related nodes and earlier decisions.
 - Look at the repo or docs enough to make the options concrete. Don't change anything.
 - Can't tell what the choice is? Use the `ask` tool rather than guessing.
 
