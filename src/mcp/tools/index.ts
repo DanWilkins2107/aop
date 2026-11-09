@@ -6,10 +6,12 @@ import { ask } from "./ask.js";
 import { context } from "./context.js";
 import { message } from "./message.js";
 import { next } from "./next.js";
+import { nodeCreate } from "./node_create.js";
 
 export const TOOLS: readonly AopTool[] = [
   ask,
   context,
   message,
   next,
+  nodeCreate,
 ];
