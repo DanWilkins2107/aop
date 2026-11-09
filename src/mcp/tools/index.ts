@@ -9,6 +9,7 @@ import { link } from "./link.js";
 import { message } from "./message.js";
 import { next } from "./next.js";
 import { nodeCreate } from "./node_create.js";
+import { nodeEdit } from "./node_edit.js";
 import { search } from "./search.js";
 
 export const TOOLS: readonly AopTool[] = [
@@ -19,5 +20,6 @@ export const TOOLS: readonly AopTool[] = [
   message,
   next,
   nodeCreate,
+  nodeEdit,
   search,
 ];
