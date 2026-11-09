@@ -4,10 +4,12 @@
 import type { AopTool } from "../tool.js";
 import { ask } from "./ask.js";
 import { context } from "./context.js";
+import { link } from "./link.js";
 import { next } from "./next.js";
 
 export const TOOLS: readonly AopTool[] = [
   ask,
   context,
+  link,
   next,
 ];
