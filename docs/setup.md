@@ -19,8 +19,17 @@ This builds AOP, puts `aop` on your PATH and runs `aop init`, which creates `~/.
 
 To change a setting later, edit `~/.aop/config.yaml`. To update AOP, `git pull` and restart `aop serve`.
 
+## Connect agents to AOP
+Agents don't use the `aop` CLI, which is for you. They act on AOP through its MCP server, which `aop serve` runs at http://127.0.0.1:4319/mcp. The port is always 4319, so a sandbox can allow just that.
+
+Add it to Claude Code once, for every project:
+```
+claude mcp add --scope user --transport http aop http://127.0.0.1:4319/mcp
+```
+Other harnesses: add an HTTP MCP server named `aop` at the same URL.
+
 ## Install the plugin
-The plugin teaches agents how to work on AOP stages. In Claude Code, from the AOP clone:
+The plugin teaches agents how to work on AOP stages and which MCP tools to use. In Claude Code, from the AOP clone:
 ```
 /plugin marketplace add ./plugin
 /plugin install aop@aop
@@ -35,7 +44,7 @@ Then turn on auto-update for the marketplace in `/plugin` → Marketplaces.
 
 ## Working with agents
 - Stopping `aop serve` stops every agent. They pick up again when it restarts.
-- `aop steer <node>` takes a node over and opens your agent session in the project's folder. Agents leave it alone until you release it from the node page or with `aop release <node>`.
+- `aop steer <node>` takes a node over and opens your agent session in the project's folder. The session reaches AOP through the same MCP server. Agents leave the node alone until you release it from the node page or with `aop release <node>`.
 
 ## Customising your process
 Your process is `~/.aop/stages.yaml`, with each agent stage's prompt in `~/.aop/prompts`. Edit a prompt to change what that agent does, including any project-specific rules. Changes apply without a restart, and the Process page shows the result and any errors.

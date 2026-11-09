@@ -16,7 +16,14 @@ This document sets out what is AOP's security posture.
 - Sessions automatically terminate if you do not have this - if an agent needs a command approval then they will have their headless session end.  
 - However it's worth mentioning that you can use the `aop steer` command if you have specific commands you want to maintain human approval over. 
 
+## What agents can do
+- Agents act on AOP only through its MCP server (port 4319). Its tools are the agent's side of a stage and nothing more: read a node, search, post messages, add links, create and edit nodes, add and remove blocks, split, move their stage on (`next`, `ask`, `fail`), and propose and apply improvements.
+- The `aop` CLI and the web app (port 4317) are for you. They can do things agents can't, such as force a stage, claim or release a node, or stop a run.
+- Each tool names the node it acts on, and AOP trusts the agent to name its own. An agent can post on or edit other nodes, and every change is recorded as the agent's in the node's history.
+- When a run ends or is stopped, AOP kills the agent's processes, so nothing left over keeps acting on the board.
+
 ## Sandboxing
 - AOP provides the necessary configuration to allow you to have sandboxed sessions, but does not enforce this. 
+- In a sandbox, allow agents to reach `127.0.0.1:4319` and not `4317`. That keeps them to the MCP tools.
 - It's recommended to use sandboxing so that AOP agents cannot get around your process, but also cannot edit percieved history.
 - As everything is stored locally, access to AOP config would allow your agents to create their own process. Again this arguably isn't much more of a risk compared to an existing setup where an agent can spawn infinite subagents, but it's worth considering. 
