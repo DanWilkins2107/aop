@@ -11,7 +11,7 @@ import { Orchestrator } from "../../src/server/orchestrator.js";
 import { isAlive, waitGone } from "../../src/server/osProcesses.js";
 import { addProject } from "../../src/server/projects.js";
 import { beginRun } from "../../src/server/runs.js";
-import type { NodeView } from "../../src/shared/api.js";
+import { RUN_ID_HEADER, type NodeView } from "../../src/shared/api.js";
 import { aopInProcess } from "../cli/cli.helpers.js";
 import { directives, fakeConfig, settle, toolCall, world } from "./agents.helpers.js";
 import { harness, makeHome, makeRepo, STAGES_YAML } from "./helpers.js";
@@ -77,8 +77,13 @@ describe("agent identity", () => {
     expect(w.runs(node.id)[1]).toMatchObject({ id: second.id, status: "running", left_via: null });
 
     // Its other writes are refused too, while the current run's go through.
-    const message = await aop(["message", "stale"], { AOP_URL: w.url, AOP_NODE_ID: node.id, AOP_RUN_ID: first!.id });
-    expect(message.code).toBe(1);
+    const message = await fetch(`${w.url}/api/nodes/${node.id}/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json", [RUN_ID_HEADER]: first!.id },
+      body: JSON.stringify({ body: "stale", author: "agent" }),
+    });
+    expect(message.ok).toBe(false);
+    expect(await message.text()).toContain("has ended");
     const current = await aop(["ask", "Which way?"], { AOP_URL: w.url, AOP_NODE_ID: node.id, AOP_RUN_ID: second.id });
     expect(current.code).toBe(0);
     expect(w.node(node.id).stage).toBe("ask_human_question");

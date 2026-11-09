@@ -9,7 +9,7 @@ This node is a choice for a human, not work. Set it out so they can decide quick
 - Can't tell what the choice is? `aop ask "..."` rather than guessing.
 
 ## Write it up
-Post it with `aop message`:
+Post it with the `message` tool:
 - Each decision to make, in one line.
 - 2-4 sensible options for each: what it means and its main trade-off, one line each.
 - Your pick, and why, in a line.

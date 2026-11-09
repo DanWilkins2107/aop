@@ -9,7 +9,7 @@ A human has a decision to make, or an action only they can do, and asked you to 
 - Can't tell what they're asking? `aop ask "..."` rather than guessing.
 
 ## Write it up
-Post it with `aop message`, short enough to read at a glance:
+Post it with the `message` tool, short enough to read at a glance:
 - The answer to what they asked, in a few lines. Facts, with where they came from.
 - Your recommendation, in a line.
 - Anything you couldn't find out, in a line.

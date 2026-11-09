@@ -22,7 +22,6 @@ Commands act on your own node (`AOP_NODE_ID`) unless they take an ID. You can on
 |---|---|
 | `aop context [<id>]` | Read a node. Without an ID, your own |
 | `aop search <query> [--all]` | Search this project's nodes, or every project with `--all` |
-| `aop message "..." [--node <id>]` | Post a message, on your node or another |
 | `aop link pr\|ticket <url>` | Attach a PR or ticket link to your node |
 | `aop ask "..."` | Ask a human. The node waits, and this stage restarts with the answer. Then exit |
 | `aop fail "<reason>"` | Mark your node failed, only when the work can't be done and asking won't help. Then exit |
@@ -39,6 +38,7 @@ These come from AOP's MCP server. Each takes your node's ID as `node_id`: the `N
 | Tool | Use |
 |---|---|
 | `next` tool with `outcome` | Finish the stage with one outcome. Then exit |
+| `message` tool with `body` | Post a message. Any node's ID as `node_id` posts it there instead |
 
 ### Improvements
 An **improvement** is a node that changes how agents work: a skill or a stage prompt. It belongs to no project. You start in the improvements folder, and you never edit real files: you propose their new contents, a human reviews the diff, and a later stage applies it.
