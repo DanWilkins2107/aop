@@ -14,7 +14,7 @@ Many agents run at once from the same folder. If the repo uses git, work in your
 ## Raise the PR
 - Push the branch and open a PR against the default branch.
 - PR body: up to 5 bullets on what changed and any decisions. Don't restate the diff or list files.
-- `aop link pr <url>`, post a 1-line handover, then the `next` tool with outcome `pr_raised`.
+- Attach it with the `link` tool, post a 1-line handover with the `message` tool, then the `next` tool with outcome `pr_raised`.
 
 ## Coming back from review
 If the node already has a PR link, this is a review round:

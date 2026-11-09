@@ -17,7 +17,6 @@ import {
   type EdgeRequest,
   type EdgeRow,
   type EditNodeRequest,
-  type LinkRequest,
   type LogTail,
   type NodeView,
   type ProjectRow,
@@ -56,7 +55,6 @@ interface Ctx {
 /** Each command's usage, for both the help and its own usage errors, so the two can't drift apart. */
 export const AGENT_COMMANDS = {
   context: ["aop context [<id>]"],
-  link: ["aop link pr|ticket <url>"],
   search: ["aop search <query> [--all]"],
   "node create": ["aop node create --title ... [--body ...] [--parent ...] [--project ...] [--type ... | --stage ...]"],
   "node edit": ["aop node edit [<id>] [--title ...] [--body ...]"],
@@ -457,13 +455,6 @@ async function run(c: Ctx, argv: string[]): Promise<number | void> {
       const { positionals } = args(rest, COMMANDS.context, {});
       if (positionals.length > 1) throw usageError(COMMANDS.context);
       c.log(await sendForText(c, apiPaths.nodeAction(positionals[0] ?? ownNode(c), "context")));
-      return;
-    }
-    case "link": {
-      const [kind, url, ...extra] = args(rest, COMMANDS.link, {}).positionals;
-      if ((kind !== "pr" && kind !== "ticket") || url === undefined || extra.length > 0) throw usageError(COMMANDS.link);
-      await send(c, "POST", apiPaths.nodeAction(ownNode(c), "links"), { kind, url, actor: ACTOR } satisfies LinkRequest);
-      c.log(`Linked ${kind} ${url}`);
       return;
     }
     case "search":

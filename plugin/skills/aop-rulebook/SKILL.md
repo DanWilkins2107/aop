@@ -19,7 +19,7 @@ Apply these on every stage, on top of the stage prompt.
 
 ## While working
 - Unsure of direction or a decision? Use the `ask` tool rather than guessing. A cheap question beats rework.
-- Attach every PR or ticket you create with `aop link pr <url>` or `aop link ticket <url>`.
+- Attach every PR or ticket you create with the `link` tool.
 - Stay inside the node's scope. Leave other work to other nodes.
 
 ## Finishing
