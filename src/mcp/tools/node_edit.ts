@@ -5,6 +5,7 @@ import { ACTOR, defineTool } from "../tool.js";
 
 export const nodeEdit = defineTool({
   name: "node_edit",
+  writes: true,
   description: "Edit an AOP node's title or description, usually your own. Give a new title, a new body, or both.",
   input: {
     node_id: z.string().min(1).describe("The node to edit. Your own node's ID is in your prompt."),

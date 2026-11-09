@@ -106,7 +106,7 @@ describe("project_stages", () => {
 
   it("gives agents the prompt from the project's process", async () => {
     const node = (await h.call<NodeView>("POST", `/api/projects/${h.projectId}/nodes`, { title: "Tidy" })).body;
-    expect(buildPrompt(h.db, loadConfig(), getNodeRow(h.db, node.id))).toContain("Tidy up.");
+    expect(buildPrompt(h.db, loadConfig(), getNodeRow(h.db, node.id), "run-1")).toContain("Tidy up.");
   });
 
   it("shows which projects have their own process on the process and settings pages", async () => {

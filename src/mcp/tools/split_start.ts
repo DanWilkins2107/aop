@@ -5,6 +5,7 @@ import { defineTool } from "../tool.js";
 
 export const splitStart = defineTool({
   name: "split_start",
+  writes: true,
   description:
     "Begin splitting an AOP node into children, from an agent stage. Children you create afterwards are held, so they don't start, " +
     "until you call `split_finish`. Your turn continues.",

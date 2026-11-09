@@ -132,7 +132,8 @@ function apiError(text: string): { message: string; details?: unknown } | undefi
 async function call(c: Ctx, method: string, path: string, body?: unknown): Promise<{ type: string; text: string }> {
   const headers: Record<string, string> = {};
   const init: RequestInit = { method, headers };
-  // Set only in a session AOP launched, so the server can tell this run from one that has ended.
+  // Set only in a session AOP or `aop steer` opened, so the server can tell this run or session from
+  // one that has ended.
   const runId = c.env["AOP_RUN_ID"];
   if (runId) headers[RUN_ID_HEADER] = runId;
   if (body !== undefined) {
@@ -307,14 +308,15 @@ async function steerCommand(c: Ctx, argv: string[]): Promise<number> {
   const id = only(positionals, COMMANDS.steer);
   const session = await send<SteerSession>(c, "POST", apiPaths.nodeAction(id, "steer"), { no_sandbox: values["no-sandbox"] === true } satisfies SteerRequest);
   c.log(`Claimed ${id}. Opening a session in ${session.cwd}. Release the claim in the UI or with \`aop release ${id}\` when you're done.`);
+  c.log(`Run ID for this session: ${session.steer_id}. Tell your agent to pass it as run_id. It works until you release the claim.`);
   // The command is the user's own config string, which may need a shell. No node text goes in it.
-  // A steered session is the human's, not an agent run, even when steered from inside one.
-  const { AOP_RUN_ID: _run, ...env } = c.env;
+  // A steered session is the human's, not an agent run, even when steered from inside one: its run
+  // ID is the session's own, tied to the human's claim.
   const child = spawn(session.command, {
     shell: true,
     cwd: session.cwd,
     stdio: "inherit",
-    env: { ...env, AOP_NODE_ID: id, AOP_URL: serverUrl(c) },
+    env: { ...c.env, AOP_NODE_ID: id, AOP_URL: serverUrl(c), AOP_RUN_ID: session.steer_id },
   });
   return new Promise<number>((done, fail) => {
     child.once("error", (error) => fail(new CliFailure(`Couldn't open the session: ${error.message}`)));

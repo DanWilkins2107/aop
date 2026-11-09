@@ -1,6 +1,6 @@
-// The agents' MCP server: the agent commands as tools, served at `/mcp` on its own localhost port,
-// so a sandboxed agent can be given that port and nothing else. Stateless: no sessions, no tokens,
-// and every tool that acts on a node names it.
+// The agents' MCP server: how agents read and change the board, as tools served at `/mcp` on its own
+// localhost port, so a sandboxed agent can be given that port and nothing else. Stateless: no
+// sessions or tokens. Every tool that acts on a node names it, and every write names its run.
 
 import type { Server } from "node:http";
 import { serve } from "@hono/node-server";

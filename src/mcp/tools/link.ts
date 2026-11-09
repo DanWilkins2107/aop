@@ -5,6 +5,7 @@ import { ACTOR, defineTool } from "../tool.js";
 
 export const link = defineTool({
   name: "link",
+  writes: true,
   description: "Attach a PR or ticket link to an AOP node.",
   input: {
     node_id: z.string().min(1).describe("The node to link. Your own node's ID is in your prompt."),

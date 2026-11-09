@@ -5,6 +5,7 @@ import { ACTOR, ApiFailure, defineTool } from "../tool.js";
 
 export const edgeRemove = defineTool({
   name: "edge_remove",
+  writes: true,
   description: "Remove a block between two AOP nodes, so `to` no longer waits for `from`.",
   input: {
     from: z.string().min(1).describe("The blocking node's ID."),

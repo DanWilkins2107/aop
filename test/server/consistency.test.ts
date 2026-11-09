@@ -2,6 +2,9 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { describe, expect, it, onTestFinished } from "vitest";
 import { ChangeFeed } from "../../src/server/changes.js";
 import { loadConfig } from "../../src/server/config.js";
@@ -11,9 +14,9 @@ import { Orchestrator } from "../../src/server/orchestrator.js";
 import { isAlive, waitGone } from "../../src/server/osProcesses.js";
 import { addProject } from "../../src/server/projects.js";
 import { beginRun } from "../../src/server/runs.js";
-import { RUN_ID_HEADER, type AskRequest, type NodeView } from "../../src/shared/api.js";
-import { API_PREFIX, apiPaths } from "../../src/shared/paths.js";
+import type { NodeView } from "../../src/shared/api.js";
 import { aopInProcess } from "../cli/cli.helpers.js";
+import { resultText } from "../mcp/helpers.js";
 import { directives, fakeConfig, settle, toolCall, world, type World } from "./agents.helpers.js";
 import { harness, makeHome, makeRepo, STAGES_YAML } from "./helpers.js";
 
@@ -25,14 +28,16 @@ async function aop(args: string[], env: Record<string, string>): Promise<{ code:
   return { code: res.code, output: res.stdout + res.stderr };
 }
 
-/** An ask straight to the API, saying it comes from `runId`, as an agent run's requests do. */
-async function askAs(w: World, nodeId: string, runId: string, question: string): Promise<{ status: number; text: string }> {
-  const response = await fetch(`${w.url}${API_PREFIX}${apiPaths.nodeAction(nodeId, "ask")}`, {
-    method: "POST",
-    headers: { "content-type": "application/json", [RUN_ID_HEADER]: runId },
-    body: JSON.stringify({ question } satisfies AskRequest),
-  });
-  return { status: response.status, text: await response.text() };
+/** A tool call on the world's MCP server, as an agent makes it, with its result's text. */
+async function toolAs(w: World, name: string, args: Record<string, unknown>): Promise<{ isError: boolean; text: string }> {
+  const client = new Client({ name: "aop-test", version: "0.0.0" });
+  await client.connect(new StreamableHTTPClientTransport(new URL(w.mcpUrl)));
+  try {
+    const result = (await client.callTool({ name, arguments: args })) as CallToolResult;
+    return { isError: result.isError === true, text: resultText(result) };
+  } finally {
+    await client.close();
+  }
 }
 
 describe("an invalid stages.yaml", () => {
@@ -80,23 +85,19 @@ describe("agent identity", () => {
     const [first] = w.runs(node.id);
     expect(first).toMatchObject({ status: "exited", end_reason: "reported" });
 
-    // What a process the first run left behind would run: it still carries that run's marker.
-    const stale = await askAs(w, node.id, first!.id, "Still here?");
-    expect(stale.status).toBe(409);
+    // What a process the first run left behind would send: it still has that run's ID.
+    const stale = await toolAs(w, "ask", { node_id: node.id, run_id: first!.id, question: "Still here?" });
+    expect(stale.isError).toBe(true);
     expect(stale.text).toContain("has ended");
     expect(w.node(node.id).stage).toBe("write_spec");
     expect(w.runs(node.id)[1]).toMatchObject({ id: second.id, status: "running", left_via: null });
 
     // Its other writes are refused too, while the current run's go through.
-    const message = await fetch(`${w.url}/api/nodes/${node.id}/messages`, {
-      method: "POST",
-      headers: { "content-type": "application/json", [RUN_ID_HEADER]: first!.id },
-      body: JSON.stringify({ body: "stale", author: "agent" }),
-    });
-    expect(message.ok).toBe(false);
-    expect(await message.text()).toContain("has ended");
-    const current = await askAs(w, node.id, second.id, "Which way?");
-    expect(current.status).toBe(200);
+    const message = await toolAs(w, "message", { node_id: node.id, run_id: first!.id, body: "stale" });
+    expect(message.isError).toBe(true);
+    expect(message.text).toContain("has ended");
+    const current = await toolAs(w, "ask", { node_id: node.id, run_id: second.id, question: "Which way?" });
+    expect(current).toMatchObject({ isError: false });
     expect(w.node(node.id).stage).toBe("ask_human_question");
   });
 
@@ -108,8 +109,9 @@ describe("agent identity", () => {
     const parent = await w.create("", { type: "dev", stage: "pr_review" });
     await w.call("POST", `/nodes/${parent.id}/invalidate`, { reason: "Hold the child" });
     const other = await w.create("", { parent_id: parent.id });
-    const res = await askAs(w, other.id, run.id, "Which way?");
-    expect(res.status).toBe(409);
+    const res = await toolAs(w, "ask", { node_id: other.id, run_id: run.id, question: "Which way?" });
+    expect(res.isError).toBe(true);
+    expect(res.text).toContain(`isn't the run on node ${other.id}`);
     expect((w.node(other.id) as NodeView).stage).toBe("implement");
     expect(w.runs(other.id)).toEqual([]);
   });

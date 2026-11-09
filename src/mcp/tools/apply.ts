@@ -6,6 +6,7 @@ import { ACTOR, ApiFailure, defineTool } from "../tool.js";
 
 export const apply = defineTool({
   name: "apply",
+  writes: true,
   description:
     "Write an improvement's proposals: to the real files at `save_locally`, or with `into`, into a worktree at `raise_pr`. " +
     "With `into`, files outside the repo are skipped. If it refuses, ask with what it said; don't write the files yourself.",

@@ -33,7 +33,8 @@ describe("the propose tool", () => {
   it("proposes a change to an existing file, as the agent, leaving the real file alone", async () => {
     const m = await mcpHarness(ON);
     const id = await improvement(m);
-    expect(await m.text("propose", { node_id: id, path: skill(), content: "New skill.\n" })).toBe(
+    const run_id = await m.run(id);
+    expect(await m.text("propose", { node_id: id, run_id, path: skill(), content: "New skill.\n" })).toBe(
       `Proposed ${skill()}. The real file is unchanged.`,
     );
     expect(readFileSync(skill(), "utf8")).toBe("Old skill.\n");
@@ -45,8 +46,9 @@ describe("the propose tool", () => {
   it("proposes a new file", async () => {
     const m = await mcpHarness(ON);
     const id = await improvement(m);
+    const run_id = await m.run(id);
     const fresh = join(skills(), "new-skill", "SKILL.md");
-    expect(await m.text("propose", { node_id: id, path: fresh, content: "Brand new.\n" })).toBe(
+    expect(await m.text("propose", { node_id: id, run_id, path: fresh, content: "Brand new.\n" })).toBe(
       `Proposed ${fresh} (new file). The real file is unchanged.`,
     );
     expect(existsSync(fresh)).toBe(false);
@@ -55,7 +57,8 @@ describe("the propose tool", () => {
   it("refuses a relative path before asking the API", async () => {
     const m = await mcpHarness(ON);
     const id = await improvement(m);
-    const result = await m.tool("propose", { node_id: id, path: "write-tests/SKILL.md", content: "x" });
+    const run_id = await m.run(id);
+    const result = await m.tool("propose", { node_id: id, run_id, path: "write-tests/SKILL.md", content: "x" });
     expect(result.isError).toBe(true);
     expect(resultText(result)).toMatch(/absolute path/);
     expect(await proposals(m, id)).toEqual([]);
@@ -64,8 +67,9 @@ describe("the propose tool", () => {
   it("passes on the API's refusal of a path outside what improvements may change", async () => {
     const m = await mcpHarness(ON);
     const id = await improvement(m);
+    const run_id = await m.run(id);
     const outside = join(mkdtempSync(join(aopHome(), "outside-")), "SKILL.md");
-    const result = await m.tool("propose", { node_id: id, path: outside, content: "evil" });
+    const result = await m.tool("propose", { node_id: id, run_id, path: outside, content: "evil" });
     expect(result.isError).toBe(true);
     expect(resultText(result)).toMatch(/is outside .*Improvements can only change those/);
     expect(await proposals(m, id)).toEqual([]);
@@ -74,7 +78,7 @@ describe("the propose tool", () => {
   it("fails for a node that isn't an improvement", async () => {
     const m = await mcpHarness(ON);
     const work = await m.create("dev");
-    const result = await m.tool("propose", { node_id: work.id, path: skill(), content: "x" });
+    const result = await m.tool("propose", { node_id: work.id, run_id: await m.run(work.id), path: skill(), content: "x" });
     expect(result.isError).toBe(true);
     expect(resultText(result)).toMatch(/Only improvements have proposals/);
   });
@@ -84,8 +88,9 @@ describe("the withdraw_proposal tool", () => {
   it("drops a proposal", async () => {
     const m = await mcpHarness(ON);
     const id = await improvement(m);
-    await m.text("propose", { node_id: id, path: skill(), content: "New skill.\n" });
-    expect(await m.text("withdraw_proposal", { node_id: id, path: skill() })).toBe(`Withdrew the proposal for ${skill()}`);
+    const run_id = await m.run(id);
+    await m.text("propose", { node_id: id, run_id, path: skill(), content: "New skill.\n" });
+    expect(await m.text("withdraw_proposal", { node_id: id, run_id, path: skill() })).toBe(`Withdrew the proposal for ${skill()}`);
     expect(await proposals(m, id)).toEqual([]);
     const events = (await m.call<EventView[]>("GET", `/api/nodes/${id}/events`)).body;
     expect(events.find((e) => e.kind === "proposal_withdrawn")).toMatchObject({ actor: "agent" });
@@ -94,7 +99,8 @@ describe("the withdraw_proposal tool", () => {
   it("refuses a relative path", async () => {
     const m = await mcpHarness(ON);
     const id = await improvement(m);
-    const result = await m.tool("withdraw_proposal", { node_id: id, path: "write-tests/SKILL.md" });
+    const run_id = await m.run(id);
+    const result = await m.tool("withdraw_proposal", { node_id: id, run_id, path: "write-tests/SKILL.md" });
     expect(result.isError).toBe(true);
     expect(resultText(result)).toMatch(/absolute path/);
   });
@@ -102,23 +108,24 @@ describe("the withdraw_proposal tool", () => {
   it("passes on the API's refusal when there's no such proposal", async () => {
     const m = await mcpHarness(ON);
     const id = await improvement(m);
-    const result = await m.tool("withdraw_proposal", { node_id: id, path: skill() });
+    const run_id = await m.run(id);
+    const result = await m.tool("withdraw_proposal", { node_id: id, run_id, path: skill() });
     expect(result.isError).toBe(true);
     expect(resultText(result)).toMatch(/No proposal/);
   });
 });
 
 describe("tools/list", () => {
-  it("offers propose and withdraw_proposal with all their arguments required", async () => {
+  it("offers propose and withdraw_proposal with all their arguments required, run_id among them", async () => {
     const m = await mcpHarness(ON);
     const tools = await m.tools();
     const propose = tools.find((t) => t.name === "propose");
     expect(propose?.description).toMatch(/real file is unchanged/);
-    expect([...(propose?.inputSchema.required ?? [])].sort()).toEqual(["content", "node_id", "path"]);
-    expect(Object.keys(propose?.inputSchema.properties ?? {}).sort()).toEqual(["content", "node_id", "path"]);
+    expect([...(propose?.inputSchema.required ?? [])].sort()).toEqual(["content", "node_id", "path", "run_id"]);
+    expect(Object.keys(propose?.inputSchema.properties ?? {}).sort()).toEqual(["content", "node_id", "path", "run_id"]);
     const withdraw = tools.find((t) => t.name === "withdraw_proposal");
     expect(withdraw?.description).toMatch(/Drop/);
-    expect([...(withdraw?.inputSchema.required ?? [])].sort()).toEqual(["node_id", "path"]);
-    expect(Object.keys(withdraw?.inputSchema.properties ?? {}).sort()).toEqual(["node_id", "path"]);
+    expect([...(withdraw?.inputSchema.required ?? [])].sort()).toEqual(["node_id", "path", "run_id"]);
+    expect(Object.keys(withdraw?.inputSchema.properties ?? {}).sort()).toEqual(["node_id", "path", "run_id"]);
   });
 });

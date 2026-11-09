@@ -1,5 +1,5 @@
-// Every tool the MCP server offers, all of them agent commands. Adding one is a new file here, plus
-// its import and its entry in `TOOLS`.
+// Every tool the MCP server offers: reads, and writes that take the caller's run ID. Adding one is a
+// new file here, plus its import and its entry in `TOOLS`.
 
 import type { AopTool } from "../tool.js";
 import { apply } from "./apply.js";

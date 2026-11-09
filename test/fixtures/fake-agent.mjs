@@ -3,11 +3,13 @@
 // the stage's prompt:
 //
 //   @@record <file>                JSON of the stdin, argv, cwd and AOP_* environment it was given
-//   @@aop ["ps"]                   runs the real `aop` CLI from PATH. "$NODE" is this node's ID, and
-//                                  "$LAST" and "$PREV" are the last two IDs it created
+//   @@aop ["ps"]                   runs the real `aop` CLI from PATH. "$NODE" is this node's ID, "$RUN"
+//                                  is AOP_RUN_ID, and "$LAST" and "$PREV" are the last two IDs it
+//                                  created
 //   @@tool next {"node_id":"$NODE","outcome":"ready"}
 //                                  calls a tool on AOP's MCP server at AOP_MCP_URL, with the same
-//                                  substitutions in its JSON arguments
+//                                  substitutions in its JSON arguments, and run_id set to
+//                                  AOP_RUN_ID unless they give one
 //   @@sleep <ms>
 //   @@hang                         never exits by itself
 //   @@exit <code>
@@ -107,7 +109,11 @@ const prose = stdin
   .join("\n");
 
 const substitute = (text) =>
-  text.replaceAll("$LAST", lastCreated).replaceAll("$PREV", previousCreated).replaceAll("$NODE", process.env["AOP_NODE_ID"] ?? "");
+  text
+    .replaceAll("$LAST", lastCreated)
+    .replaceAll("$PREV", previousCreated)
+    .replaceAll("$NODE", process.env["AOP_NODE_ID"] ?? "")
+    .replaceAll("$RUN", process.env["AOP_RUN_ID"] ?? "");
 
 function remember(output) {
   const created = /^Created (\S+)/m.exec(output);
@@ -181,7 +187,9 @@ async function perform(directive) {
       return;
     case "tool": {
       const [, tool, json = "{}"] = /^(\S+)\s*(.*)$/s.exec(rest) ?? [];
-      await callTool(tool, JSON.parse(substitute(json || "{}")));
+      // Its run ID, unless the directive gives one, as a real agent copies it from its prompt.
+      const run = process.env["AOP_RUN_ID"];
+      await callTool(tool, { ...(run ? { run_id: run } : {}), ...JSON.parse(substitute(json || "{}")) });
       return;
     }
     case "sleep":

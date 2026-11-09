@@ -50,8 +50,10 @@ export interface ApiErrorBody {
 }
 
 /**
- * The header a launched agent's CLI sends with its run's ID, from `AOP_RUN_ID`. The server refuses a
- * write from a run that has ended, and a stage change from any run but the one on that node.
+ * The header carrying the run ID a write comes from: every MCP write tool sends its `run_id` in it.
+ * That's an agent run's ID, or a steered session's `steer_id`. The server refuses a write from a run
+ * that has ended or a session whose claim was released, and a stage change from any run but the one
+ * on that node, or a session on another node.
  */
 export const RUN_ID_HEADER = "x-aop-run-id";
 
@@ -316,6 +318,11 @@ export interface SteerSession {
   node_id: string;
   command: string;
   cwd: string;
+  /**
+   * The session's ID, which its write tools pass as their `run_id`. It acts on the board only while
+   * the human's claim holds, and moves only this node. Reopening a held claim gives the same one.
+   */
+  steer_id: string;
 }
 
 /** A process file (the shared `stages.yaml` or a project's own), in file order. Built-in stages aren't listed unless a type uses one. */

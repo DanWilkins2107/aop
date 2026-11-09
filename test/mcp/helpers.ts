@@ -1,9 +1,12 @@
+import { randomUUID } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { onTestFinished } from "vitest";
 import { createMcpApp, MCP_PATH } from "../../src/mcp/server.js";
 import { createApp } from "../../src/server/api.js";
+import { getNodeRow } from "../../src/server/nodes.js";
+import { beginRun } from "../../src/server/runs.js";
 import { harness, type Harness } from "../server/helpers.js";
 
 export interface McpHarness extends Harness {
@@ -13,6 +16,11 @@ export interface McpHarness extends Harness {
   text(name: string, args?: Record<string, unknown>): Promise<string>;
   /** What `tools/list` offers. */
   tools(): Promise<Tool[]>;
+  /**
+   * Opens a running agent run, as a launch does, and returns its ID for a write tool's `run_id`. On
+   * this node, which the run then claims, or else on a new node of its own.
+   */
+  run(nodeId?: string): Promise<string>;
 }
 
 /** The text of a tool result, success or error. */
@@ -49,6 +57,10 @@ export async function mcpHarness(overrides: Record<string, string> = {}): Promis
     },
     async tools() {
       return (await client.listTools()).tools;
+    },
+    async run(nodeId) {
+      const id = nodeId ?? (await h.create("dev")).id;
+      return beginRun(h.db, getNodeRow(h.db, id), randomUUID(), "unused.log").id;
     },
   };
 }
