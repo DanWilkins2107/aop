@@ -7,7 +7,7 @@ export const splitFinish = defineTool({
   name: "split_finish",
   writes: true,
   description:
-    "End the split begun with `split_start`. The node becomes `broken_down` and its children start. " +
+    "End the split begun with the `split_start` tool. The node becomes `broken_down` and its children start. " +
     "It needs at least one child, and the node's own blocks moved to the children they apply to. " +
     "This ends your turn: stop working once you've called it.",
   input: {

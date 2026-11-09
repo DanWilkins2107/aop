@@ -72,7 +72,7 @@ export function nodeContext(db: Db, nodeId: string, runId?: string): string {
     moves.push(...node.available_outcomes.map(({ outcome, target }) => `- the \`next\` tool with outcome \`${outcome}\` moves this node to ${target}`));
     moves.push("- `aop split start` then `aop split finish` holds new children until the split is done");
   } else {
-    moves.push(`This node is at ${node.stage}, where no agent command moves it.`);
+    moves.push(`This node is at ${node.stage}, where no agent tool moves it.`);
   }
   if (node.turn === "agent") {
     moves.push(

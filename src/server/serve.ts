@@ -14,6 +14,14 @@ import { MCP_PATH, startMcpServer } from "../mcp/server.js";
 import { DEFAULT_PORT, MCP_PORT, TEST_MCP_PORT_ENV } from "../shared/port.js";
 import { acquireServerLock, ServerAlreadyRunning, type ServerLock } from "./serverLock.js";
 
+/** The MCP server's fixed port is taken, most likely by another AOP with a different AOP_HOME. */
+class McpPortInUse extends Error {
+  constructor(port: number) {
+    super(`MCP port ${port} is in use. Is another AOP running?`);
+    this.name = "McpPortInUse";
+  }
+}
+
 /** Runs the server and its agents in the foreground until it's told to stop. */
 export async function runServer(argv: string[], usage: string): Promise<void> {
   let port: number;
@@ -53,9 +61,14 @@ export async function runServer(argv: string[], usage: string): Promise<void> {
     lock.setUrl(url);
     console.log(`AOP listening on ${url}`);
     // Before the agents, which reach AOP through it. Always the same port, so a sandbox can allow just that.
-    const mcp = await startMcpServer(db, Number(process.env[TEST_MCP_PORT_ENV] ?? MCP_PORT), { changes, orchestrator });
+    const mcpPort = Number(process.env[TEST_MCP_PORT_ENV] ?? MCP_PORT);
+    const mcp = await startMcpServer(db, mcpPort, { changes, orchestrator }).catch((error: unknown) => {
+      if ((error as { code?: string }).code === "EADDRINUSE") throw new McpPortInUse(mcpPort);
+      throw error;
+    });
     mcpServer = mcp;
     const mcpUrl = `http://${HOSTNAME}:${mcp.port}${MCP_PATH}`;
+    lock.setMcpUrl(mcpUrl);
     console.log(`AOP MCP listening on ${mcpUrl}`);
     console.log(`Config: ${configPath()}`);
     console.log(`Database: ${dbPath()}`);
@@ -88,8 +101,9 @@ export async function runServer(argv: string[], usage: string): Promise<void> {
     await Promise.all([api?.close(), mcpServer?.close()]).catch(() => undefined);
     db?.close();
     lock?.release();
-    // A bad config or a running server is the expected failure here: say so, without a stack trace.
-    console.error(error instanceof ConfigError || error instanceof ServerAlreadyRunning ? error.message : error);
+    // A bad config, a running server or a taken MCP port is the expected failure here: say so, without a stack trace.
+    const expected = error instanceof ConfigError || error instanceof ServerAlreadyRunning || error instanceof McpPortInUse;
+    console.error(expected ? error.message : error);
     process.exitCode = 1;
   }
 }

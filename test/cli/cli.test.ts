@@ -3,7 +3,8 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { EdgeRow, EventView, LinkRow, MessageRow } from "../../src/shared/api.js";
+import type { EdgeRow, EventView, LinkRow } from "../../src/shared/api.js";
+import { MCP_PORT } from "../../src/shared/port.js";
 import { directives, fakeCommand, settle, toolCall, until, world, type World } from "../server/agents.helpers.js";
 import { makeRepo } from "../server/helpers.js";
 import { aopInProcess } from "./cli.helpers.js";
@@ -137,7 +138,7 @@ describe("the agent commands", () => {
   });
 
   it("bad usage is a clear message and exit code 2, with no stack trace", async () => {
-    const bad = [["logs"], ["node", "create"], ["edge", "add", "subtask", "a", "b"], ["link", "x", "y"], ["nonsense"], ["logs", "x", "--bad"], ["search"], ["ps", "x"], ["reap", "--bad"]];
+    const bad = [["logs"], ["node", "create"], ["edge", "add", "subtask", "a", "b"], ["link", "x", "y"], ["nonsense"], ["logs", "x", "--bad"], ["search"], ["ps", "x"], ["reap", "--bad"], ["next"], ["ask"], ["fail"], ["message"]];
     for (const args of bad) {
       const res = await aop(args, { node: "n" });
       expect(res.code, args.join(" ")).toBe(2);
@@ -161,6 +162,8 @@ describe("the agent commands", () => {
     for (const line of ["aop logs <node> [--lines N]", "aop edge add blocks <from> <to>", "aop edge remove blocks <from> <to>", "aop ps"]) {
       expect(help).toContain(`\n  ${line}\n`);
     }
+    expect(help).toContain("Agent commands that remain while agents move to MCP");
+    expect(help).toContain(`Agents use AOP's MCP server at http://127.0.0.1:${MCP_PORT}/mcp.\n`);
   });
 
   it("says when the server can't be reached", async () => {

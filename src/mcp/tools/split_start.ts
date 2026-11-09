@@ -8,7 +8,7 @@ export const splitStart = defineTool({
   writes: true,
   description:
     "Begin splitting an AOP node into children, from an agent stage. Children you create afterwards are held, so they don't start, " +
-    "until you call `split_finish`. Your turn continues.",
+    "until you call the `split_finish` tool. Your turn continues.",
   input: {
     node_id: z.string().min(1).describe("The node to split. Your own node's ID is in your prompt."),
   },

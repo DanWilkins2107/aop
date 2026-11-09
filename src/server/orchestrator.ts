@@ -49,7 +49,7 @@ import {
   type StopReason,
 } from "./runs.js";
 
-/** How long an agent that reported `next`, `ask` or `split finish` gets to exit before it's stopped. */
+/** How long an agent that called the `next`, `ask` or `split_finish` tool gets to exit before it's stopped. */
 const DEFAULT_GRACE_MS = 15_000;
 const RECONCILE_INTERVAL_MS = 5_000;
 const REAP_INTERVAL_MS = 30_000;

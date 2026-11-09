@@ -6,7 +6,7 @@ import { ACTOR, defineTool } from "../tool.js";
 export const message = defineTool({
   name: "message",
   writes: true,
-  description: "Post a message on an AOP node, usually your own and sometimes another's. It shows in the node's messages in `context`.",
+  description: "Post a message on an AOP node, usually your own and sometimes another's. It shows in the node's messages in the `context` tool.",
   input: {
     node_id: z.string().min(1).describe("The node to post on. Your own node's ID is in your prompt."),
     body: z.string().min(1).describe("The message to post."),

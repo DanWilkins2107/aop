@@ -30,7 +30,7 @@ import {
   type WithdrawRequest,
 } from "../shared/api.js";
 import { API_PREFIX, apiPaths } from "../shared/paths.js";
-import { DEFAULT_PORT } from "../shared/port.js";
+import { DEFAULT_PORT, MCP_PORT } from "../shared/port.js";
 
 /** What a run of the CLI reads and writes, instead of the process's own. */
 export interface CliIo {
@@ -90,8 +90,9 @@ const listed = (commands: Record<string, Usage>) =>
 
 const USAGE = `aop: agent orchestration platform
 
-For agents, acting on AOP_NODE_ID:
+Agent commands that remain while agents move to MCP, acting on AOP_NODE_ID:
 ${listed(AGENT_COMMANDS)}
+Agents use AOP's MCP server at http://127.0.0.1:${MCP_PORT}/mcp.
 
 For humans:
 ${listed(HUMAN_COMMANDS)}

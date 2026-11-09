@@ -24,6 +24,18 @@ describe("the node_edit tool", () => {
     expect(events.find((e) => e.kind === "description_edited")).toMatchObject({ actor: "agent" });
   });
 
+  it("edits the title and body together, recording both", async () => {
+    const m = await mcpHarness();
+    const node = await m.create("dev", { title: "Old title", body: "Old body" });
+    const args = { node_id: node.id, run_id: await m.run(node.id), title: "New title", body: "New body" };
+    expect(await m.text("node_edit", args)).toBe(`Edited ${node.id}`);
+    const after = (await m.call<NodeView>("GET", `/api/nodes/${node.id}`)).body;
+    expect([after.title, after.body]).toEqual(["New title", "New body"]);
+    const events = (await m.call<EventView[]>("GET", `/api/nodes/${node.id}/events`)).body;
+    expect(events.find((e) => e.kind === "title_edited")).toMatchObject({ actor: "agent", data: { previous: "Old title" } });
+    expect(events.find((e) => e.kind === "description_edited")).toMatchObject({ actor: "agent" });
+  });
+
   it("refuses when given neither a title nor a body", async () => {
     const m = await mcpHarness();
     const node = await m.create("dev", { title: "Kept" });
