@@ -3,7 +3,7 @@ import type { EdgeRequest, EdgeRow } from "../../shared/api.js";
 import { apiPaths } from "../../shared/paths.js";
 import { ACTOR, defineTool } from "../tool.js";
 
-export const edge_add = defineTool({
+export const edgeAdd = defineTool({
   name: "edge_add",
   description: "Make one AOP node block another: `from` must finish before `to` starts.",
   input: {

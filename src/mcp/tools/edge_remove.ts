@@ -3,7 +3,7 @@ import type { ActorRequest, EdgeRow } from "../../shared/api.js";
 import { apiPaths } from "../../shared/paths.js";
 import { ACTOR, ApiFailure, defineTool } from "../tool.js";
 
-export const edge_remove = defineTool({
+export const edgeRemove = defineTool({
   name: "edge_remove",
   description: "Remove a block between two AOP nodes, so `to` no longer waits for `from`.",
   input: {

@@ -4,8 +4,8 @@
 import type { AopTool } from "../tool.js";
 import { ask } from "./ask.js";
 import { context } from "./context.js";
-import { edge_add } from "./edge_add.js";
-import { edge_remove } from "./edge_remove.js";
+import { edgeAdd } from "./edge_add.js";
+import { edgeRemove } from "./edge_remove.js";
 import { fail } from "./fail.js";
 import { link } from "./link.js";
 import { message } from "./message.js";
@@ -19,8 +19,8 @@ import { splitStart } from "./split_start.js";
 export const TOOLS: readonly AopTool[] = [
   ask,
   context,
-  edge_add,
-  edge_remove,
+  edgeAdd,
+  edgeRemove,
   fail,
   link,
   message,
