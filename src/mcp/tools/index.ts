@@ -14,9 +14,11 @@ import { next } from "./next.js";
 import { nodeCreate } from "./node_create.js";
 import { nodeEdit } from "./node_edit.js";
 import { proposals } from "./proposals.js";
+import { propose } from "./propose.js";
 import { search } from "./search.js";
 import { splitFinish } from "./split_finish.js";
 import { splitStart } from "./split_start.js";
+import { withdrawProposal } from "./withdraw_proposal.js";
 
 export const TOOLS: readonly AopTool[] = [
   apply,
@@ -31,7 +33,9 @@ export const TOOLS: readonly AopTool[] = [
   nodeCreate,
   nodeEdit,
   proposals,
+  propose,
   search,
   splitFinish,
   splitStart,
+  withdrawProposal,
 ];
