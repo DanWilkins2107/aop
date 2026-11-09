@@ -8,7 +8,7 @@ export const search = defineTool({
   description:
     "Search AOP nodes' titles, descriptions and messages. Searches your own node's project, or every project with " +
     "`all` (an improvement node, which belongs to no project, always searches every project). Each result gives the " +
-    "node's ID, stage and title, then the matching text with the matched words in [brackets]. Read a result with `context`.",
+    "node's ID, stage and title, then the matching text with the matched words in [brackets]. Read a result with the `context` tool.",
   input: {
     query: z.string().min(1).describe("The words to search for. A node matches if it has all of them."),
     node_id: z.string().min(1).describe("Your own node's ID, from your prompt. Its project is the one searched."),

@@ -1,9 +1,12 @@
 import { type ChildProcess, spawn } from "node:child_process";
+import { once } from "node:events";
 import { existsSync, mkdirSync, mkdtempSync } from "node:fs";
+import { type AddressInfo, createServer } from "node:net";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { aopHome } from "../../src/server/paths.js";
 import type { StagesView } from "../../src/shared/api.js";
+import { TEST_MCP_PORT_ENV } from "../../src/shared/port.js";
 import { makeHome } from "./helpers.js";
 
 const ROOT = resolve(import.meta.dirname, "../..");
@@ -75,6 +78,22 @@ describe("starting the server", () => {
     const { output, exited } = run("src/server/main.ts", ["some/repo"], { ...env, AOP_HOME: makeHome() });
     expect(await exited).toBe(2);
     expect(output()).toContain("Usage");
+  });
+
+  it("with the MCP port taken says so in one line, and exits", { timeout: 40_000 }, async () => {
+    const { env } = fakeUser();
+    // A port of the test's own, never MCP_PORT itself.
+    const taken = createServer().listen(0, "127.0.0.1");
+    await once(taken, "listening");
+    try {
+      const port = (taken.address() as AddressInfo).port;
+      const { output, exited } = run("src/server/main.ts", [], { ...env, AOP_HOME: makeHome(), [TEST_MCP_PORT_ENV]: String(port) });
+      expect(await exited).toBe(1);
+      expect(output()).toContain(`MCP port ${port} is in use. Is another AOP running?`);
+      expect(output()).not.toContain("    at ");
+    } finally {
+      taken.close();
+    }
   });
 
   it("with a valid config runs with no projects", { timeout: 40_000 }, async () => {

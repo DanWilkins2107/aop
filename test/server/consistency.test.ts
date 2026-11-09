@@ -15,18 +15,11 @@ import { isAlive, waitGone } from "../../src/server/osProcesses.js";
 import { addProject } from "../../src/server/projects.js";
 import { beginRun } from "../../src/server/runs.js";
 import type { NodeView } from "../../src/shared/api.js";
-import { aopInProcess } from "../cli/cli.helpers.js";
 import { resultText } from "../mcp/helpers.js";
 import { directives, fakeConfig, settle, toolCall, world, type World } from "./agents.helpers.js";
 import { harness, makeHome, makeRepo, STAGES_YAML } from "./helpers.js";
 
 const TIMEOUT = { timeout: 90_000 };
-
-/** The CLI in-process, with exactly this environment on top of the test's. */
-async function aop(args: string[], env: Record<string, string>): Promise<{ code: number | null; output: string }> {
-  const res = await aopInProcess(args, env);
-  return { code: res.code, output: res.stdout + res.stderr };
-}
 
 /** A tool call on the world's MCP server, as an agent makes it, with its result's text. */
 async function toolAs(w: World, name: string, args: Record<string, unknown>): Promise<{ isError: boolean; text: string }> {

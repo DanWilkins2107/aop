@@ -104,7 +104,7 @@ const CLOSE_TIMEOUT_MS = 60_000;
 
 /**
  * A real server and orchestrator on a free port, in a throwaway AOP_HOME, launching fake agents that
- * use the real CLI. Only ever launches `fakeCommand`, or `fakeClaudeCommand` with `claude`. Call it inside
+ * call AOP's MCP tools (and, while some remain, the CLI). Only ever launches `fakeCommand`, or `fakeClaudeCommand` with `claude`. Call it inside
  * a test or `beforeEach`: it closes itself when the test finishes, pass or fail, and puts the environment
  * back even if it fails to start.
  */

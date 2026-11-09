@@ -12,7 +12,7 @@ describe("the fail tool", () => {
     const messages = (await m.call<{ author: string; body: string; stage: string }[]>("GET", `/api/nodes/${node.id}/messages`)).body;
     expect(messages.map((msg) => [msg.author, msg.body, msg.stage])).toEqual([["agent", "The repo is gone", "failed"]]);
     const events = (await m.call<EventView[]>("GET", `/api/nodes/${node.id}/events`)).body;
-    expect(events.find((e) => e.kind === "stage_changed")).toMatchObject({ actor: "agent", data: { via: "fail" } });
+    expect(events.find((e) => e.kind === "stage_changed")).toMatchObject({ actor: "agent", data: { via: "fail", reason: "The repo is gone" } });
   });
 
   it("fails with the API's message from a human stage", async () => {

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import Database from "better-sqlite3";
 import { aopHome } from "./paths.js";
 import { isAlive } from "./osProcesses.js";
+import { MCP_PORT } from "../shared/port.js";
 
 /**
  * One server per AOP_HOME. A second one would treat the first's agents as leftovers from a crash and
@@ -26,12 +27,15 @@ export class ServerAlreadyRunning extends Error {
 interface Holder {
   pid: number;
   url: string | null;
+  mcp_url: string | null;
   started_at: string;
 }
 
 export interface ServerLock {
-  /** Records where this server is listening, for a refusal to name. */
+  /** Records where this server's API is listening, for a refusal to name. */
   setUrl(url: string): void;
+  /** Records where this server's MCP server is listening, for a refusal to name. */
+  setMcpUrl(url: string): void;
   /** Ends this server's hold. Also happens by itself when the process ends. */
   release(): void;
 }
@@ -50,13 +54,17 @@ export function acquireServerLock(home: string = aopHome()): ServerLock {
     throw error;
   }
 
-  const holder: Holder = { pid: process.pid, url: null, started_at: new Date().toISOString() };
+  const holder: Holder = { pid: process.pid, url: null, mcp_url: null, started_at: new Date().toISOString() };
   const writeHolder = () => writeFileSync(holderPath, `${JSON.stringify(holder)}\n`);
   writeHolder();
   let held = true;
   return {
     setUrl(url) {
       holder.url = url;
+      if (held) writeHolder();
+    },
+    setMcpUrl(url) {
+      holder.mcp_url = url;
       if (held) writeHolder();
     },
     release() {
@@ -72,7 +80,12 @@ function readHolder(path: string): Holder | null {
   try {
     const parsed = JSON.parse(readFileSync(path, "utf8")) as Partial<Holder>;
     return typeof parsed.pid === "number" && typeof parsed.started_at === "string"
-      ? { pid: parsed.pid, url: typeof parsed.url === "string" ? parsed.url : null, started_at: parsed.started_at }
+      ? {
+          pid: parsed.pid,
+          url: typeof parsed.url === "string" ? parsed.url : null,
+          mcp_url: typeof parsed.mcp_url === "string" ? parsed.mcp_url : null,
+          started_at: parsed.started_at,
+        }
       : null;
   } catch {
     return null;
@@ -84,10 +97,12 @@ function refusal(home: string, holderPath: string): string {
   // The file is only a description, and may be from an earlier server, or not written yet.
   const who =
     holder && isAlive(holder.pid)
-      ? `process ${holder.pid}${holder.url ? ` at ${holder.url}` : ", still starting up"}, started ${holder.started_at}`
+      ? `process ${holder.pid}${holder.url ? ` at ${holder.url}` : ", still starting up"}` +
+        `${holder.mcp_url ? `, MCP at ${holder.mcp_url}` : ""}, started ${holder.started_at}`
       : "a server whose details aren't available yet";
   return (
     `Another AOP server is already running with AOP_HOME ${home}: ${who}.\n` +
-    "Stop that one first, or set AOP_HOME to a different folder to run a separate AOP."
+    "Stop that one first, or set AOP_HOME to a different folder to run a separate AOP. " +
+    `A separate AOP would also need MCP port ${MCP_PORT}, so two can't run at once on one machine.`
   );
 }

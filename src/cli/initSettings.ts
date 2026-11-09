@@ -2,6 +2,7 @@ import { existsSync, statSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { isFromUserHome, resolveConfigPath } from "../server/paths.js";
 import { loadStagesFile } from "../server/stages.js";
+import { MCP_PORT } from "../shared/port.js";
 
 /** `aop init` stopped, with a message for the user. */
 export class InitFailure extends Error {}
@@ -9,7 +10,7 @@ export class InitFailure extends Error {}
 /** What each setting is for, both when asking for it and in the written config. */
 export const ABOUT = {
   agent_session_command:
-    "This is the session your agents are starting in. Strongly consider having this command start sessions inside a sandbox.",
+    `This is the session your agents are starting in. Strongly consider having this command start sessions inside a sandbox. The sandbox must allow 127.0.0.1:${MCP_PORT}, AOP's MCP server.`,
   out_of_sandbox_command:
     "Sometimes you may need to run and supervise a session that runs outside of a sandbox (using `aop steer --no-sandbox`). Not needed if you're not running sessions sandboxed.",
   open_from: "Where sessions start for projects with no path.",

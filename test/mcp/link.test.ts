@@ -14,6 +14,24 @@ describe("the link tool", () => {
     expect(events.find((e) => e.kind === "link_added")).toMatchObject({ actor: "agent", data: { kind: "pr", url } });
   });
 
+  it("attaches a ticket link", async () => {
+    const m = await mcpHarness();
+    const node = await m.create("dev");
+    const url = "https://example.com/tickets/42";
+    expect(await m.text("link", { node_id: node.id, run_id: await m.run(node.id), kind: "ticket", url })).toBe(`Linked ticket ${url}`);
+    const links = (await m.call<LinkRow[]>("GET", `/api/nodes/${node.id}/links`)).body;
+    expect(links.map((l) => [l.kind, l.url])).toEqual([["ticket", url]]);
+  });
+
+  it("refuses a kind that isn't pr or ticket", async () => {
+    const m = await mcpHarness();
+    const node = await m.create("dev");
+    const result = await m.tool("link", { node_id: node.id, run_id: await m.run(node.id), kind: "doc", url: "https://example.com/1" });
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toMatch(/kind/);
+    expect((await m.call<LinkRow[]>("GET", `/api/nodes/${node.id}/links`)).body).toEqual([]);
+  });
+
   it("fails with the API's message for a URL that isn't http(s)", async () => {
     const m = await mcpHarness();
     const node = await m.create("dev");

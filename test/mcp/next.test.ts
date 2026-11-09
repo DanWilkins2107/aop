@@ -23,6 +23,16 @@ describe("the next tool", () => {
     expect((await m.node(node.id)).stage).toBe("write_spec");
   });
 
+  it("fails with the API's message on a human stage", async () => {
+    const m = await mcpHarness();
+    const node = await m.create("dev");
+    await m.post(node.id, "next", { outcome: "done" });
+    const result = await m.tool("next", { node_id: node.id, run_id: await m.run(node.id), outcome: "approve" });
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toMatch(/Stage "spec_review" is a human turn, so an agent can't report its outcome/);
+    expect((await m.node(node.id)).stage).toBe("spec_review");
+  });
+
   it("fails for an unknown node", async () => {
     const m = await mcpHarness();
     const result = await m.tool("next", { node_id: "no-such-node", run_id: await m.run(), outcome: "done" });

@@ -451,7 +451,8 @@ describe("a real server process", () => {
       await second.exited;
       expect(second.child.exitCode).toBe(1);
       expect(second.output()).toContain("Another AOP server is already running");
-      expect(second.output()).toContain(`process ${first.child.pid} at ${url}`);
+      expect(second.output()).toContain(`process ${first.child.pid} at ${url}, MCP at http://127.0.0.1:`);
+      expect(second.output()).toContain("so two can't run at once on one machine");
       expect(second.output()).not.toMatch(/AOP listening/);
 
       expect(isAlive(pid)).toBe(true);

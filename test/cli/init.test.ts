@@ -102,7 +102,7 @@ describe("aop init with flags", () => {
 
     const text = readFileSync(join(box.home, "config.yaml"), "utf8");
     expect(text.replace(/\r?\n# /g, " ")).toContain(
-      "Required. AOP appends `-p` and sends the prompt on stdin. This is the session your agents are starting in. Strongly consider having this command start sessions inside a sandbox.",
+      "Required. AOP appends `-p` and sends the prompt on stdin. This is the session your agents are starting in. Strongly consider having this command start sessions inside a sandbox. The sandbox must allow 127.0.0.1:4319, AOP's MCP server.",
     );
     expect(result.out).toContain("The config is valid.");
     expect(result.out).not.toContain("plugin");
@@ -337,7 +337,7 @@ describe("asking", () => {
     expect(result.err).toBe("");
     expect(result.code).toBe(0);
     for (const prompt of [
-      "Agent session command (required). This is the session your agents are starting in. Strongly consider having this command start sessions inside a sandbox.",
+      "Agent session command (required). This is the session your agents are starting in. Strongly consider having this command start sessions inside a sandbox. The sandbox must allow 127.0.0.1:4319, AOP's MCP server.",
       "Agents run headless, so they can't ask you to approve anything. Use Claude Code's auto mode, or an equivalent.",
       "Command [claude --permission-mode auto]: ",
       "Command, or blank to skip (e.g. claude): ",
