@@ -5,6 +5,7 @@ import { ACTOR, defineTool } from "../tool.js";
 
 export const next = defineTool({
   name: "next",
+  writes: true,
   description:
     "Finish an AOP node's current stage with one outcome, one of those listed under \"Moving on\" in `context`. " +
     "This ends your turn: stop working once you've called it.",

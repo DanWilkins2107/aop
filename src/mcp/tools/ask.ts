@@ -5,6 +5,7 @@ import { defineTool } from "../tool.js";
 
 export const ask = defineTool({
   name: "ask",
+  writes: true,
   description:
     "Ask a human a question about an AOP node. The node waits for the answer, then its current stage restarts with the answer in its messages. " +
     "This ends your turn: stop working once you've called it.",

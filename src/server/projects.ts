@@ -120,7 +120,7 @@ export function deleteProject(db: Db, id: string): ProjectRow {
     db.prepare(
       `UPDATE improvements SET source_node_id = NULL, source_message_id = NULL WHERE source_node_id IN ${projectNodes}`,
     ).run({ id });
-    for (const table of ["links", "messages", "events", "runs"]) {
+    for (const table of ["links", "messages", "events", "runs", "steer_sessions"]) {
       db.prepare(`DELETE FROM ${table} WHERE node_id IN ${projectNodes}`).run({ id });
     }
     db.prepare(`DELETE FROM edges WHERE source_id IN ${projectNodes} OR target_id IN ${projectNodes}`).run({ id });

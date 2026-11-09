@@ -36,7 +36,7 @@ describe("the apply tool", () => {
   it("writes the proposals to the real files at save_locally", async () => {
     const m = await mcpHarness(IMPROVEMENTS);
     const node = await improvement(m, "save_locally");
-    expect(await m.text("apply", { node_id: node.id })).toBe(`Wrote ${skill()}`);
+    expect(await m.text("apply", { node_id: node.id, run_id: await m.run(node.id) })).toBe(`Wrote ${skill()}`);
     expect(readFileSync(skill(), "utf8")).toBe("New.\n");
   });
 
@@ -47,7 +47,7 @@ describe("the apply tool", () => {
     mkdirSync(join(worktree, ".git"));
     const node = await improvement(m, "raise_pr");
     const written = join(worktree, "write-tests", "SKILL.md");
-    expect(await m.text("apply", { node_id: node.id, into: worktree })).toBe(`Wrote ${written}`);
+    expect(await m.text("apply", { node_id: node.id, run_id: await m.run(node.id), into: worktree })).toBe(`Wrote ${written}`);
     expect(readFileSync(written, "utf8")).toBe("New.\n");
     expect(readFileSync(skill(), "utf8")).toBe("Old skill.\n");
   });
@@ -56,7 +56,7 @@ describe("the apply tool", () => {
     const m = await mcpHarness(IMPROVEMENTS);
     mkdirSync(join(skills(), ".git"));
     const node = await improvement(m, "raise_pr");
-    const result = await m.tool("apply", { node_id: node.id, into: "worktree" });
+    const result = await m.tool("apply", { node_id: node.id, run_id: await m.run(node.id), into: "worktree" });
     expect(result.isError).toBe(true);
     expect(resultText(result)).toMatch(/full path/);
   });
@@ -64,19 +64,19 @@ describe("the apply tool", () => {
   it("fails with the API's message before save_locally, writing nothing", async () => {
     const m = await mcpHarness(IMPROVEMENTS);
     const node = await improvement(m);
-    const result = await m.tool("apply", { node_id: node.id });
+    const result = await m.tool("apply", { node_id: node.id, run_id: await m.run(node.id) });
     expect(result.isError).toBe(true);
     expect(resultText(result)).toMatch(/only at save_locally, and this improvement is at draft_change/);
     expect(readFileSync(skill(), "utf8")).toBe("Old skill.\n");
   });
 
-  it("is listed with node_id required and into optional", async () => {
+  it("is listed with node_id and run_id required and into optional", async () => {
     const m = await mcpHarness();
     const tool = (await m.tools()).find((t) => t.name === "apply");
     expect(tool?.description).toMatch(/save_locally/);
     expect(tool?.description).toMatch(/raise_pr/);
-    expect(Object.keys(tool?.inputSchema.properties ?? {}).sort()).toEqual(["into", "node_id"]);
-    expect([...(tool?.inputSchema.required ?? [])].sort()).toEqual(["node_id"]);
+    expect(Object.keys(tool?.inputSchema.properties ?? {}).sort()).toEqual(["into", "node_id", "run_id"]);
+    expect([...(tool?.inputSchema.required ?? [])].sort()).toEqual(["node_id", "run_id"]);
     expect(tool?.annotations).toBeUndefined();
   });
 });

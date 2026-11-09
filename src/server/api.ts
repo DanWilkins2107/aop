@@ -40,6 +40,7 @@ import {
 import { API_PREFIX, apiPaths, routes } from "../shared/paths.js";
 import { readableLines } from "./agentOutput.js";
 import { ChangeFeed, EVERYTHING, nodesNotice, type ChangeNotice } from "./changes.js";
+import { openSteerSessionNode } from "./claims.js";
 import type { Db } from "./db.js";
 import { nodeContext } from "./context.js";
 import { ApiError, badRequest, ConfigError, notFound, refused } from "./errors.js";
@@ -89,7 +90,7 @@ async function readBody<S extends z.ZodType>(c: Context, schema: S, emptyAllowed
   return parsed.data;
 }
 
-/** The agent run a request says it comes from. See `RUN_ID_HEADER`. */
+/** The agent run, or steered session, a request says it comes from. See `RUN_ID_HEADER`. */
 function runIdOf(c: Context): string | undefined {
   const value = c.req.header(RUN_ID_HEADER)?.trim();
   return value === undefined || value === "" ? undefined : value;
@@ -173,10 +174,16 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
 
   // Every write comes through here, and refused ones change nothing.
   app.use(`${API_PREFIX}/*`, async (c, proceed) => {
-    // A process left over from an ended run still has its CLI, and must not act on the board. Stage
-    // changes check the run against the node as well, inside their transaction: see `stageMachine.ts`.
+    // A process left over from an ended run can still call the tools, and must not act on the board.
+    // The run ID is a running run's, or an open steered session's, whose claim still holds. Stage
+    // changes check it against the node as well, inside their transaction: see `stageMachine.ts`.
     const runId = runIdOf(c);
-    if (runId !== undefined && !["GET", "HEAD"].includes(c.req.method) && getRun(db, runId)?.status !== "running") {
+    if (
+      runId !== undefined &&
+      !["GET", "HEAD"].includes(c.req.method) &&
+      getRun(db, runId)?.status !== "running" &&
+      openSteerSessionNode(db, runId) === undefined
+    ) {
       throw refused(`Agent run ${runId} has ended, so it can't change anything. It should exit`);
     }
     await proceed();

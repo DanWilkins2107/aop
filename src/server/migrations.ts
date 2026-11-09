@@ -398,6 +398,35 @@ CREATE TRIGGER nodes_fts_delete AFTER DELETE ON nodes
 BEGIN DELETE FROM nodes_fts WHERE rowid = OLD.rowid; END;
 `,
   },
+  {
+    // A steered session's ID, which its tools send as their run ID. It's open only while the human's
+    // claim on its node holds: the triggers refuse one without that claim, and end it with the claim.
+    sql: `
+CREATE TABLE steer_sessions (
+  id         TEXT PRIMARY KEY NOT NULL
+    CONSTRAINT steer_sessions_id_not_blank CHECK (length(id) > 0),
+  created_at TEXT NOT NULL,
+  node_id    TEXT NOT NULL REFERENCES nodes(id) ON DELETE RESTRICT,
+  ended_at   TEXT
+) STRICT;
+CREATE UNIQUE INDEX steer_sessions_one_open_per_node ON steer_sessions(node_id) WHERE ended_at IS NULL;
+
+CREATE TRIGGER steer_sessions_need_human_claim BEFORE INSERT ON steer_sessions
+WHEN NEW.ended_at IS NULL AND (SELECT claimed_by FROM nodes WHERE id = NEW.node_id) IS NOT 'human'
+BEGIN SELECT RAISE(ABORT, 'a steered session needs the human''s claim on its node'); END;
+
+CREATE TRIGGER steer_sessions_reopen_never BEFORE UPDATE OF ended_at ON steer_sessions
+WHEN OLD.ended_at IS NOT NULL
+BEGIN SELECT RAISE(ABORT, 'a steered session never reopens'); END;
+
+CREATE TRIGGER steer_sessions_end_with_claim AFTER UPDATE OF claimed_by ON nodes
+WHEN NEW.claimed_by IS NOT 'human'
+BEGIN
+  UPDATE steer_sessions SET ended_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    WHERE node_id = NEW.id AND ended_at IS NULL;
+END;
+`,
+  },
 ];
 
 export interface Migration extends Step {

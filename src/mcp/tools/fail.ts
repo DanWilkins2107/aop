@@ -5,6 +5,7 @@ import { ACTOR, defineTool } from "../tool.js";
 
 export const fail = defineTool({
   name: "fail",
+  writes: true,
   description:
     "Mark an AOP node failed, with the reason in its messages for the human who picks it up. " +
     "Use it only when the work can't be done and asking a human won't help. " +

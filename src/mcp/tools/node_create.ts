@@ -3,7 +3,7 @@ import type { CreateNodeRequest, NodeView, ProjectRow } from "../../shared/api.j
 import { apiPaths } from "../../shared/paths.js";
 import { ACTOR, ApiFailure, defineTool, type ToolApi } from "../tool.js";
 
-/** A project named by ID or name, as `aop node create --project` takes it. */
+/** A project named by ID or name. */
 async function resolveProject(api: ToolApi, reference: string): Promise<string> {
   const projects = await api.json<ProjectRow[]>("GET", apiPaths.projects);
   const matches = projects.filter((p) => p.id === reference || p.name === reference);
@@ -15,6 +15,7 @@ async function resolveProject(api: ToolApi, reference: string): Promise<string> 
 
 export const nodeCreate = defineTool({
   name: "node_create",
+  writes: true,
   description:
     "Create an AOP node. It goes in the named project, or else the parent's, or else your own node's. " +
     "`type` starts it at that type's first stage; `stage` starts it exactly there. With both, `type` says which type's `stage` is meant. " +

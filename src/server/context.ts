@@ -53,10 +53,11 @@ function section(title: string, body: string[]): string[] {
 }
 
 /**
- * What `aop context` prints: where a node sits in the tree and what's known about it. The prompt of
- * every launched agent includes the same text, so this is the one place that writes it.
+ * What the `context` tool gives: where a node sits in the tree and what's known about it. The prompt
+ * of every launched agent includes the same text, with its run ID, so this is the one place that
+ * writes it.
  */
-export function nodeContext(db: Db, nodeId: string): string {
+export function nodeContext(db: Db, nodeId: string, runId?: string): string {
   const node = getNode(db, nodeId);
   const where = node.kind === "improvement" ? "none. This is an improvement to how agents work" : getProject(db, node.project_id).name;
 
@@ -86,6 +87,7 @@ export function nodeContext(db: Db, nodeId: string): string {
     `# ${node.title}`,
     "",
     `Node: ${node.id}`,
+    ...(runId !== undefined ? [`Run: ${runId} (your run ID, which every write tool takes as \`run_id\`)`] : []),
     `Project: ${where}`,
     `Type: ${node.type}`,
     `Stage: ${node.stage}`,
@@ -154,9 +156,9 @@ function improvementSections(db: Db, nodeId: string): string[] {
 }
 
 /** Everything a launched agent gets on stdin. Throws if the stage's prompt can't be read. */
-export function buildPrompt(db: Db, config: AopConfig, node: NodeRow): string {
+export function buildPrompt(db: Db, config: AopConfig, node: NodeRow, runId: string): string {
   const stage = promptStage(node);
   const promptFile = graphFor(graphsOf(config), node).stages.get(stage)?.prompt;
   if (promptFile === undefined) throw new Error(`Stage "${stage}" has no prompt in its process file`);
-  return [LOAD_SKILLS, nodeContext(db, node.id), readFileSync(promptFile, "utf8").trimEnd()].join("\n\n") + "\n";
+  return [LOAD_SKILLS, nodeContext(db, node.id, runId), readFileSync(promptFile, "utf8").trimEnd()].join("\n\n") + "\n";
 }

@@ -293,7 +293,7 @@ describe("the human commands", () => {
   describe("steer", () => {
     /** Writes what the session was given, and exits. Stands in for the interactive tool, and never is one. */
     const session = (name: string, code = 0) =>
-      `${JSON.stringify(process.execPath)} -e "require('node:fs').writeFileSync(process.argv[1], JSON.stringify({cwd: process.cwd(), node: process.env.AOP_NODE_ID, url: process.env.AOP_URL, args: process.argv.slice(2)})); process.exit(${code})" "${w.file(name)}"`;
+      `${JSON.stringify(process.execPath)} -e "require('node:fs').writeFileSync(process.argv[1], JSON.stringify({cwd: process.cwd(), node: process.env.AOP_NODE_ID, url: process.env.AOP_URL, run: process.env.AOP_RUN_ID, args: process.argv.slice(2)})); process.exit(${code})" "${w.file(name)}"`;
 
     const useCommands = (agent: string, out?: string) =>
       writeFileSync(
@@ -307,15 +307,20 @@ describe("the human commands", () => {
       const res = await aop(["steer", node.id]);
       expect(res.code).toBe(0);
       expect(w.node(node.id).claimed_by).toBe("human");
-      const seen = JSON.parse(readFileSync(w.file("in.json"), "utf8")) as { cwd: string; node: string; url: string; args: string[] };
+      const seen = JSON.parse(readFileSync(w.file("in.json"), "utf8")) as { cwd: string; node: string; url: string; run: string; args: string[] };
       expect(seen.cwd.toLowerCase()).toBe(w.repo.toLowerCase());
       expect(seen.node).toBe(node.id);
       expect(seen.url).toBe(w.url);
       expect(seen.args).toEqual([]);
+      // The session's own run ID, tied to the claim, printed for the human to pass on.
+      const steerRow = w.db.prepare("SELECT id FROM steer_sessions WHERE node_id = ? AND ended_at IS NULL").get(node.id) as { id: string };
+      expect(seen.run).toBe(steerRow.id);
+      expect(res.stdout).toContain(steerRow.id);
 
-      // Reopening a session you hold is fine, and the claim survives its end.
+      // Reopening a session you hold is fine, keeps its run ID, and the claim survives its end.
       expect((await aop(["steer", node.id])).code).toBe(0);
       expect(w.node(node.id).claimed_by).toBe("human");
+      expect((JSON.parse(readFileSync(w.file("in.json"), "utf8")) as { run: string }).run).toBe(steerRow.id);
     });
 
     it("--no-sandbox runs out_of_sandbox_command, and errors clearly if it isn't set", async () => {

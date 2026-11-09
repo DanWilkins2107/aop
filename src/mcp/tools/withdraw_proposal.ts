@@ -6,6 +6,7 @@ import { absolutePath } from "./propose.js";
 
 export const withdrawProposal = defineTool({
   name: "withdraw_proposal",
+  writes: true,
   description: "Drop a file's proposal from an AOP improvement node, for a file that no longer belongs in the change.",
   input: {
     node_id: z.string().min(1).describe("The improvement node. Your own node's ID is in your prompt."),

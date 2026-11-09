@@ -43,8 +43,8 @@ export function fakeConfig(extra = "", command = fakeCommand): string {
 
 export const directives = (...lines: string[]) => lines.map((line) => `@@${line}`).join("\n");
 
-/** A `@@tool` directive's text: an MCP tool call on the agent's own node, such as `toolCall("next", { outcome: "fixed" })`. */
-export const toolCall = (name: string, args: Record<string, unknown> = {}) => `tool ${name} ${JSON.stringify({ node_id: "$NODE", ...args })}`;
+/** A `@@tool` directive's text: an MCP tool call on the agent's own node, from its own run, such as `toolCall("next", { outcome: "fixed" })`. */
+export const toolCall = (name: string, args: Record<string, unknown> = {}) => `tool ${name} ${JSON.stringify({ node_id: "$NODE", run_id: "$RUN", ...args })}`;
 
 /**
  * Gives the system time to do something it mustn't, before checking that it didn't. Only for that: wait

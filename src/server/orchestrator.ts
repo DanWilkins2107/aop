@@ -236,7 +236,7 @@ export class Orchestrator {
       const cwd = nodeStartPath(this.db, node, config);
       appendToLog(run.log_path, `[aop] run ${id} on node ${node.id}, stage ${node.stage}, at ${run.created_at}\n[aop] ${command}\n[aop] in ${cwd}\n`);
       if (!isFolder(cwd)) throw new Error(`The start folder doesn't exist: ${cwd}`);
-      prompt = buildPrompt(this.db, config, node);
+      prompt = buildPrompt(this.db, config, node, id);
       // The command is the user's own string, so it may need a shell. Nothing from a node goes in
       // it: the node's ID goes in the environment and everything else goes in on stdin.
       child = spawn(command, {

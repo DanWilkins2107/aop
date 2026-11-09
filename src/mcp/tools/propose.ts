@@ -12,6 +12,7 @@ export function absolutePath(path: string): string {
 
 export const propose = defineTool({
   name: "propose",
+  writes: true,
   description:
     "Store a file's proposed new contents on an AOP improvement node: a skill, or a stage prompt. " +
     "The real file is unchanged: a human reviews the diff, and a later stage applies it. " +

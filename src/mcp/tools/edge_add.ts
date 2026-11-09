@@ -5,6 +5,7 @@ import { ACTOR, defineTool } from "../tool.js";
 
 export const edgeAdd = defineTool({
   name: "edge_add",
+  writes: true,
   description: "Make one AOP node block another: `from` must finish before `to` starts.",
   input: {
     from: z.string().min(1).describe("The blocking node's ID, which must finish first."),

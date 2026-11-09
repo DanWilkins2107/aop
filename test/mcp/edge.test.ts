@@ -9,7 +9,7 @@ describe("the edge_add tool", () => {
     const m = await mcpHarness();
     const a = await m.create("dev");
     const b = await m.create("dev");
-    expect(await m.text("edge_add", { from: a.id, to: b.id })).toBe(`${a.id} now blocks ${b.id}`);
+    expect(await m.text("edge_add", { run_id: await m.run(), from: a.id, to: b.id })).toBe(`${a.id} now blocks ${b.id}`);
     expect((await activeEdges(m, a.id)).map((e) => [e.kind, e.source_id, e.target_id])).toEqual([["blocks", a.id, b.id]]);
     const events = (await m.call<EventView[]>("GET", `/api/nodes/${a.id}/events`)).body;
     expect(events.find((e) => e.kind === "edge_added")).toMatchObject({ actor: "agent", data: { kind: "blocks", target_id: b.id } });
@@ -19,8 +19,8 @@ describe("the edge_add tool", () => {
     const m = await mcpHarness();
     const a = await m.create("dev");
     const b = await m.create("dev");
-    await m.text("edge_add", { from: a.id, to: b.id });
-    const result = await m.tool("edge_add", { from: b.id, to: a.id });
+    await m.text("edge_add", { run_id: await m.run(), from: a.id, to: b.id });
+    const result = await m.tool("edge_add", { run_id: await m.run(), from: b.id, to: a.id });
     expect(result.isError).toBe(true);
     expect(resultText(result)).toMatch(/would create a blocks cycle/);
     expect(await activeEdges(m, a.id)).toHaveLength(1);
@@ -29,7 +29,7 @@ describe("the edge_add tool", () => {
   it("fails for a node blocking itself", async () => {
     const m = await mcpHarness();
     const a = await m.create("dev");
-    const result = await m.tool("edge_add", { from: a.id, to: a.id });
+    const result = await m.tool("edge_add", { run_id: await m.run(), from: a.id, to: a.id });
     expect(result.isError).toBe(true);
     expect(await activeEdges(m, a.id)).toEqual([]);
   });
@@ -37,7 +37,7 @@ describe("the edge_add tool", () => {
   it("fails for an unknown node", async () => {
     const m = await mcpHarness();
     const a = await m.create("dev");
-    const result = await m.tool("edge_add", { from: a.id, to: "no-such-node" });
+    const result = await m.tool("edge_add", { run_id: await m.run(), from: a.id, to: "no-such-node" });
     expect(result.isError).toBe(true);
     expect(resultText(result)).toMatch(/no-such-node/);
   });
@@ -48,8 +48,8 @@ describe("the edge_remove tool", () => {
     const m = await mcpHarness();
     const a = await m.create("dev");
     const b = await m.create("dev");
-    await m.text("edge_add", { from: a.id, to: b.id });
-    expect(await m.text("edge_remove", { from: a.id, to: b.id })).toBe(`${a.id} no longer blocks ${b.id}`);
+    await m.text("edge_add", { run_id: await m.run(), from: a.id, to: b.id });
+    expect(await m.text("edge_remove", { run_id: await m.run(), from: a.id, to: b.id })).toBe(`${a.id} no longer blocks ${b.id}`);
     expect(await activeEdges(m, a.id)).toEqual([]);
     const events = (await m.call<EventView[]>("GET", `/api/nodes/${a.id}/events`)).body;
     expect(events.find((e) => e.kind === "edge_removed")).toMatchObject({ actor: "agent", data: { kind: "blocks", target_id: b.id } });
@@ -59,8 +59,8 @@ describe("the edge_remove tool", () => {
     const m = await mcpHarness();
     const a = await m.create("dev");
     const b = await m.create("dev");
-    await m.text("edge_add", { from: b.id, to: a.id });
-    const result = await m.tool("edge_remove", { from: a.id, to: b.id });
+    await m.text("edge_add", { run_id: await m.run(), from: b.id, to: a.id });
+    const result = await m.tool("edge_remove", { run_id: await m.run(), from: a.id, to: b.id });
     expect(result.isError).toBe(true);
     expect(resultText(result)).toBe(`${a.id} doesn't block ${b.id}`);
     expect(await activeEdges(m, a.id)).toHaveLength(1);
@@ -68,7 +68,7 @@ describe("the edge_remove tool", () => {
 });
 
 describe("the edge tools", () => {
-  it("are listed, each with from and to required", async () => {
+  it("are listed, each with run_id, from and to required", async () => {
     const m = await mcpHarness();
     const tools = await m.tools();
     const add = tools.find((t) => t.name === "edge_add");
@@ -76,8 +76,8 @@ describe("the edge tools", () => {
     expect(add?.description).toMatch(/`from` must finish before `to` starts/);
     expect(remove?.description).toMatch(/Remove a block/);
     for (const tool of [add, remove]) {
-      expect([...(tool?.inputSchema.required ?? [])].sort()).toEqual(["from", "to"]);
-      expect(Object.keys(tool?.inputSchema.properties ?? {}).sort()).toEqual(["from", "to"]);
+      expect([...(tool?.inputSchema.required ?? [])].sort()).toEqual(["from", "run_id", "to"]);
+      expect(Object.keys(tool?.inputSchema.properties ?? {}).sort()).toEqual(["from", "run_id", "to"]);
       expect(tool?.annotations).toBeUndefined();
     }
   });

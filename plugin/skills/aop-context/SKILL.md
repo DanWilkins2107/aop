@@ -31,7 +31,7 @@ Commands act on your own node (`AOP_NODE_ID`) unless they take an ID. You can on
 | `aop split finish` | End the split. Your node becomes `broken_down` and the children start |
 
 ### MCP tools
-These come from AOP's MCP server. Each takes your node's ID as `node_id`: the `Node:` line of `aop context`.
+These come from AOP's MCP server. Each takes your node's ID as `node_id`: the `Node:` line of `aop context`. Write tools also take your run ID as `run_id`: the `Run:` line of your prompt, or `AOP_RUN_ID` in a session `aop steer` opened. A write with an ended run's ID is refused.
 
 | Tool | Use |
 |---|---|

@@ -2,6 +2,7 @@
 // a human or agent takes on a node is a function here: create, edit, next, move, ask, answer, fail,
 // retry, invalidate, restore, block, unblock and split.
 
+import { openSteerSessionNode } from "./claims.js";
 import type { Db } from "./db.js";
 import { badRequest, refused } from "./errors.js";
 import type { EventDataByKind, NodeKind, NodeRow, NodeView, StageChangeVia } from "../shared/api.js";
@@ -159,16 +160,22 @@ function applyStageChange(db: Db, node: NodeRow, change: StageChange): void {
  * An agent gets one outcome. Without this, one that reported and is still exiting could move the
  * node on again from its next stage.
  *
- * `runId` is the run the caller says it belongs to (the CLI sends its `AOP_RUN_ID`). When given, it
- * must be the run on this node now. That is what stops a process left over from an earlier run, which
- * can outlive its run while the clear-up after exit is still finding it, from moving the next run's
- * stage. A caller with no run ID, such as a steered session, gets only the check above.
+ * `runId` is the run ID the caller sent in `RUN_ID_HEADER`, as every MCP write tool does with its
+ * `run_id`. When given, it must be the run on this node now. That is what stops a process left over
+ * from an earlier run, which can outlive its run while the clear-up after exit is still finding it,
+ * from moving the next run's stage. A steered session sends its own ID instead, which moves only its
+ * own node and only while the human's claim holds. It is never the agent run itself, so like a
+ * caller with no run ID it gets only the check above.
  */
 function assertRunStillOnNode(db: Db, nodeId: string, runId?: string): void {
+  const steeredNode = runId === undefined ? undefined : openSteerSessionNode(db, runId);
+  if (steeredNode !== undefined && steeredNode !== nodeId) {
+    throw refused(`Steered session ${runId} is on node ${steeredNode}, so it can't move node ${nodeId}`);
+  }
   const run = db.prepare("SELECT id, left_via FROM runs WHERE node_id = ? AND status = 'running'").get(nodeId) as
     | { id: string; left_via: string | null }
     | undefined;
-  if (runId !== undefined && run?.id !== runId) {
+  if (runId !== undefined && steeredNode === undefined && run?.id !== runId) {
     throw refused(`Agent run ${runId} isn't the run on node ${nodeId}, so it can't move it`);
   }
   if (run?.left_via != null) {

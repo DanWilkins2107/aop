@@ -45,6 +45,11 @@ describe("starting", () => {
       `# Prompted node\n\nNode: ${node.id}\nProject: ${context.split("Project: ")[1]?.split("\n")[0]}\nType: hotfix\nStage: implement\n\n`,
     );
     expect(seen.stdin).toContain(context.split("## Moving on")[0]?.split("## Description")[1]);
+    // The prompt alone has the run's ID, next to the node's, for the write tools' run_id.
+    const [run] = w.runs(node.id);
+    expect(seen.env["AOP_RUN_ID"]).toBe(run?.id);
+    expect(seen.stdin).toContain(`Node: ${node.id}\nRun: ${run?.id} (your run ID, which every write tool takes as \`run_id\`)\nProject: `);
+    expect(context).not.toContain("Run: ");
   });
 
   it("starts in open_from for a project with no path", TIMEOUT, async () => {
