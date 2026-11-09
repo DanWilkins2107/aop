@@ -2,7 +2,6 @@
 // `main.ts` runs it on the real process. Tests run it in-process through `runCli`, with their own environment and output.
 
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseArgs, type ParseArgsConfig } from "node:util";
 import {
@@ -19,12 +18,10 @@ import {
   type LogTail,
   type NodeView,
   type ProjectRow,
-  type ProposalRequest,
   type ProposalView,
   type ReapResult,
   type SteerRequest,
   type SteerSession,
-  type WithdrawRequest,
 } from "../shared/api.js";
 import { API_PREFIX, apiPaths } from "../shared/paths.js";
 import { DEFAULT_PORT } from "../shared/port.js";
@@ -37,8 +34,6 @@ export interface CliIo {
   stderr: NodeJS.WritableStream;
   /** Called once, with the exit code, when the command has finished. */
   exit: (code: number) => void;
-  /** What `aop propose` reads when it has no `--from`. None means there's nothing to read. */
-  stdin?: NodeJS.ReadableStream;
   /** Where relative paths start. The process's own working directory if left out. */
   cwd?: string;
 }
@@ -56,7 +51,6 @@ export const AGENT_COMMANDS = {
   "node create": ["aop node create --title ... [--body ...] [--parent ...] [--project ...] [--type ... | --stage ...]"],
   edge: ["aop edge add blocks <from> <to>", "aop edge remove blocks <from> <to>"],
   split: ["aop split start", "aop split finish"],
-  propose: ["aop propose <path> [--from <file>]", "aop propose <path> --withdraw"],
   proposals: ["aop proposals [--show <path>]"],
   apply: ["aop apply [--into <checkout>]"],
 } as const;
@@ -322,40 +316,6 @@ async function logsCommand(c: Ctx, argv: string[]): Promise<void> {
 /** A path as the user typed it, made absolute from where the command runs. */
 const absolute = (c: Ctx, path: string) => resolve(c.io.cwd ?? process.cwd(), path);
 
-async function readStdin(c: Ctx): Promise<string> {
-  const stdin = c.io.stdin;
-  if (stdin === undefined || (stdin as { isTTY?: boolean }).isTTY) throw new CliFailure("Pass --from <file>, or pipe the contents in.");
-  const chunks: Buffer[] = [];
-  for await (const chunk of stdin) chunks.push(Buffer.from(chunk as Buffer));
-  return Buffer.concat(chunks).toString("utf8");
-}
-
-/** Stores a file's proposed contents on this improvement. The real file isn't touched. */
-async function proposeCommand(c: Ctx, argv: string[]): Promise<void> {
-  const usage = COMMANDS.propose;
-  const { values, positionals } = args(argv, usage, { from: { type: "string" }, withdraw: { type: "boolean" } });
-  const target = absolute(c, only(positionals, usage));
-  const proposals = apiPaths.improvementAction(ownNode(c), "proposals");
-  if (values.withdraw === true) {
-    if (values.from !== undefined) throw usageError(usage);
-    await send(c, "DELETE", proposals, { path: target, actor: ACTOR } satisfies WithdrawRequest);
-    c.log(`Withdrew the proposal for ${target}`);
-    return;
-  }
-  let content: string;
-  if (values.from === undefined) {
-    content = await readStdin(c);
-  } else {
-    try {
-      content = readFileSync(absolute(c, values.from), "utf8");
-    } catch (error) {
-      throw new CliFailure(`Can't read ${values.from}: ${(error as Error).message}`);
-    }
-  }
-  const proposal = await send<ProposalView>(c, "PUT", proposals, { path: target, content, actor: ACTOR } satisfies ProposalRequest);
-  c.log(`Proposed ${proposal.path}${proposal.current === null ? " (new file)" : ""}. The real file is unchanged.`);
-}
-
 async function proposalsCommand(c: Ctx, argv: string[]): Promise<void> {
   const { values, positionals } = args(argv, COMMANDS.proposals, { show: { type: "string" } });
   if (positionals.length > 0) throw usageError(COMMANDS.proposals);
@@ -429,8 +389,6 @@ async function run(c: Ctx, argv: string[]): Promise<number | void> {
       movedTo(c, await send(c, "POST", apiPaths.nodeAction(ownNode(c), `split/${action}`)));
       return;
     }
-    case "propose":
-      return proposeCommand(c, rest);
     case "proposals":
       return proposalsCommand(c, rest);
     case "apply":

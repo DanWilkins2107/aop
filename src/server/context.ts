@@ -143,7 +143,7 @@ function improvementSections(db: Db, nodeId: string): string[] {
     ...section("What can change", [
       `- Files inside ${config.improvementsDir}, where you start`,
       ...prompts.map((path) => `- ${path}`),
-      "Never edit them directly: `aop propose <path> --from <file>` stores each change for review.",
+      "Never edit them directly: the `propose` tool stores each change for review.",
       config.improvementsRepo === null
         ? "That folder isn't in a git repo, so Raise PR isn't offered."
         : `That folder is in the git repo ${config.improvementsRepo}.`,
