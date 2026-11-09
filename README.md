@@ -2,10 +2,10 @@
 AOP is an agent orchestration platform. It provides the building blocks for you to create a deterministic process in which probabalistic agents act, as well as some other nice-to-have features.
 
 ## Other Pages
-See docs/setup.md for the setup process for aop.
-See docs/contributions.md if you'd like to contribute to AOP
-See docs/features.md for how AOP works
-See docs/security.md for AOP's security posture. 
+- See [docs/setup.md](docs/setup.md) for the setup process for aop.
+- See [docs/contributions.md](docs/contributions.md) if you'd like to contribute to AOP
+- See [docs/features.md](docs/features.md) for how AOP works
+- See [docs/security.md](docs/security.md) for AOP's security posture.
 
 ## Why would you use an orchestration layer
 Claude Code + similar tools take a lot of configuration to be fit for multi-agent orchestration across a range of tasks.
