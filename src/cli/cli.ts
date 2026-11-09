@@ -16,7 +16,6 @@ import {
   type CreateNodeRequest,
   type EdgeRequest,
   type EdgeRow,
-  type EditNodeRequest,
   type LinkRequest,
   type LogTail,
   type NodeView,
@@ -59,7 +58,6 @@ export const AGENT_COMMANDS = {
   link: ["aop link pr|ticket <url>"],
   search: ["aop search <query> [--all]"],
   "node create": ["aop node create --title ... [--body ...] [--parent ...] [--project ...] [--type ... | --stage ...]"],
-  "node edit": ["aop node edit [<id>] [--title ...] [--body ...]"],
   edge: ["aop edge add blocks <from> <to>", "aop edge remove blocks <from> <to>"],
   split: ["aop split start", "aop split finish"],
   propose: ["aop propose <path> [--from <file>]", "aop propose <path> --withdraw"],
@@ -246,22 +244,7 @@ async function nodeCommand(c: Ctx, argv: string[]): Promise<void> {
     c.log(`Created ${node.id} at ${node.stage}`);
     return;
   }
-  if (action === "edit") {
-    const usage = COMMANDS["node edit"];
-    const { values, positionals } = args(rest, usage, { title: { type: "string" }, body: { type: "string" } });
-    if (positionals.length > 1 || (values.title === undefined && values.body === undefined)) {
-      throw usageError(usage);
-    }
-    const id = positionals[0] ?? ownNode(c);
-    await send(c, "PATCH", apiPaths.node(id), {
-      actor: ACTOR,
-      ...(values.title !== undefined ? { title: values.title } : {}),
-      ...(values.body !== undefined ? { body: values.body } : {}),
-    } satisfies EditNodeRequest);
-    c.log(`Edited ${id}`);
-    return;
-  }
-  throw usageError([...COMMANDS["node create"], ...COMMANDS["node edit"]]);
+  throw usageError(COMMANDS["node create"]);
 }
 
 async function edgeCommand(c: Ctx, argv: string[]): Promise<void> {
