@@ -14,8 +14,6 @@ import {
   type ApplyRequest,
   type ApplyResult,
   type CreateNodeRequest,
-  type EdgeRequest,
-  type EdgeRow,
   type LogTail,
   type NodeView,
   type ProjectRow,
@@ -56,7 +54,6 @@ export const AGENT_COMMANDS = {
   context: ["aop context [<id>]"],
   search: ["aop search <query> [--all]"],
   "node create": ["aop node create --title ... [--body ...] [--parent ...] [--project ...] [--type ... | --stage ...]"],
-  edge: ["aop edge add blocks <from> <to>", "aop edge remove blocks <from> <to>"],
   split: ["aop split start", "aop split finish"],
   propose: ["aop propose <path> [--from <file>]", "aop propose <path> --withdraw"],
   proposals: ["aop proposals [--show <path>]"],
@@ -245,26 +242,6 @@ async function nodeCommand(c: Ctx, argv: string[]): Promise<void> {
   throw usageError(COMMANDS["node create"]);
 }
 
-async function edgeCommand(c: Ctx, argv: string[]): Promise<void> {
-  const usage = COMMANDS.edge;
-  const [action, kind, from, to, ...extra] = args(argv, usage, {}).positionals;
-  if (kind !== "blocks" || from === undefined || to === undefined || extra.length > 0) throw usageError(usage);
-  if (action === "add") {
-    await send(c, "POST", apiPaths.nodeAction(from, "edges"), { target_id: to, kind, actor: ACTOR } satisfies EdgeRequest);
-    c.log(`${from} now blocks ${to}`);
-    return;
-  }
-  if (action === "remove") {
-    const edges = await send<EdgeRow[]>(c, "GET", apiPaths.nodeAction(from, "edges"));
-    const edge = edges.find((e) => e.kind === kind && e.source_id === from && e.target_id === to);
-    if (!edge) throw new CliFailure(`${from} doesn't block ${to}`);
-    await send(c, "DELETE", apiPaths.edge(edge.id), { actor: ACTOR } satisfies ActorRequest);
-    c.log(`${from} no longer blocks ${to}`);
-    return;
-  }
-  throw usageError(usage);
-}
-
 async function searchCommand(c: Ctx, argv: string[]): Promise<void> {
   const { values, positionals } = args(argv, COMMANDS.search, { all: { type: "boolean" } });
   if (positionals.length === 0) throw usageError(COMMANDS.search);
@@ -444,8 +421,6 @@ async function run(c: Ctx, argv: string[]): Promise<number | void> {
       return searchCommand(c, rest);
     case "node":
       return nodeCommand(c, rest);
-    case "edge":
-      return edgeCommand(c, rest);
     case "split": {
       const action = only(args(rest, COMMANDS.split, {}).positionals, COMMANDS.split);
       if (action !== "start" && action !== "finish") throw usageError(COMMANDS.split);

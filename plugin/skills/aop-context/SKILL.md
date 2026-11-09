@@ -23,8 +23,6 @@ Commands act on your own node (`AOP_NODE_ID`) unless they take an ID. You can on
 | `aop context [<id>]` | Read a node. Without an ID, your own |
 | `aop search <query> [--all]` | Search this project's nodes, or every project with `--all` |
 | `aop node create --title ... [--body ...] [--parent <id>] [--project ...] [--type ... \| --stage ...]` | Create a node. `--type` starts it at that type's first stage; `--stage` starts it exactly there |
-| `aop edge add blocks <from> <to>` | `<from>` must finish before `<to>` starts |
-| `aop edge remove blocks <from> <to>` | Remove that block |
 | `aop split start` | Begin a split. Children you create are held until it finishes |
 | `aop split finish` | End the split. Your node becomes `broken_down` and the children start |
 
@@ -39,6 +37,8 @@ These come from AOP's MCP server. Each takes your node's ID as `node_id`: the `N
 | `ask` tool with `question` | Ask a human. The node waits, and this stage restarts with the answer. Then exit |
 | `node_edit` tool with `title` and/or `body` | Edit a title or description. Any node's ID as `node_id` edits that one instead |
 | `link` tool with `kind` and `url` | Attach a PR or ticket link to your node |
+| `edge_add` tool with `from` and `to` | Node `from` must finish before node `to` starts. Takes no `node_id` |
+| `edge_remove` tool with `from` and `to` | Remove that block. Takes no `node_id` |
 
 ### Improvements
 An **improvement** is a node that changes how agents work: a skill or a stage prompt. It belongs to no project. You start in the improvements folder, and you never edit real files: you propose their new contents, a human reviews the diff, and a later stage applies it.
