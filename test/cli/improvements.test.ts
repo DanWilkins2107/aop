@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it, onTestFinished } from "vitest";
 import { aopHome } from "../../src/server/paths.js";
@@ -28,31 +28,26 @@ beforeEach(async () => {
 });
 
 /** The CLI as an improvement's agent runs it: in the improvements folder, on its node. */
-const aop = (args: string[], node: string, stdin?: string): Promise<CliResult> =>
-  aopInProcess(args, { AOP_URL: url, AOP_NODE_ID: node }, { cwd: join(aopHome(), "skills"), stdin: stdin ?? "" });
+const aop = (args: string[], node: string): Promise<CliResult> =>
+  aopInProcess(args, { AOP_URL: url, AOP_NODE_ID: node }, { cwd: join(aopHome(), "skills") });
+
+/** Stores a proposal through the API, as the `propose` tool does. */
+async function propose(id: string, path: string, content: string): Promise<void> {
+  const res = await h.call("PUT", `/api/improvements/${id}/proposals`, { path, content, actor: "agent" });
+  expect(res.status, JSON.stringify(res.body)).toBe(200);
+}
 
 describe("the proposal commands", () => {
-  it("propose from a file or stdin, list, show, withdraw and apply", async () => {
+  it("list, show and apply", async () => {
     const { node } = (await h.call<ImprovementView>("POST", "/api/improvements", { body: "Better tests" })).body;
     const skill = join(aopHome(), "skills", "write-tests", "SKILL.md");
-    const draft = join(mkdtempSync(join(aopHome(), "draft-")), "SKILL.md");
-    writeFileSync(draft, "New skill.\n");
+    await propose(node.id, skill, "New skill.\n");
+    await propose(node.id, join(aopHome(), "skills", "other", "SKILL.md"), "Another.\n");
 
-    const fromFile = await aop(["propose", "write-tests/SKILL.md", "--from", draft], node.id);
-    expect(fromFile.stderr).toBe("");
-    expect(fromFile.code).toBe(0);
-    expect(readFileSync(skill, "utf8")).toBe("Old skill.\n");
-
-    expect((await aop(["propose", "other/SKILL.md"], node.id, "From stdin.\n")).code).toBe(0);
     const listed = await aop(["proposals"], node.id);
     expect(listed.stdout).toContain("new file");
     expect(listed.stdout).toContain(skill);
     expect((await aop(["proposals", "--show", "write-tests/SKILL.md"], node.id)).stdout).toBe("New skill.\n");
-    expect((await aop(["propose", "other/SKILL.md", "--withdraw"], node.id)).code).toBe(0);
-
-    const refused = await aop(["propose", "../config.yaml", "--from", draft], node.id);
-    expect(refused.code).toBe(1);
-    expect(refused.stderr).toContain("never change");
     expect((await aop(["apply"], node.id)).code).toBe(1);
 
     await h.post(node.id, "next", { outcome: "drafted", actor: "agent" });
@@ -61,6 +56,6 @@ describe("the proposal commands", () => {
     expect(applied.stdout).toContain(`Wrote ${skill}`);
     expect(readFileSync(skill, "utf8")).toBe("New skill.\n");
     const proposals = (await h.call<ProposalView[]>("GET", `/api/improvements/${node.id}/proposals`)).body;
-    expect(proposals.map((p) => p.display_path)).toEqual(["write-tests/SKILL.md"]);
+    expect(proposals.map((p) => p.display_path).sort()).toEqual(["other/SKILL.md", "write-tests/SKILL.md"]);
   });
 });

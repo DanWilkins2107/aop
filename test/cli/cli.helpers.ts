@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { Readable, Writable } from "node:stream";
+import { Writable } from "node:stream";
 import { runCli } from "../../src/cli/cli.js";
 import { nodeArgs } from "../server/agents.helpers.js";
 
@@ -23,10 +23,9 @@ const collect = (add: (text: string) => void) =>
     },
   });
 
-/** Where an in-process run starts, and what it reads on stdin, as a piped command would. */
+/** Where an in-process run starts. */
 export interface InProcessOptions {
   cwd?: string;
-  stdin?: string;
 }
 
 /** The CLI in this process, with its own environment and output. Fast: prefer it. */
@@ -38,7 +37,6 @@ export async function aopInProcess(args: string[], env: Record<string, string> =
     stdout: collect((text) => (result.stdout += text)),
     stderr: collect((text) => (result.stderr += text)),
     exit: (code) => (result.code = code),
-    ...(options.stdin !== undefined ? { stdin: Readable.from([options.stdin]) } : {}),
     ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
   });
   return result;

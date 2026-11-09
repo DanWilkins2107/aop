@@ -45,10 +45,13 @@ An **improvement** is a node that changes how agents work: a skill or a stage pr
 
 | Command | Use |
 |---|---|
-| `aop propose <path> [--from <file>]` | Store a file's proposed contents, from a draft file or stdin. The real file is unchanged |
-| `aop propose <path> --withdraw` | Drop that proposal |
 | `aop proposals [--show <path>]` | List the proposals, or print one |
 | `aop apply [--into <checkout>]` | Write the proposals: to the real files at `save_locally`, or into a worktree at `raise_pr` |
+
+| Tool | Use |
+|---|---|
+| `propose` tool with `path` and `content` | Store a file's full proposed contents. `path` is the real file's absolute path. The real file is unchanged |
+| `withdraw_proposal` tool with `path` | Drop that proposal |
 
 ## Notes
 - Your node's ID is on the `Node:` line of `aop context`.
