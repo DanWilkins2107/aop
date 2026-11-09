@@ -3,7 +3,9 @@
 
 import type { AopTool } from "../tool.js";
 import { context } from "./context.js";
+import { next } from "./next.js";
 
 export const TOOLS: readonly AopTool[] = [
   context,
+  next,
 ];
