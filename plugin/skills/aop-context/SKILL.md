@@ -25,7 +25,6 @@ Commands act on your own node (`AOP_NODE_ID`) unless they take an ID. You can on
 | `aop message "..." [--node <id>]` | Post a message, on your node or another |
 | `aop link pr\|ticket <url>` | Attach a PR or ticket link to your node |
 | `aop ask "..."` | Ask a human. The node waits, and this stage restarts with the answer. Then exit |
-| `aop fail "<reason>"` | Mark your node failed, only when the work can't be done and asking won't help. Then exit |
 | `aop node create --title ... [--body ...] [--parent <id>] [--project ...] [--type ... \| --stage ...]` | Create a node. `--type` starts it at that type's first stage; `--stage` starts it exactly there |
 | `aop node edit [<id>] [--title ...] [--body ...]` | Edit a title or description |
 | `aop edge add blocks <from> <to>` | `<from>` must finish before `<to>` starts |
@@ -39,6 +38,7 @@ These come from AOP's MCP server. Each takes your node's ID as `node_id`: the `N
 | Tool | Use |
 |---|---|
 | `next` tool with `outcome` | Finish the stage with one outcome. Then exit |
+| `fail` tool with `reason` | Mark your node failed, only when the work can't be done and asking won't help. Then exit |
 
 ### Improvements
 An **improvement** is a node that changes how agents work: a skill or a stage prompt. It belongs to no project. You start in the improvements folder, and you never edit real files: you propose their new contents, a human reviews the diff, and a later stage applies it.
@@ -52,6 +52,6 @@ An **improvement** is a node that changes how agents work: a skill or a stage pr
 
 ## Notes
 - Your node's ID is on the `Node:` line of `aop context`.
-- The `next` tool, `aop ask` and `aop fail` end your turn. Stop working once you've used one.
+- The `next` tool, `aop ask` and the `fail` tool end your turn. Stop working once you've used one.
 - Exiting without the `next` tool or `aop ask` marks the node failed, so always finish with one.
 - Every edit is recorded, so act on other nodes only when your stage needs it.

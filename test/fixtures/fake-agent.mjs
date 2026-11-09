@@ -3,7 +3,7 @@
 // the stage's prompt:
 //
 //   @@record <file>                JSON of the stdin, argv, cwd and AOP_* environment it was given
-//   @@aop ["fail","Gone"]          runs the real `aop` CLI from PATH. "$NODE" is this node's ID, and
+//   @@aop ["ps"]                   runs the real `aop` CLI from PATH. "$NODE" is this node's ID, and
 //                                  "$LAST" and "$PREV" are the last two IDs it created
 //   @@tool next {"node_id":"$NODE","outcome":"ready"}
 //                                  calls a tool on AOP's MCP server at AOP_MCP_URL, with the same
