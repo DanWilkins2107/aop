@@ -74,8 +74,6 @@ describe("the agent commands", () => {
   it("everything it writes says actor agent", async () => {
     const node = await parked();
     const other = await parked();
-    await aop(["message", "from the agent"], { node: node.id });
-    await aop(["message", "to another", "--node", other.id], { node: node.id });
     await aop(["link", "pr", "https://example.com/pr"], { node: node.id });
     await aop(["link", "ticket", "https://example.com/ticket"], { node: node.id });
     await aop(["node", "edit", "--title", "New title", "--body", "New body"], { node: node.id });
@@ -85,15 +83,13 @@ describe("the agent commands", () => {
 
     expect(w.node(node.id)).toMatchObject({ title: "New title", body: "New body" });
     expect(w.node(other.id).title).toBe("Other title");
-    const messages = (await w.call<MessageRow[]>("GET", `/nodes/${other.id}/messages`)).body;
-    expect(messages.map((m) => [m.author, m.body])).toEqual([["agent", "to another"]]);
     const links = (await w.call<LinkRow[]>("GET", `/nodes/${node.id}/links`)).body;
     expect(links.map((l) => l.kind)).toEqual(["pr", "ticket"]);
     expect((await w.call<EdgeRow[]>("GET", `/nodes/${node.id}/edges`)).body).toEqual([]);
 
     const written = (await eventsOf(node.id)).filter((event) => event.kind !== "node_created");
     expect(written.map((event) => event.kind)).toEqual(
-      expect.arrayContaining(["message_added", "link_added", "title_edited", "description_edited", "edge_added", "edge_removed"]),
+      expect.arrayContaining(["link_added", "title_edited", "description_edited", "edge_added", "edge_removed"]),
     );
     expect(new Set(written.map((event) => event.actor))).toEqual(new Set(["agent"]));
   });

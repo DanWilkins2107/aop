@@ -17,7 +17,7 @@ Decide what this node is, then take exactly one outcome.
 When unsure between one PR and a split, split. Too-small pieces are fine; too-large ones are hard to review.
 
 ## Proposing a split
-Post it with `aop message`. One line per child, then one line on edges:
+Post it with the `message` tool. One line per child, then one line on edges:
 
 ```
 1. <child title> - <one-line scope>

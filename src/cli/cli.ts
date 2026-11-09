@@ -21,8 +21,6 @@ import {
   type FailRequest,
   type LinkRequest,
   type LogTail,
-  type MessageRequest,
-  type MessageRow,
   type NodeView,
   type ProjectRow,
   type ProposalRequest,
@@ -62,7 +60,6 @@ export const AGENT_COMMANDS = {
   context: ["aop context [<id>]"],
   ask: ['aop ask "..."'],
   fail: ['aop fail "<reason>"'],
-  message: ['aop message "..." [--node <id>]'],
   link: ["aop link pr|ticket <url>"],
   search: ["aop search <query> [--all]"],
   "node create": ["aop node create --title ... [--body ...] [--parent ...] [--project ...] [--type ... | --stage ...]"],
@@ -472,13 +469,6 @@ async function run(c: Ctx, argv: string[]): Promise<number | void> {
     case "fail": {
       const reason = only(args(rest, COMMANDS.fail, {}).positionals, COMMANDS.fail);
       movedTo(c, await send(c, "POST", apiPaths.nodeAction(ownNode(c), "fail"), { reason, actor: ACTOR } satisfies FailRequest));
-      return;
-    }
-    case "message": {
-      const { values, positionals } = args(rest, COMMANDS.message, { node: { type: "string" } });
-      const body = only(positionals, COMMANDS.message);
-      const message = await send<MessageRow>(c, "POST", apiPaths.nodeAction(values.node ?? ownNode(c), "messages"), { body, author: ACTOR } satisfies MessageRequest);
-      c.log(`Posted to ${message.node_id}`);
       return;
     }
     case "link": {
