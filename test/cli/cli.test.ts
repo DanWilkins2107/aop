@@ -3,7 +3,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { EdgeRow, EventView, LinkRow, MessageRow } from "../../src/shared/api.js";
+import type { EdgeRow, EventView, MessageRow } from "../../src/shared/api.js";
 import { directives, fakeCommand, settle, toolCall, until, world, type World } from "../server/agents.helpers.js";
 import { makeRepo } from "../server/helpers.js";
 import { aopInProcess } from "./cli.helpers.js";
@@ -60,18 +60,13 @@ describe("the agent commands", () => {
   it("everything it writes says actor agent", async () => {
     const node = await parked();
     const other = await parked();
-    await aop(["link", "pr", "https://example.com/pr"], { node: node.id });
-    await aop(["link", "ticket", "https://example.com/ticket"], { node: node.id });
     await aop(["edge", "add", "blocks", node.id, other.id], { node: node.id });
     await aop(["edge", "remove", "blocks", node.id, other.id], { node: node.id });
-
-    const links = (await w.call<LinkRow[]>("GET", `/nodes/${node.id}/links`)).body;
-    expect(links.map((l) => l.kind)).toEqual(["pr", "ticket"]);
     expect((await w.call<EdgeRow[]>("GET", `/nodes/${node.id}/edges`)).body).toEqual([]);
 
     const written = (await eventsOf(node.id)).filter((event) => event.kind !== "node_created");
     expect(written.map((event) => event.kind)).toEqual(
-      expect.arrayContaining(["link_added", "edge_added", "edge_removed"]),
+      expect.arrayContaining(["edge_added", "edge_removed"]),
     );
     expect(new Set(written.map((event) => event.actor))).toEqual(new Set(["agent"]));
   });
@@ -133,7 +128,7 @@ describe("the agent commands", () => {
   });
 
   it("bad usage is a clear message and exit code 2, with no stack trace", async () => {
-    const bad = [["logs"], ["node", "create"], ["edge", "add", "subtask", "a", "b"], ["link", "x", "y"], ["nonsense"], ["logs", "x", "--bad"], ["search"], ["ps", "x"], ["reap", "--bad"]];
+    const bad = [["logs"], ["node", "create"], ["edge", "add", "subtask", "a", "b"], ["nonsense"], ["logs", "x", "--bad"], ["search"], ["ps", "x"], ["reap", "--bad"]];
     for (const args of bad) {
       const res = await aop(args, { node: "n" });
       expect(res.code, args.join(" ")).toBe(2);
