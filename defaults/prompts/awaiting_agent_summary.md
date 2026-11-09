@@ -17,4 +17,4 @@ Post it with `aop message`:
 Don't make the decision or start the work: that's for the human.
 
 ## Finish
-Then `aop next summarised`.
+Then the `next` tool with outcome `summarised`.

@@ -11,8 +11,8 @@ describe("the aop entry point", () => {
   it("prints the help, and a usage error is exit code 2 with no stack trace", async () => {
     const help = await aop(["help"]);
     expect(help.code).toBe(0);
-    expect(help.stdout).toContain("\n  aop next <outcome>\n");
-    for (const args of [["next"], ["nonsense"]]) {
+    expect(help.stdout).toContain('\n  aop ask "..."\n');
+    for (const args of [["fail"], ["nonsense"]]) {
       const res = await aop(args);
       expect(res.code, args.join(" ")).toBe(2);
       expect(res.stderr).toContain("aop ");

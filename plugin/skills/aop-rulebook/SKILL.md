@@ -24,7 +24,7 @@ Apply these on every stage, on top of the stage prompt.
 
 ## Finishing
 - Post a short handover with `aop message "..."` first: what changed, any decisions, anything the next person must know. 1-3 lines.
-- Then report exactly one outcome with `aop next <outcome>` (or end a split with `aop split finish`), and exit.
+- Then report exactly one outcome with the `next` tool (or end a split with `aop split finish`), and exit.
 - If you need a human instead, `aop ask "..."` is your one ending, then exit.
 - If the work can't be done and asking won't help, `aop fail "<reason>"` is your one ending, then exit.
 

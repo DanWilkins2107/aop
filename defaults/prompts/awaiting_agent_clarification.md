@@ -17,4 +17,4 @@ Post it with `aop message`, short enough to read at a glance:
 Answer only what was asked. Don't repeat the summary, the description or options they didn't ask about: those are already on the page. Don't make the decision, do the action or start the work: that's for the human.
 
 ## Finish
-Then `aop next clarified`.
+Then the `next` tool with outcome `clarified`.

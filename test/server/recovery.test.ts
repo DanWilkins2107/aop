@@ -6,7 +6,7 @@ import { openDb } from "../../src/server/db.js";
 import { isAlive, killTree, readProcessStarts, waitGone } from "../../src/server/osProcesses.js";
 import { listProcesses, recordProcess } from "../../src/server/runs.js";
 import type { AgentProcessView, NodeView, ProjectRow, ReapResult } from "../../src/shared/api.js";
-import { aopShim, directives, fakeConfig, nodeArgs, pidIn, settle, until, world, type World } from "./agents.helpers.js";
+import { aopShim, directives, fakeConfig, nodeArgs, pidIn, settle, toolCall, until, world, type World } from "./agents.helpers.js";
 import { makeHome, makeRepo } from "./helpers.js";
 
 const TIMEOUT = { timeout: 120_000 };
@@ -278,7 +278,7 @@ describe("reap and identity", () => {
   it("ps lists each agent and its node, and marks one that's exiting", TIMEOUT, async () => {
     w = await world({ graceMs: 60_000 });
     const hanging = await w.create(directives("hang"), { title: "Hanging" });
-    const leaving = await w.create(directives('aop ["next","fixed"]', "hang"), { title: "Leaving" });
+    const leaving = await w.create(directives(toolCall("next", { outcome: "fixed" }), "hang"), { title: "Leaving" });
     await w.runStarted(hanging.id);
     await w.atStage(leaving.id, "done");
     await w.runStarted(leaving.id);

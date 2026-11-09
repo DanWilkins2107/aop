@@ -194,7 +194,7 @@ describe("the improvement pipeline", () => {
     expect(context).toContain("Too many tests.");
     expect(context).toContain(`Files inside ${skills()}`);
     expect(context).toContain(join(aopHome(), "prompts", "implement.md"));
-    expect(context).toContain("`aop next drafted`");
+    expect(context).toContain("the `next` tool with outcome `drafted`");
   });
 });
 
@@ -265,6 +265,7 @@ describe("proposals", () => {
       "skills/prompts/split_approved.md": "b",
       "skills/prompts/implement.md": "c",
       "skills/prompts/awaiting_agent_clarification.md": "d",
+      "skills/prompts/awaiting_agent_summary.md": "e",
     });
     const { node } = await capture({ body: "x" });
     expect((await propose(node.id, join(skills(), "stages.yaml"), "evil")).status).toBe(400);

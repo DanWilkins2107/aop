@@ -105,6 +105,7 @@ export class Orchestrator {
   /** Clear-ups that outlive their run, which shutdown has to wait for. */
   private readonly background = new Set<Promise<unknown>>();
   private url = "";
+  private mcpUrl = "";
   private running = false;
   /** Set for good by `shutdown`, which can come while `start` is still waiting on its first sweep. */
   private shutDown = false;
@@ -124,9 +125,12 @@ export class Orchestrator {
   /**
    * Deals with whatever a previous server left behind, then begins starting agents. Before this, no
    * run is active, so every process on record and every `running` row is left over from a crash.
+   * Agents get both URLs. Real ones reach MCP at the fixed port their own config names; the fake
+   * agent in tests uses `AOP_MCP_URL`, because there the port is any free one.
    */
-  async start(url: string): Promise<void> {
+  async start(url: string, mcpUrl: string): Promise<void> {
     this.url = url;
+    this.mcpUrl = mcpUrl;
     prepareSweeps();
     await this.reap();
     // Shut down while the sweep above ran, such as Ctrl+C during a slow startup: start nothing.
@@ -240,7 +244,7 @@ export class Orchestrator {
         cwd,
         // The run's marker is inherited by everything the agent starts, so a crash at any moment,
         // even before anything below has been recorded, leaves its whole tree findable.
-        env: { ...process.env, AOP_NODE_ID: node.id, AOP_URL: this.url, [RUN_MARKER]: id },
+        env: { ...process.env, AOP_NODE_ID: node.id, AOP_URL: this.url, AOP_MCP_URL: this.mcpUrl, [RUN_MARKER]: id },
         stdio: "pipe",
         windowsHide: true,
         // Its own process group, so that it can be killed along with its children. On Windows the

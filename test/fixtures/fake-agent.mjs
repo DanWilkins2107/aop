@@ -3,8 +3,11 @@
 // the stage's prompt:
 //
 //   @@record <file>                JSON of the stdin, argv, cwd and AOP_* environment it was given
-//   @@aop ["next","ready"]         runs the real `aop` CLI from PATH. "$NODE" is this node's ID, and
+//   @@aop ["fail","Gone"]          runs the real `aop` CLI from PATH. "$NODE" is this node's ID, and
 //                                  "$LAST" and "$PREV" are the last two IDs it created
+//   @@tool next {"node_id":"$NODE","outcome":"ready"}
+//                                  calls a tool on AOP's MCP server at AOP_MCP_URL, with the same
+//                                  substitutions in its JSON arguments
 //   @@sleep <ms>
 //   @@hang                         never exits by itself
 //   @@exit <code>
@@ -19,7 +22,7 @@
 //
 // Given `--output-format stream-json`, as AOP passes to Claude Code, it writes what Claude Code does:
 // one JSON event per line, from a `system` init event to a `result` event, with `say` as assistant
-// text and `aop` as a Bash tool call and its result. Each assistant turn reports usage, which grows
+// text, `aop` as a Bash tool call and `tool` as an MCP tool call (`mcp__aop__<name>`), each with its result. Each assistant turn reports usage, which grows
 // turn by turn unless set:
 //
 //   @@usage <input> <cache_read> <cache_creation> <output>   the usage the next turns report
@@ -27,6 +30,8 @@
 //   @@raw <text>                   prints a line that isn't an event, as stderr noise would be
 import { spawn, spawnSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 const stdin = await new Promise((done) => {
   let text = "";
@@ -101,9 +106,20 @@ const prose = stdin
   .filter((line) => !line.startsWith("@@"))
   .join("\n");
 
+const substitute = (text) =>
+  text.replaceAll("$LAST", lastCreated).replaceAll("$PREV", previousCreated).replaceAll("$NODE", process.env["AOP_NODE_ID"] ?? "");
+
+function remember(output) {
+  const created = /^Created (\S+)/m.exec(output);
+  if (created) {
+    previousCreated = lastCreated;
+    lastCreated = created[1];
+  }
+}
+
 function runAop(args) {
   const quoted = args
-    .map((arg) => arg.replaceAll("$LAST", lastCreated).replaceAll("$PREV", previousCreated).replaceAll("$NODE", process.env["AOP_NODE_ID"] ?? ""))
+    .map(substitute)
     .map((arg) => `"${arg.replaceAll('"', '\\"')}"`).join(" ");
   const toolUseId = nextId("toolu");
   if (streamJson) {
@@ -115,11 +131,35 @@ function runAop(args) {
   const result = spawnSync(`aop ${quoted}`, { shell: true, encoding: "utf8" });
   if (streamJson) toolResult(toolUseId, `[fake] aop ${quoted} -> ${result.status}\n${result.stdout}${result.stderr}`, result.status !== 0);
   else process.stdout.write(`[fake] aop ${quoted} -> ${result.status}\n${result.stdout}${result.stderr}`);
-  const created = /^Created (\S+)/m.exec(result.stdout ?? "");
-  if (created) {
-    previousCreated = lastCreated;
-    lastCreated = created[1];
+  remember(result.stdout ?? "");
+}
+
+/** One MCP tool call, as Claude Code makes it. A client per call is fine, since the server is stateless. */
+async function callTool(name, args) {
+  const toolUseId = nextId("toolu");
+  if (streamJson) {
+    assistantTurn([
+      { type: "text", text: `Calling ${name}.` },
+      { type: "tool_use", id: toolUseId, name: `mcp__aop__${name}`, input: args },
+    ]);
   }
+  let text;
+  let isError;
+  const client = new Client({ name: "fake-agent", version: "0.0.0" });
+  try {
+    await client.connect(new StreamableHTTPClientTransport(new URL(process.env["AOP_MCP_URL"] ?? "")));
+    const result = await client.callTool({ name, arguments: args });
+    text = result.content.map((part) => (part.type === "text" ? part.text : `[${part.type}]`)).join("\n");
+    isError = result.isError === true;
+  } catch (error) {
+    text = error instanceof Error ? error.message : String(error);
+    isError = true;
+  } finally {
+    await client.close().catch(() => {});
+  }
+  if (streamJson) toolResult(toolUseId, text, isError);
+  else process.stdout.write(`[fake] tool ${name} -> ${isError ? "error" : "ok"}\n${text}\n`);
+  remember(text);
 }
 
 async function perform(directive) {
@@ -139,6 +179,11 @@ async function perform(directive) {
     case "aop":
       runAop(JSON.parse(rest));
       return;
+    case "tool": {
+      const [, tool, json = "{}"] = /^(\S+)\s*(.*)$/s.exec(rest) ?? [];
+      await callTool(tool, JSON.parse(substitute(json || "{}")));
+      return;
+    }
     case "sleep":
       await new Promise((done) => setTimeout(done, Number(rest)));
       return;

@@ -23,7 +23,6 @@ import {
   type LogTail,
   type MessageRequest,
   type MessageRow,
-  type NextRequest,
   type NodeView,
   type ProjectRow,
   type ProposalRequest,
@@ -61,7 +60,6 @@ interface Ctx {
 /** Each command's usage, for both the help and its own usage errors, so the two can't drift apart. */
 export const AGENT_COMMANDS = {
   context: ["aop context [<id>]"],
-  next: ["aop next <outcome>"],
   ask: ['aop ask "..."'],
   fail: ['aop fail "<reason>"'],
   message: ['aop message "..." [--node <id>]'],
@@ -464,11 +462,6 @@ async function run(c: Ctx, argv: string[]): Promise<number | void> {
       const { positionals } = args(rest, COMMANDS.context, {});
       if (positionals.length > 1) throw usageError(COMMANDS.context);
       c.log(await sendForText(c, apiPaths.nodeAction(positionals[0] ?? ownNode(c), "context")));
-      return;
-    }
-    case "next": {
-      const outcome = only(args(rest, COMMANDS.next, {}).positionals, COMMANDS.next);
-      movedTo(c, await send(c, "POST", apiPaths.nodeAction(ownNode(c), "next"), { outcome, actor: ACTOR } satisfies NextRequest));
       return;
     }
     case "ask": {
