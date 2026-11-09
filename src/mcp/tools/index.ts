@@ -9,6 +9,8 @@ import { link } from "./link.js";
 import { message } from "./message.js";
 import { next } from "./next.js";
 import { search } from "./search.js";
+import { splitFinish } from "./split_finish.js";
+import { splitStart } from "./split_start.js";
 
 export const TOOLS: readonly AopTool[] = [
   ask,
@@ -18,4 +20,6 @@ export const TOOLS: readonly AopTool[] = [
   message,
   next,
   search,
+  splitFinish,
+  splitStart,
 ];
