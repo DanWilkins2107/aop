@@ -13,7 +13,7 @@ import { addProject } from "../../src/server/projects.js";
 import { beginRun } from "../../src/server/runs.js";
 import type { NodeView } from "../../src/shared/api.js";
 import { aopInProcess } from "../cli/cli.helpers.js";
-import { directives, fakeConfig, settle, world } from "./agents.helpers.js";
+import { directives, fakeConfig, settle, toolCall, world } from "./agents.helpers.js";
 import { harness, makeHome, makeRepo, STAGES_YAML } from "./helpers.js";
 
 const TIMEOUT = { timeout: 90_000 };
@@ -63,14 +63,14 @@ describe("agent identity", () => {
       ),
     );
     const node = await w.create(
-      directives('ifnot Stage: write_spec :: aop ["next","fixed"]', "ifnot Stage: write_spec :: exit 0", "hang"),
+      directives(`ifnot Stage: write_spec :: ${toolCall("next", { outcome: "fixed" })}`, "ifnot Stage: write_spec :: exit 0", "hang"),
     );
     const second = await w.runStarted(node.id, 2);
     const [first] = w.runs(node.id);
     expect(first).toMatchObject({ status: "exited", end_reason: "reported" });
 
     // What a process the first run left behind would run: it still carries that run's marker.
-    const stale = await aop(["next", "again"], { AOP_URL: w.url, AOP_NODE_ID: node.id, AOP_RUN_ID: first!.id });
+    const stale = await aop(["ask", "Still here?"], { AOP_URL: w.url, AOP_NODE_ID: node.id, AOP_RUN_ID: first!.id });
     expect(stale.code).toBe(1);
     expect(stale.output).toContain("has ended");
     expect(w.node(node.id).stage).toBe("write_spec");
@@ -79,9 +79,9 @@ describe("agent identity", () => {
     // Its other writes are refused too, while the current run's go through.
     const message = await aop(["message", "stale"], { AOP_URL: w.url, AOP_NODE_ID: node.id, AOP_RUN_ID: first!.id });
     expect(message.code).toBe(1);
-    const current = await aop(["next", "again"], { AOP_URL: w.url, AOP_NODE_ID: node.id, AOP_RUN_ID: second.id });
+    const current = await aop(["ask", "Which way?"], { AOP_URL: w.url, AOP_NODE_ID: node.id, AOP_RUN_ID: second.id });
     expect(current.code).toBe(0);
-    expect(w.node(node.id).stage).toBe("done");
+    expect(w.node(node.id).stage).toBe("ask_human_question");
   });
 
   it("refuses a run's stage change on a node that isn't the run's", TIMEOUT, async () => {
@@ -92,7 +92,7 @@ describe("agent identity", () => {
     const parent = await w.create("", { type: "dev", stage: "pr_review" });
     await w.call("POST", `/nodes/${parent.id}/invalidate`, { reason: "Hold the child" });
     const other = await w.create("", { parent_id: parent.id });
-    const res = await aop(["next", "fixed"], { AOP_URL: w.url, AOP_NODE_ID: other.id, AOP_RUN_ID: run.id });
+    const res = await aop(["ask", "Which way?"], { AOP_URL: w.url, AOP_NODE_ID: other.id, AOP_RUN_ID: run.id });
     expect(res.code).toBe(1);
     expect((w.node(other.id) as NodeView).stage).toBe("implement");
     expect(w.runs(other.id)).toEqual([]);
@@ -145,7 +145,7 @@ describe("shutdown", () => {
     const node = createNode(db, project.id, { type: "hotfix", title: "Queued", body: directives("hang"), actor: "human" });
 
     // Ctrl+C while the startup sweep is still going.
-    const starting = orchestrator.start("http://127.0.0.1:9");
+    const starting = orchestrator.start("http://127.0.0.1:9", "http://127.0.0.1:9/mcp");
     await orchestrator.shutdown();
     await starting;
     await settle(500);

@@ -55,7 +55,8 @@ export async function runServer(argv: string[], usage: string): Promise<void> {
     // Before the agents, which reach AOP through it. Always the same port, so a sandbox can allow just that.
     const mcp = await startMcpServer(db, Number(process.env[TEST_MCP_PORT_ENV] ?? MCP_PORT), { changes, orchestrator });
     mcpServer = mcp;
-    console.log(`AOP MCP listening on http://${HOSTNAME}:${mcp.port}${MCP_PATH}`);
+    const mcpUrl = `http://${HOSTNAME}:${mcp.port}${MCP_PATH}`;
+    console.log(`AOP MCP listening on ${mcpUrl}`);
     console.log(`Config: ${configPath()}`);
     console.log(`Database: ${dbPath()}`);
 
@@ -79,7 +80,7 @@ export async function runServer(argv: string[], usage: string): Promise<void> {
     // SIGHUP is a closed terminal, and on Windows SIGBREAK is Ctrl+Break.
     for (const signal of ["SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK"] as const) process.on(signal, shutdown);
 
-    await orchestrator.start(url);
+    await orchestrator.start(url, mcpUrl);
     // After the orchestrator, so the first children it creates are picked up straight away.
     if (!stopping) scheduler.start();
   } catch (error) {

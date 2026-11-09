@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { EdgeRow, EventView, LinkRow, MessageRow } from "../../src/shared/api.js";
-import { directives, fakeCommand, settle, until, world, type World } from "../server/agents.helpers.js";
+import { directives, fakeCommand, settle, toolCall, until, world, type World } from "../server/agents.helpers.js";
 import { makeRepo } from "../server/helpers.js";
 import { aopInProcess } from "./cli.helpers.js";
 
@@ -41,8 +41,8 @@ describe("the agent commands", () => {
     expect((await aop(["context", node.id])).stdout).toBe(fromEnv.stdout);
   });
 
-  it("next, ask, fail and split need a node from the environment", async () => {
-    for (const args of [["next", "x"], ["ask", "x"], ["fail", "x"], ["split", "start"], ["split", "finish"], ["context"]]) {
+  it("ask, fail and split need a node from the environment", async () => {
+    for (const args of [["ask", "x"], ["fail", "x"], ["split", "start"], ["split", "finish"], ["context"]]) {
       const res = await aop(args);
       expect(res.code).toBe(1);
       expect(res.stderr).toContain("AOP_NODE_ID");
@@ -51,11 +51,10 @@ describe("the agent commands", () => {
 
   it("agent commands are refused on human stages", async () => {
     const node = await parked();
-    const res = await aop(["next", "merged"], { node: node.id });
+    const res = await aop(["ask", "?"], { node: node.id });
     expect(res.code).toBe(1);
-    expect(res.stderr).toContain("human turn");
+    expect(res.stderr).toContain("not an agent stage");
     expect(w.node(node.id).stage).toBe("pr_review");
-    expect((await aop(["ask", "?"], { node: node.id })).code).toBe(1);
   });
 
   it("fail marks the agent's own node failed as the agent, posting the reason", async () => {
@@ -70,14 +69,6 @@ describe("the agent commands", () => {
     const messages = (await w.call<MessageRow[]>("GET", `/nodes/${node.id}/messages`)).body;
     expect(messages.at(-1)).toMatchObject({ author: "agent", stage: "failed", body: "The service it needs is gone" });
     expect((await aop(["fail"], { node: node.id })).code).toBe(2);
-  });
-
-  it("an unavailable outcome lists the ones that are", async () => {
-    const node = await w.create(directives("hang"));
-    await w.runStarted(node.id);
-    const res = await aop(["next", "nonsense"], { node: node.id });
-    expect(res.code).toBe(1);
-    expect(res.stderr).toContain("fixed");
   });
 
   it("everything it writes says actor agent", async () => {
@@ -164,14 +155,14 @@ describe("the agent commands", () => {
   });
 
   it("bad usage is a clear message and exit code 2, with no stack trace", async () => {
-    const bad = [["next"], ["node", "create"], ["edge", "add", "subtask", "a", "b"], ["link", "x", "y"], ["nonsense"], ["next", "--bad"], ["search"], ["ps", "x"], ["reap", "--bad"]];
+    const bad = [["fail"], ["node", "create"], ["edge", "add", "subtask", "a", "b"], ["link", "x", "y"], ["nonsense"], ["ask", "--bad"], ["search"], ["ps", "x"], ["reap", "--bad"]];
     for (const args of bad) {
       const res = await aop(args, { node: "n" });
       expect(res.code, args.join(" ")).toBe(2);
       expect(res.stderr).not.toContain("    at ");
     }
     // Usage comes before the node, so it's the usage that's reported without one.
-    for (const args of [["next"], ["ask", "a", "b"], ["split", "sideways"]]) {
+    for (const args of [["fail"], ["ask", "a", "b"], ["split", "sideways"]]) {
       const res = await aop(args);
       expect(res.code, args.join(" ")).toBe(2);
       expect(res.stderr).toContain("Usage: aop ");
@@ -180,12 +171,12 @@ describe("the agent commands", () => {
 
   it("a usage error shows that command's usage, as the help lists it", async () => {
     const help = (await aop(["help"])).stdout;
-    const option = await aop(["next", "--bad"], { node: "n" });
+    const option = await aop(["ask", "--bad"], { node: "n" });
     expect(option.stderr).toContain("--bad");
-    expect(option.stderr).toContain("Usage: aop next <outcome>");
+    expect(option.stderr).toContain('Usage: aop ask "..."');
     const edge = await aop(["edge", "add"]);
     expect(edge.stderr).toBe("Usage: aop edge add blocks <from> <to>\n       aop edge remove blocks <from> <to>\n");
-    for (const line of ["aop next <outcome>", "aop edge add blocks <from> <to>", "aop edge remove blocks <from> <to>", "aop ps"]) {
+    for (const line of ['aop ask "..."', "aop edge add blocks <from> <to>", "aop edge remove blocks <from> <to>", "aop ps"]) {
       expect(help).toContain(`\n  ${line}\n`);
     }
   });
@@ -376,9 +367,9 @@ describe("the human commands", () => {
       useCommands(session("in.json", 7));
       expect((await aop(["steer", node.id])).code).toBe(7);
       // Human stages can only be passed from the UI, even in a steered session.
-      const refused = await aop(["next", "merged"], { node: node.id });
+      const refused = await aop(["ask", "?"], { node: node.id });
       expect(refused.code).toBe(1);
-      expect(refused.stderr).toContain("human turn");
+      expect(refused.stderr).toContain("not an agent stage");
     });
 
     it("a human claim keeps agents off, and releasing lets them on", async () => {
@@ -389,7 +380,7 @@ describe("the human commands", () => {
       await settle(1_000);
       expect(w.runs(node.id)).toEqual([]);
       writeFileSync(join(w.home, "config.yaml"), `agent_session_command: ${JSON.stringify(fakeCommand)}\nstages: ./stages.yaml\n`);
-      await w.call("PATCH", `/nodes/${node.id}`, { body: directives('aop ["next","fixed"]') });
+      await w.call("PATCH", `/nodes/${node.id}`, { body: directives(toolCall("next", { outcome: "fixed" })) });
       await w.call("POST", `/nodes/${node.id}/release`);
       await w.atStage(node.id, "done");
     });

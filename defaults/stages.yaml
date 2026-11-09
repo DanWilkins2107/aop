@@ -4,7 +4,7 @@
 # - A stage has `turn: agent` or `turn: human` and an optional `color`. Agent stages need a
 #   `prompt`, a file inside this file's folder.
 # - A type is a small graph: its `start` stage, and each stage's `next`, mapping an outcome (an
-#   agent's `aop next <outcome>`, or a human's button) to a stage in the type, another type
+#   agent's `next` tool call, or a human's button) to a stage in the type, another type
 #   (entering at its start), `done` or `broken_down`. `next` lives on the type, so one stage can
 #   be used in several types.
 # - Built-in names are reserved: done, broken_down, invalidated, ask_human_question, failed,

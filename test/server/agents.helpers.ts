@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { expect, onTestFinished } from "vitest";
 import { ChangeFeed } from "../../src/server/changes.js";
 import { openDb, type Db } from "../../src/server/db.js";
+import { MCP_PATH, startMcpServer } from "../../src/mcp/server.js";
 import { Orchestrator } from "../../src/server/orchestrator.js";
 import { aopHome } from "../../src/server/paths.js";
 import { isAlive, killTree } from "../../src/server/osProcesses.js";
@@ -42,6 +43,9 @@ export function fakeConfig(extra = "", command = fakeCommand): string {
 
 export const directives = (...lines: string[]) => lines.map((line) => `@@${line}`).join("\n");
 
+/** A `@@tool` directive's text: an MCP tool call on the agent's own node, such as `toolCall("next", { outcome: "fixed" })`. */
+export const toolCall = (name: string, args: Record<string, unknown> = {}) => `tool ${name} ${JSON.stringify({ node_id: "$NODE", ...args })}`;
+
 /**
  * Gives the system time to do something it mustn't, before checking that it didn't. Only for that: wait
  * for something that should happen with `until` or `expect.poll`, which wait no longer than they need.
@@ -74,6 +78,8 @@ export interface World {
   repo: string;
   db: Db;
   url: string;
+  /** The MCP endpoint, which fake agents reach through `AOP_MCP_URL` for `@@tool`. */
+  mcpUrl: string;
   projectId: string;
   orchestrator: Orchestrator;
   file(name: string): string;
@@ -164,14 +170,18 @@ export async function world(
   undo.push(() => server.close());
   const url = `http://127.0.0.1:${server.port}`;
   process.env["AOP_URL"] = url;
+  const mcp = await startMcpServer(db, 0, { changes, orchestrator: proxy });
+  undo.push(() => mcp.close());
+  const mcpUrl = `http://127.0.0.1:${mcp.port}${MCP_PATH}`;
   undo.push(() => holder.current.shutdown());
-  await holder.current.start(url);
+  await holder.current.start(url, mcpUrl);
 
   const self: World = {
     home,
     repo,
     db,
     url,
+    mcpUrl,
     projectId: project.id,
     get orchestrator() {
       return holder.current;
@@ -230,7 +240,7 @@ export async function world(
     async restartOrchestrator({ graceMs } = {}) {
       await holder.current.shutdown();
       holder.current = makeOrchestrator(graceMs);
-      await holder.current.start(url);
+      await holder.current.start(url, mcpUrl);
     },
     close,
   };

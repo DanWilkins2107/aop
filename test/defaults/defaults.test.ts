@@ -1,6 +1,7 @@
 import { cpSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { TOOLS } from "../../src/mcp/tools/index.js";
 import { loadConfig } from "../../src/server/config.js";
 import { aopHome } from "../../src/server/paths.js";
 import { ROOT } from "../server/agents.helpers.js";
@@ -121,6 +122,20 @@ describe("plugin and prompts", () => {
         }
       }
     }
+  });
+
+  // The text always names an MCP tool as "the `next` tool": a backticked name, then "tool".
+  it("only name MCP tools the server has, each as `<name>` tool", () => {
+    const tools = new Set(TOOLS.map((t) => t.name));
+    const texts = markdownFiles().map((file) => ({ file, text: readFileSync(file, "utf8") }));
+    const mentions = texts.flatMap(({ file, text }) => [...text.matchAll(/`([a-z_]+)` tools?\b/g)].map((m) => ({ file, name: m[1]! })));
+    expect(mentions.length).toBeGreaterThan(5);
+    for (const { file, name } of mentions) expect(tools, `${file}: \`${name}\` tool isn't an MCP tool`).toContain(name);
+    // A tool's bare name would slip past the check above.
+    const bare = texts.flatMap(({ file, text }) =>
+      [...tools].filter((name) => new RegExp(`\`${name}\`(?! tool)`).test(text)).map((name) => `${file}: \`${name}\``),
+    );
+    expect(bare, 'write a tool as "the `<name>` tool"').toEqual([]);
   });
 
   it("have valid manifests", () => {

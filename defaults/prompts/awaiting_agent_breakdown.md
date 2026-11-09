@@ -9,10 +9,10 @@ Decide what this node is, then take exactly one outcome.
 - Direction unclear, or the description too thin to size? `aop ask "..."` rather than guessing.
 
 ## Route
-- **One PR:** one coherent change, roughly 200-300 changed lines or fewer. Post a 1-line handover, then `aop next ready`.
-- **Bigger than one PR:** propose a split (below), then `aop next split`. Don't create children yet.
-- **Only a human can do it** (accounts, payments, third-party consoles, anything physical): post ~3 lines: what the human must do, where (account, console, link), and what to hand back or what it unblocks. Then `aop next human_only`.
-- **A choice, not work** (which approach, whether to do it at all): post a 1-line handover naming the choice, then `aop next decision`. The next stage sets out the options.
+- **One PR:** one coherent change, roughly 200-300 changed lines or fewer. Post a 1-line handover, then the `next` tool with outcome `ready`.
+- **Bigger than one PR:** propose a split (below), then the `next` tool with outcome `split`. Don't create children yet.
+- **Only a human can do it** (accounts, payments, third-party consoles, anything physical): post ~3 lines: what the human must do, where (account, console, link), and what to hand back or what it unblocks. Then the `next` tool with outcome `human_only`.
+- **A choice, not work** (which approach, whether to do it at all): post a 1-line handover naming the choice, then the `next` tool with outcome `decision`. The next stage sets out the options.
 
 When unsure between one PR and a split, split. Too-small pieces are fine; too-large ones are hard to review.
 

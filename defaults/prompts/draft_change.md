@@ -14,4 +14,4 @@ This node asks for a change to how agents work: a skill, or a stage prompt. Draf
 - Check that `aop proposals` lists exactly the files you meant.
 
 ## Finish
-Post a 1-3 line summary of what changes and why, then `aop next drafted`.
+Post a 1-3 line summary of what changes and why, then the `next` tool with outcome `drafted`.

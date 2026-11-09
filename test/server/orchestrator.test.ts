@@ -6,7 +6,7 @@ import { isAlive, waitGone } from "../../src/server/osProcesses.js";
 import { deleteProject } from "../../src/server/projects.js";
 import { listProcesses } from "../../src/server/runs.js";
 import type { EventView, MessageRow, NodeView, RunView } from "../../src/shared/api.js";
-import { directives, settle, until, world, type World } from "./agents.helpers.js";
+import { directives, settle, toolCall, until, world, type World } from "./agents.helpers.js";
 import { makeRepo, STAGES_YAML } from "./helpers.js";
 
 const TIMEOUT = { timeout: 90_000 };
@@ -24,7 +24,7 @@ const POLL = { timeout: 10_000, interval: 50 };
 describe("starting", () => {
   it("launches the command in the project's path, with the prompt on stdin only", TIMEOUT, async () => {
     w = await world();
-    const node = await w.create(directives(`record ${w.file("r.json")}`, 'aop ["next","fixed"]'), { title: "Prompted node" });
+    const node = await w.create(directives(`record ${w.file("r.json")}`, toolCall("next", { outcome: "fixed" })), { title: "Prompted node" });
     await w.atStage(node.id, "done");
     const seen = recorded("r.json");
 
@@ -33,6 +33,7 @@ describe("starting", () => {
     expect(seen.cwd.toLowerCase()).toBe(w.repo.toLowerCase());
     expect(seen.env["AOP_NODE_ID"]).toBe(node.id);
     expect(seen.env["AOP_URL"]).toBe(w.url);
+    expect(seen.env["AOP_MCP_URL"]).toBe(w.mcpUrl);
     expect(seen.stdin.indexOf("aop-rulebook")).toBeGreaterThanOrEqual(0);
     expect(seen.stdin.indexOf("aop-context")).toBeGreaterThanOrEqual(0);
     expect(seen.stdin.indexOf("Prompted node")).toBeGreaterThan(seen.stdin.indexOf("aop-rulebook"));
@@ -53,7 +54,7 @@ describe("starting", () => {
     const res = await w.call<NodeView>("POST", `/projects/${project.body.id}/nodes`, {
       type: "hotfix",
       title: "t",
-      body: directives(`record ${w.file("r.json")}`, 'aop ["next","fixed"]'),
+      body: directives(`record ${w.file("r.json")}`, toolCall("next", { outcome: "fixed" })),
     });
     await w.atStage(res.body.id, "done");
     expect(recorded("r.json").cwd.toLowerCase()).toBe(openFrom.toLowerCase());
@@ -61,7 +62,7 @@ describe("starting", () => {
 
   it("doesn't start a human stage, a claimed node, or a blocked one until that clears", TIMEOUT, async () => {
     w = await world();
-    const go = directives('aop ["next","fixed"]');
+    const go = directives(toolCall("next", { outcome: "fixed" }));
     const human = await w.create(go, { type: "dev", stage: "spec_review" });
     const blocker = await w.create(go, { type: "dev", stage: "spec_review" });
 
@@ -97,7 +98,7 @@ describe("starting", () => {
     const before = await w.create(directives("hang"));
     await w.runStarted(before.id);
     const stagesFile = join(w.home, "stages.yaml");
-    const created = await w.create(directives('aop ["next","fixed"]'), { stage: "pr_review", type: "dev" });
+    const created = await w.create(directives(toolCall("next", { outcome: "fixed" })), { stage: "pr_review", type: "dev" });
     writeFileSync(stagesFile, "not: valid\n");
     // Direct, because the API won't take stage changes while the file is invalid.
     w.db.prepare("UPDATE nodes SET stage = 'implement', type = 'hotfix' WHERE id = ?").run(created.id);
@@ -126,7 +127,7 @@ describe("starting", () => {
     w = await world();
     const canary = w.file("pwned.txt");
     const hostile = `x" & echo pwned > "${canary}" & "; touch "${canary}"; $(touch "${canary}")`;
-    const node = await w.create(`${hostile}\n${directives(`record ${w.file("r.json")}`, 'aop ["next","fixed"]')}`, {
+    const node = await w.create(`${hostile}\n${directives(`record ${w.file("r.json")}`, toolCall("next", { outcome: "fixed" }))}`, {
       title: 'x" & echo pwned & "; echo pwned; $(echo pwned)',
     });
     await w.atStage(node.id, "done");
@@ -139,7 +140,7 @@ describe("starting", () => {
 describe("how a run ends", () => {
   it("next: moves on, releases the claim and records the outcome", TIMEOUT, async () => {
     w = await world();
-    const node = await w.create(directives('aop ["next","fixed"]'));
+    const node = await w.create(directives(toolCall("next", { outcome: "fixed" })));
     await w.atStage(node.id, "done");
     const [run] = await w.runsEnded(node.id);
     expect(run).toMatchObject({ status: "exited", end_reason: "reported", exit_code: 0 });
@@ -185,7 +186,7 @@ describe("how a run ends", () => {
 
   it("an outcome that isn't in next is refused, so the run still fails", TIMEOUT, async () => {
     w = await world();
-    const node = await w.create(directives('aop ["next","nonsense"]'));
+    const node = await w.create(directives(toolCall("next", { outcome: "nonsense" })));
     await w.atStage(node.id, "failed");
     const [run] = await w.runsEnded(node.id);
     await expect.poll(() => logOf(run!.id), POLL).toContain("isn't available");
@@ -267,8 +268,8 @@ describe("stopping", () => {
     const node = await w.create(
       directives(
         `ifnot Stage: write_spec :: pid ${w.file("agent.pid")}`,
-        'ifnot Stage: write_spec :: aop ["next","fixed"]',
-        'ifnot Stage: write_spec :: aop ["next","again"]',
+        `ifnot Stage: write_spec :: ${toolCall("next", { outcome: "fixed" })}`,
+        `ifnot Stage: write_spec :: ${toolCall("next", { outcome: "again" })}`,
         "ifnot Stage: write_spec :: hang",
         "hang",
       ),
@@ -313,7 +314,7 @@ describe("stopping", () => {
 
   it("refuses to stop a run that isn't running", TIMEOUT, async () => {
     w = await world();
-    const node = await w.create(directives('aop ["next","fixed"]'));
+    const node = await w.create(directives(toolCall("next", { outcome: "fixed" })));
     const [run] = await w.runsEnded(node.id);
     expect((await w.call("POST", `/runs/${run!.id}/stop`)).status).toBe(409);
     expect((await w.call("POST", "/runs/nope/stop")).status).toBe(409);
@@ -416,7 +417,7 @@ describe("stopping", () => {
   it("clears up a child an agent left behind when it exited by itself", TIMEOUT, async () => {
     // A long grace period, so that it's the exit being tested and not the stop that would follow.
     w = await world({ graceMs: 60_000 });
-    const node = await w.create(directives(`child ${w.file("child.pid")}`, 'aop ["next","fixed"]'));
+    const node = await w.create(directives(`child ${w.file("child.pid")}`, toolCall("next", { outcome: "fixed" })));
     const child = await w.pidFrom("child.pid");
     await w.atStage(node.id, "done");
     expect(await waitGone(child, 15_000)).toBe(true);
@@ -427,7 +428,7 @@ describe("stopping", () => {
     const bystander = await w.create(directives(`pid ${w.file("bystander.pid")}`, `child ${w.file("bystander-child.pid")}`, "hang"));
     // The grandchild's parent has exited before the agent does, so no parent link reaches it.
     const node = await w.create(
-      directives(`child ${w.file("child.pid")}`, `grandchild ${w.file("grandchild.pid")}`, "sleep 4000", `grandchild ${w.file("late.pid")}`, 'aop ["next","fixed"]'),
+      directives(`child ${w.file("child.pid")}`, `grandchild ${w.file("grandchild.pid")}`, "sleep 4000", `grandchild ${w.file("late.pid")}`, toolCall("next", { outcome: "fixed" })),
     );
     const [child, grandchild] = [await w.pidFrom("child.pid"), await w.pidFrom("grandchild.pid")];
     // Orphaned, and alive until the agent's run ends.
@@ -526,7 +527,7 @@ describe("splitting", () => {
       type: "hotfix",
       title: "Survives the failure",
       parent_id: parent.id,
-      body: directives('aop ["next","fixed"]'),
+      body: directives(toolCall("next", { outcome: "fixed" })),
     });
     await w.atStage(parent.id, "failed");
     expect(w.node(parent.id).return_stage).toBe("splitting");
@@ -557,7 +558,7 @@ describe("splitting", () => {
       type: "hotfix",
       title: "Waits for the answer",
       parent_id: parent.id,
-      body: directives('aop ["next","fixed"]'),
+      body: directives(toolCall("next", { outcome: "fixed" })),
     });
     await settle();
     expect(w.runs(child.body.id)).toEqual([]);
@@ -577,7 +578,7 @@ describe("asking", () => {
         `ifnot Use the blue one :: aop ["ask","Which colour?"]`,
         `ifnot Use the blue one :: exit 0`,
         `record ${w.file("second.json")}`,
-        'aop ["next","fixed"]',
+        toolCall("next", { outcome: "fixed" }),
       ),
     );
     await w.atStage(node.id, "ask_human_question");
@@ -601,7 +602,7 @@ describe("asking", () => {
     const node = await w.create(directives("exit 1"));
     await w.atStage(node.id, "failed");
     await w.runsEnded(node.id);
-    await w.call("PATCH", `/nodes/${node.id}`, { body: directives('aop ["next","fixed"]') });
+    await w.call("PATCH", `/nodes/${node.id}`, { body: directives(toolCall("next", { outcome: "fixed" })) });
     await w.call("POST", `/nodes/${node.id}/retry`);
     await w.atStage(node.id, "done");
     expect(w.runs(node.id)).toHaveLength(2);

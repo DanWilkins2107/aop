@@ -5,7 +5,7 @@ import { agentToolFor, HEADLESS_AGENT_FLAGS, readableLines, StreamJsonUsage } fr
 import { aopHome } from "../../src/server/paths.js";
 import { decideRunEnd, LOST_RUN_REASON, type RunEndInput, type RunEnding, type StopReason } from "../../src/server/runs.js";
 import type { LogTail, RunView } from "../../src/shared/api.js";
-import { directives, until, world, type World } from "./agents.helpers.js";
+import { directives, toolCall, until, world, type World } from "./agents.helpers.js";
 
 const TIMEOUT = { timeout: 90_000 };
 
@@ -208,7 +208,7 @@ describe("runs on a node", () => {
   it("Claude Code gets stream-json, and its runs show context consumed and a readable tail", TIMEOUT, async () => {
     w = await world({ claude: true });
     const node = await w.create(
-      directives(`record ${w.file("r.json")}`, "say Reading the code.", "subagent busy elsewhere", "usage 7 30000 500 90", "say Fixed it.", 'aop ["next","fixed"]'),
+      directives(`record ${w.file("r.json")}`, "say Reading the code.", "subagent busy elsewhere", "usage 7 30000 500 90", "say Fixed it.", toolCall("next", { outcome: "fixed" })),
     );
     await w.atStage(node.id, "done");
     const seen = JSON.parse(readFileSync(w.file("r.json"), "utf8")) as { argv: string[] };
@@ -216,7 +216,7 @@ describe("runs on a node", () => {
 
     const [run] = await w.runsEnded(node.id);
     expect(run).toMatchObject({ output_format: "stream-json" });
-    // The aop call is the latest main turn, with the usage set before it. The subagent's is ignored.
+    // The tool call is the latest main turn, with the usage set before it. The subagent's is ignored.
     const runs = await eventually("usage to be recorded", async () => {
       const found = await runsOf(node.id);
       return found[0]?.output_tokens === 41 + 90 + 90 ? found : null;
@@ -230,9 +230,9 @@ describe("runs on a node", () => {
     expect(tail.status).toBe(200);
     expect(tail.body.running).toBe(false);
     expect(tail.body.lines).toEqual(
-      expect.arrayContaining(["Session started, claude-fake-1", "Reading the code.", "Fixed it.", "Running aop next.", "Result:"]),
+      expect.arrayContaining(["Session started, claude-fake-1", "Reading the code.", "Fixed it.", "Calling next.", "Result:"]),
     );
-    expect(tail.body.lines.some((line) => line.startsWith('→ Bash: aop "next" "fixed"'))).toBe(true);
+    expect(tail.body.lines.some((line) => line.startsWith("→ mcp__aop__next"))).toBe(true);
     expect(tail.body.lines.join("\n")).not.toContain("busy elsewhere");
     expect(tail.body.lines.every((line) => !line.startsWith("{"))).toBe(true);
     // The log itself keeps the raw stream.
