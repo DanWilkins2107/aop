@@ -10,23 +10,17 @@ AOP is a board of task **nodes** shared by humans and agents. It launched you on
 - **Node:** a piece of work with a title, description, messages, links and edges. Nodes form a tree (parent to children) and can block each other.
 - **Stage:** where a node is. Each stage is a human's turn or an agent's turn. Your stage prompt says what to do here.
 - **Type:** a small graph of stages, such as `triage` or `dev`. The node carries on through types with one history.
-- **Outcome:** how you leave a stage. Only the outcomes listed under "Moving on" in `aop context` are accepted.
+- **Outcome:** how you leave a stage. Only the outcomes listed under "Moving on" in the `context` tool's text are accepted.
 
 ## Start here
-Run `aop context` first. It shows the node's ancestors, children, siblings, blocks, description, messages, links and outcomes. Your prompt already includes a copy, but run it again after a split or a long task.
+Call the `context` tool first. It shows the node's ancestors, children, siblings, blocks, description, messages, links and outcomes. Your prompt already includes a copy, but call it again after a split or a long task.
 
-## Commands
-Commands act on your own node (`AOP_NODE_ID`) unless they take an ID. You can only move your own node.
-
-| Command | Use |
-|---|---|
-| `aop context [<id>]` | Read a node. Without an ID, your own |
-
-### MCP tools
-These come from AOP's MCP server. Each takes your node's ID as `node_id`: the `Node:` line of `aop context`. Write tools also take your run ID as `run_id`: the `Run:` line of your prompt, or `AOP_RUN_ID` in a session `aop steer` opened. A write with an ended run's ID is refused.
+## MCP tools
+These come from AOP's MCP server. You can only move your own node. Each takes your node's ID as `node_id`: the `Node:` line in your prompt. Write tools also take your run ID as `run_id`: the `Run:` line of your prompt, or `AOP_RUN_ID` in a session `aop steer` opened. A write with an ended run's ID is refused.
 
 | Tool | Use |
 |---|---|
+| `context` tool with `node_id` | Read any node, such as one found by search |
 | `next` tool with `outcome` | Finish the stage with one outcome. Then exit |
 | `message` tool with `body` | Post a message. Any node's ID as `node_id` posts it there instead |
 | `fail` tool with `reason` | Mark your node failed, only when the work can't be done and asking won't help. Then exit |
@@ -51,7 +45,7 @@ An **improvement** is a node that changes how agents work: a skill or a stage pr
 | `apply` tool (with `into` at `raise_pr`) | Write the proposals: to the real files at `save_locally`, or into a worktree at `raise_pr` |
 
 ## Notes
-- Your node's ID is on the `Node:` line of `aop context`.
+- Your node's ID is on the `Node:` line in your prompt.
 - The `next` tool, the `ask` tool and the `fail` tool end your turn. Stop working once you've used one.
 - Exiting without the `next` tool or the `ask` tool marks the node failed, so always finish with one.
 - Every edit is recorded, so act on other nodes only when your stage needs it.

@@ -42,7 +42,7 @@ export async function aopInProcess(args: string[], env: Record<string, string> =
   return result;
 }
 
-/** The real `aop` entry point in its own process, as an agent would run it. Slow: only for smoke tests. */
+/** The real `aop` entry point in its own process, as a shell would run it. Slow: only for smoke tests. */
 export function aopSpawned(args: string[], env: Record<string, string> = {}): Promise<CliResult> {
   const child = spawn(process.execPath, [...nodeArgs("src/cli/main.ts"), ...args], {
     env: cliEnv(env),

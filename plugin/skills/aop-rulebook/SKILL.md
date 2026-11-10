@@ -13,7 +13,7 @@ Apply these on every stage, on top of the stage prompt.
 - Write PRs and commits as if no board existed. The work stands on its own.
 
 ## Before starting
-- Run `aop context`.
+- Call the `context` tool.
 - Use the `search` tool for related work, decisions and earlier attempts. Invalidated nodes are useful: they say what was tried and why it was wrong.
 - Read the human's messages on the node. Approvals often come with small changes.
 

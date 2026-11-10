@@ -9,7 +9,7 @@ A human approved the split proposed in this node's messages. Read their reply: a
    - Human-only: `stage` `human_only_action`, with a ~3-line body: what to do, where (account, console, link), and what to hand back or unblock.
 3. Add the agreed blocks between children with the `edge_add` tool.
 4. Move this node's blocks to the children they apply to (the `edge_remove` tool, then the `edge_add` tool). Use as few edges as needed.
-5. Check with `aop context`, post a 1-line handover with the `message` tool, then the `split_finish` tool.
+5. Check with the `context` tool, post a 1-line handover with the `message` tool, then the `split_finish` tool.
 
 Keep each other child to a title and a one-line body, or a few bullets at most. Detail belongs in the child's own stages, and writing it twice means the human reads it twice.
 

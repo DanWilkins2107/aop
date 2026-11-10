@@ -4,7 +4,6 @@
 import { spawn } from "node:child_process";
 import { parseArgs, type ParseArgsConfig } from "node:util";
 import {
-  RUN_ID_HEADER,
   type ActorRequest,
   type AddProjectRequest,
   type AgentProcessView,
@@ -39,9 +38,6 @@ interface Ctx {
 }
 
 /** Each command's usage, for both the help and its own usage errors, so the two can't drift apart. */
-export const AGENT_COMMANDS = {
-  context: ["aop context [<id>]"],
-} as const;
 export const HUMAN_COMMANDS = {
   init: [
     "aop init [--yes] [--fill-missing] [--if-new] [--agent-session-command <cmd>] [--out-of-sandbox-command <cmd>] [--open-from <dir>] [--create-open-from] [--agent-timeout-minutes <n>] [--stages <file>] [--improvements-path <dir>]",
@@ -56,7 +52,6 @@ export const HUMAN_COMMANDS = {
   reap: ["aop reap"],
 } as const;
 type Usage = readonly string[];
-const COMMANDS: Record<keyof typeof AGENT_COMMANDS | keyof typeof HUMAN_COMMANDS, Usage> = { ...AGENT_COMMANDS, ...HUMAN_COMMANDS };
 
 const listed = (commands: Record<string, Usage>) =>
   Object.values(commands)
@@ -66,12 +61,9 @@ const listed = (commands: Record<string, Usage>) =>
 
 const USAGE = `aop: agent orchestration platform
 
-Agent commands that remain while agents move to MCP, acting on AOP_NODE_ID:
-${listed(AGENT_COMMANDS)}
-Agents use AOP's MCP server at http://127.0.0.1:${MCP_PORT}/mcp.
-
-For humans:
 ${listed(HUMAN_COMMANDS)}
+
+Agents use AOP's MCP server at http://127.0.0.1:${MCP_PORT}/mcp.
 
 Finds the server through AOP_URL, or AOP_PORT on localhost, or else port ${DEFAULT_PORT}.`;
 
@@ -79,9 +71,7 @@ Finds the server through AOP_URL, or AOP_PORT on localhost, or else port ${DEFAU
 const usageError = (usage: Usage, problem?: string) =>
   new UsageError(`${problem === undefined ? "" : `${problem}\n`}Usage: ${usage.join("\n       ")}`);
 
-/** The commands agents use all say so. `actor` is self-reported, and these are the agent's commands. */
-const ACTOR = "agent";
-/** The human commands say so instead, and always name their node rather than reading AOP_NODE_ID. */
+/** Every command is a human's, and names its node rather than reading AOP_NODE_ID. `actor` is self-reported. */
 const HUMAN = "human";
 /** How much of a log `aop logs` prints unless asked for more or less. */
 const DEFAULT_LOG_LINES = 50;
@@ -109,10 +99,7 @@ function apiError(text: string): { message: string; details?: unknown } | undefi
 async function call(c: Ctx, method: string, path: string, body?: unknown): Promise<{ type: string; text: string }> {
   const headers: Record<string, string> = {};
   const init: RequestInit = { method, headers };
-  // Set only in a session AOP or `aop steer` opened, so the server can tell this run or session from
-  // one that has ended.
-  const runId = c.env["AOP_RUN_ID"];
-  if (runId) headers[RUN_ID_HEADER] = runId;
+  // No run ID, even where AOP_RUN_ID is set: every command is the human's, not the run's or session's.
   if (body !== undefined) {
     headers["content-type"] = "application/json";
     init.body = JSON.stringify(body);
@@ -133,7 +120,7 @@ async function call(c: Ctx, method: string, path: string, body?: unknown): Promi
   return { type: response.headers.get("content-type") ?? "", text };
 }
 
-/** Every route the CLI uses answers JSON, except a node's context. */
+/** Every route the CLI uses answers JSON. */
 async function send<T>(c: Ctx, method: string, path: string, body?: unknown): Promise<T> {
   const { type, text } = await call(c, method, path, body);
   if (!type.includes("json")) throw notTheApi(c);
@@ -142,19 +129,6 @@ async function send<T>(c: Ctx, method: string, path: string, body?: unknown): Pr
   } catch {
     throw notTheApi(c);
   }
-}
-
-async function sendForText(c: Ctx, path: string): Promise<string> {
-  const { type, text } = await call(c, "GET", path);
-  if (!type.startsWith("text/plain")) throw notTheApi(c);
-  return text;
-}
-
-/** The node this session is working on. An agent can only move its own, so it's never an argument. */
-function ownNode(c: Ctx): string {
-  const id = c.env["AOP_NODE_ID"];
-  if (!id) throw new CliFailure("AOP_NODE_ID isn't set. This command only works in a session AOP or `aop steer` opened.");
-  return id;
 }
 
 /** Reads the options of one command. A bad option is a usage error, not a stack trace. */
@@ -179,8 +153,8 @@ function none(argv: string[], usage: Usage): void {
 
 
 async function steerCommand(c: Ctx, argv: string[]): Promise<number> {
-  const { values, positionals } = args(argv, COMMANDS.steer, { "no-sandbox": { type: "boolean" } });
-  const id = only(positionals, COMMANDS.steer);
+  const { values, positionals } = args(argv, HUMAN_COMMANDS.steer, { "no-sandbox": { type: "boolean" } });
+  const id = only(positionals, HUMAN_COMMANDS.steer);
   const session = await send<SteerSession>(c, "POST", apiPaths.nodeAction(id, "steer"), { no_sandbox: values["no-sandbox"] === true } satisfies SteerRequest);
   c.log(`Claimed ${id}. Opening a session in ${session.cwd}. Release the claim in the UI or with \`aop release ${id}\` when you're done.`);
   c.log(`Run ID for this session: ${session.steer_id}. Tell your agent to pass it as run_id. It works until you release the claim.`);
@@ -201,7 +175,7 @@ async function steerCommand(c: Ctx, argv: string[]): Promise<number> {
 
 /** Stops the agent running on a node, as the UI's Stop run does. The node stays put, claimed by the human. */
 async function stopCommand(c: Ctx, argv: string[]): Promise<void> {
-  const id = only(args(argv, COMMANDS.stop, {}).positionals, COMMANDS.stop);
+  const id = only(args(argv, HUMAN_COMMANDS.stop, {}).positionals, HUMAN_COMMANDS.stop);
   const node = await send<NodeView>(c, "GET", apiPaths.node(id));
   if (node.run_id === null) throw new CliFailure(`No agent is running on ${id}`);
   const stopped = await send<NodeView>(c, "POST", apiPaths.run(node.run_id, "stop"));
@@ -209,7 +183,7 @@ async function stopCommand(c: Ctx, argv: string[]): Promise<void> {
 }
 
 async function releaseCommand(c: Ctx, argv: string[]): Promise<void> {
-  const id = only(args(argv, COMMANDS.release, {}).positionals, COMMANDS.release);
+  const id = only(args(argv, HUMAN_COMMANDS.release, {}).positionals, HUMAN_COMMANDS.release);
   await send<NodeView>(c, "POST", apiPaths.nodeAction(id, "release"), { actor: HUMAN } satisfies ActorRequest);
   c.log(`Released ${id}`);
 }
@@ -219,7 +193,7 @@ async function releaseCommand(c: Ctx, argv: string[]): Promise<void> {
  * output, which for stream-json means its text rather than the raw events.
  */
 async function logsCommand(c: Ctx, argv: string[]): Promise<void> {
-  const usage = COMMANDS.logs;
+  const usage = HUMAN_COMMANDS.logs;
   const { values, positionals } = args(argv, usage, { lines: { type: "string" } });
   const id = only(positionals, usage);
   const lines = values.lines === undefined ? DEFAULT_LOG_LINES : Number(values.lines);
@@ -263,15 +237,9 @@ async function run(c: Ctx, argv: string[]): Promise<number | void> {
     case "-h":
       c.log(USAGE);
       return;
-    case "context": {
-      const { positionals } = args(rest, COMMANDS.context, {});
-      if (positionals.length > 1) throw usageError(COMMANDS.context);
-      c.log(await sendForText(c, apiPaths.nodeAction(positionals[0] ?? ownNode(c), "context")));
-      return;
-    }
     case "project": {
-      const [action, path, ...extra] = args(rest, COMMANDS.project, {}).positionals;
-      if (action !== "add" || path === undefined || extra.length > 0) throw usageError(COMMANDS.project);
+      const [action, path, ...extra] = args(rest, HUMAN_COMMANDS.project, {}).positionals;
+      if (action !== "add" || path === undefined || extra.length > 0) throw usageError(HUMAN_COMMANDS.project);
       const project = await send<ProjectRow>(c, "POST", apiPaths.projects, { repo_path: path } satisfies AddProjectRequest);
       c.log(`Added project "${project.name}" (${project.id})`);
       return;
@@ -280,7 +248,7 @@ async function run(c: Ctx, argv: string[]): Promise<number | void> {
       // Loaded here because every other command only talks HTTP, and shouldn't need the database's native module.
       const { runServer } = await import("../server/serve.js");
       // The server belongs to the process, so it prints, and sets the exit code, there.
-      await runServer(rest, usageError(COMMANDS.serve).message);
+      await runServer(rest, usageError(HUMAN_COMMANDS.serve).message);
       return Number(process.exitCode ?? 0);
     }
     case "steer":
@@ -292,16 +260,16 @@ async function run(c: Ctx, argv: string[]): Promise<number | void> {
     case "logs":
       return logsCommand(c, rest);
     case "ps":
-      none(rest, COMMANDS.ps);
+      none(rest, HUMAN_COMMANDS.ps);
       printAgents(c, await send<AgentProcessView[]>(c, "GET", apiPaths.agents));
       return;
     case "reap":
-      none(rest, COMMANDS.reap);
+      none(rest, HUMAN_COMMANDS.reap);
       printReaped(c, await send<ReapResult>(c, "POST", apiPaths.reap));
       return;
     case "init": {
       const { runInit } = await import("./init.js");
-      return runInit(rest, { env: c.env, output: c.io.stdout, errors: c.io.stderr, usage: usageError(COMMANDS.init).message });
+      return runInit(rest, { env: c.env, output: c.io.stdout, errors: c.io.stderr, usage: usageError(HUMAN_COMMANDS.init).message });
     }
     default:
       throw new UsageError(`Unknown command "${command}"\n\n${USAGE}`);
