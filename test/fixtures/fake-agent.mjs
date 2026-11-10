@@ -3,13 +3,11 @@
 // the stage's prompt:
 //
 //   @@record <file>                JSON of the stdin, argv, cwd and AOP_* environment it was given
-//   @@aop ["ps"]                   runs the real `aop` CLI from PATH. "$NODE" is this node's ID, "$RUN"
-//                                  is AOP_RUN_ID, and "$LAST" and "$PREV" are the last two IDs it
-//                                  created
 //   @@tool next {"node_id":"$NODE","outcome":"ready"}
-//                                  calls a tool on AOP's MCP server at AOP_MCP_URL, with the same
-//                                  substitutions in its JSON arguments, and run_id set to
-//                                  AOP_RUN_ID unless they give one
+//                                  calls a tool on AOP's MCP server at AOP_MCP_URL, with run_id set
+//                                  to AOP_RUN_ID unless the arguments give one. In the JSON, "$NODE"
+//                                  is the ID on the prompt's `Node:` line, "$RUN" is AOP_RUN_ID, and
+//                                  "$LAST" and "$PREV" are the last two IDs it created
 //   @@sleep <ms>
 //   @@hang                         never exits by itself
 //   @@exit <code>
@@ -24,8 +22,8 @@
 //
 // Given `--output-format stream-json`, as AOP passes to Claude Code, it writes what Claude Code does:
 // one JSON event per line, from a `system` init event to a `result` event, with `say` as assistant
-// text, `aop` as a Bash tool call and `tool` as an MCP tool call (`mcp__aop__<name>`), each with its result. Each assistant turn reports usage, which grows
-// turn by turn unless set:
+// text and `tool` as an MCP tool call (`mcp__aop__<name>`) with its result. Each assistant turn
+// reports usage, which grows turn by turn unless set:
 //
 //   @@usage <input> <cache_read> <cache_creation> <output>   the usage the next turns report
 //   @@subagent <text>              an assistant turn from a subagent, with its own, larger usage
@@ -108,11 +106,14 @@ const prose = stdin
   .filter((line) => !line.startsWith("@@"))
   .join("\n");
 
+// The node's ID, from the prompt's `Node:` line, as a real agent finds it.
+const nodeId = /^Node: (\S+)/m.exec(stdin)?.[1] ?? "";
+
 const substitute = (text) =>
   text
     .replaceAll("$LAST", lastCreated)
     .replaceAll("$PREV", previousCreated)
-    .replaceAll("$NODE", process.env["AOP_NODE_ID"] ?? "")
+    .replaceAll("$NODE", nodeId)
     .replaceAll("$RUN", process.env["AOP_RUN_ID"] ?? "");
 
 function remember(output) {
@@ -121,23 +122,6 @@ function remember(output) {
     previousCreated = lastCreated;
     lastCreated = created[1];
   }
-}
-
-function runAop(args) {
-  const quoted = args
-    .map(substitute)
-    .map((arg) => `"${arg.replaceAll('"', '\\"')}"`).join(" ");
-  const toolUseId = nextId("toolu");
-  if (streamJson) {
-    assistantTurn([
-      { type: "text", text: `Running aop ${args[0] ?? ""}.` },
-      { type: "tool_use", id: toolUseId, name: "Bash", input: { command: `aop ${quoted}`, description: "Report to AOP" } },
-    ]);
-  }
-  const result = spawnSync(`aop ${quoted}`, { shell: true, encoding: "utf8" });
-  if (streamJson) toolResult(toolUseId, `[fake] aop ${quoted} -> ${result.status}\n${result.stdout}${result.stderr}`, result.status !== 0);
-  else process.stdout.write(`[fake] aop ${quoted} -> ${result.status}\n${result.stdout}${result.stderr}`);
-  remember(result.stdout ?? "");
 }
 
 /** One MCP tool call, as Claude Code makes it. A client per call is fine, since the server is stateless. */
@@ -181,9 +165,6 @@ async function perform(directive) {
           env: Object.fromEntries(Object.entries(process.env).filter(([key]) => key.startsWith("AOP_"))),
         }),
       );
-      return;
-    case "aop":
-      runAop(JSON.parse(rest));
       return;
     case "tool": {
       const [, tool, json = "{}"] = /^(\S+)\s*(.*)$/s.exec(rest) ?? [];

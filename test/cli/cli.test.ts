@@ -14,7 +14,7 @@ beforeEach(async () => {
   w = await world({ config: `out_of_sandbox_command: ${JSON.stringify(fakeCommand + " --out")}\n` });
 });
 
-/** The CLI in-process, with AOP_NODE_ID set if `node` is, as in a session on a node. `cli.smoke.test.ts` runs the real entry point. */
+/** The CLI in-process, with AOP_NODE_ID set if `node` is, which no command reads. `cli.smoke.test.ts` runs the real entry point. */
 const aop = (args: string[], options: { node?: string; env?: Record<string, string> } = {}) =>
   aopInProcess(args, { AOP_URL: w.url, ...(options.node ? { AOP_NODE_ID: options.node } : {}), ...options.env });
 
@@ -189,7 +189,9 @@ describe("the human commands", () => {
       expect(w.node(node.id).claimed_by).toBe("human");
       const seen = JSON.parse(readFileSync(w.file("in.json"), "utf8")) as { cwd: string; node: string; url: string; run: string; args: string[] };
       expect(seen.cwd.toLowerCase()).toBe(w.repo.toLowerCase());
-      expect(seen.node).toBe(node.id);
+      // The node's ID is in the steer output, not the environment.
+      expect(seen.node).toBeUndefined();
+      expect(res.stdout).toContain(node.id);
       expect(seen.url).toBe(w.url);
       expect(seen.args).toEqual([]);
       // The session's own run ID, tied to the claim, printed for the human to pass on.
@@ -209,7 +211,8 @@ describe("the human commands", () => {
       expect((await aop(["steer", node.id, "--no-sandbox"])).code).toBe(0);
       expect(existsSync(w.file("out.json"))).toBe(true);
       expect(existsSync(w.file("in.json"))).toBe(false);
-      expect(readFileSync(w.file("out.json"), "utf8")).toContain(node.id);
+      const steerRow = w.db.prepare("SELECT id FROM steer_sessions WHERE node_id = ? AND ended_at IS NULL").get(node.id) as { id: string };
+      expect((JSON.parse(readFileSync(w.file("out.json"), "utf8")) as { run: string }).run).toBe(steerRow.id);
 
       const other = await parked();
       useCommands(session("in.json"));

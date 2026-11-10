@@ -156,7 +156,7 @@ describe("shutdown", () => {
     const node = createNode(db, project.id, { type: "hotfix", title: "Queued", body: directives("hang"), actor: "human" });
 
     // Ctrl+C while the startup sweep is still going.
-    const starting = orchestrator.start("http://127.0.0.1:9", "http://127.0.0.1:9/mcp");
+    const starting = orchestrator.start("http://127.0.0.1:9/mcp");
     await orchestrator.shutdown();
     await starting;
     await settle(500);
