@@ -1,12 +1,12 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { delimiter, join } from "node:path";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, onTestFinished } from "vitest";
 import { openDb } from "../../src/server/db.js";
 import { isAlive, killTree, readProcessStarts, waitGone } from "../../src/server/osProcesses.js";
 import { listProcesses, recordProcess } from "../../src/server/runs.js";
 import type { AgentProcessView, NodeView, ProjectRow, ReapResult } from "../../src/shared/api.js";
-import { aopShim, directives, fakeConfig, nodeArgs, pidIn, settle, toolCall, until, world, type World } from "./agents.helpers.js";
+import { directives, fakeConfig, nodeArgs, pidIn, settle, toolCall, until, world, type World } from "./agents.helpers.js";
 import { makeHome, makeRepo } from "./helpers.js";
 
 const TIMEOUT = { timeout: 120_000 };
@@ -292,9 +292,9 @@ describe("reap and identity", () => {
 });
 
 /** A real server process, which can really crash. Never on a fixed port, so it can't touch a real one. */
-function realServer(home: string, shim: string) {
+function realServer(home: string) {
   const child = spawn(process.execPath, [...nodeArgs("src/server/main.ts"), "--port", "0"], {
-    env: { ...process.env, AOP_HOME: home, PATH: `${shim}${delimiter}${process.env["PATH"]}` },
+    env: { ...process.env, AOP_HOME: home },
     stdio: "pipe",
     windowsHide: true,
   });
@@ -312,13 +312,12 @@ describe("a real server process", () => {
 
   async function setUp() {
     const home = makeHome({ "config.yaml": fakeConfig() });
-    const shim = aopShim();
-    const first = realServer(home, shim);
+    const first = realServer(home);
     const url = await first.url;
     const post = async <T>(path: string, body: unknown) =>
       (await (await fetch(`${url}/api${path}`, { method: "POST", body: JSON.stringify(body) })).json()) as T;
     const project = await post<ProjectRow>("/projects", { repo_path: makeRepo() });
-    return { home, shim, first, url, post, project };
+    return { home, first, url, post, project };
   }
 
   /** A fake agent's process, killed when the test finishes if a failure left it running. */
@@ -340,7 +339,7 @@ describe("a real server process", () => {
   }
 
   it("after a crash, the next start kills the orphan and fails its node", TIMEOUT, async () => {
-    const { home, shim, first, post, project } = await setUp();
+    const { home, first, post, project } = await setUp();
     const pidFile = join(home, "agent.pid");
     const childFile = join(home, "child.pid");
     const node = await post<NodeView>(`/projects/${project.id}/nodes`, {
@@ -364,7 +363,7 @@ describe("a real server process", () => {
     await first.exited;
     expect(isAlive(pid)).toBe(true);
 
-    const second = realServer(home, shim);
+    const second = realServer(home);
     await second.url;
     try {
       expect(await waitGone(pid, 20_000)).toBe(true);
@@ -378,7 +377,7 @@ describe("a real server process", () => {
   });
 
   it("a crash straight after launch leaves nothing the next start can't find, even what the agent starts later", TIMEOUT, async () => {
-    const { home, shim, first, post, project } = await setUp();
+    const { home, first, post, project } = await setUp();
     const file = (name: string) => join(home, name);
     const node = await post<NodeView>(`/projects/${project.id}/nodes`, {
       type: "hotfix",
@@ -409,7 +408,7 @@ describe("a real server process", () => {
     expect(record.children ?? "").not.toContain(String(pids[1]));
     try {
       expect(pids.map(isAlive)).toEqual([true, true, true]);
-      const second = realServer(home, shim);
+      const second = realServer(home);
       await second.url;
       try {
         for (const pid of pids) expect(await waitGone(pid, 30_000)).toBe(true);
@@ -432,7 +431,7 @@ describe("a real server process", () => {
   });
 
   it("a second server on the same AOP_HOME refuses to start, names the first, and leaves its agents alone", TIMEOUT, async () => {
-    const { home, shim, first, url, post, project } = await setUp();
+    const { home, first, url, post, project } = await setUp();
     const pidFile = join(home, "agent.pid");
     const node = await post<NodeView>(`/projects/${project.id}/nodes`, {
       type: "hotfix",
@@ -447,7 +446,7 @@ describe("a real server process", () => {
       }
     });
     try {
-      const second = realServer(home, shim);
+      const second = realServer(home);
       await second.exited;
       expect(second.child.exitCode).toBe(1);
       expect(second.output()).toContain("Another AOP server is already running");
@@ -467,14 +466,14 @@ describe("a real server process", () => {
     }
 
     // A crash leaves no lock behind: the next server starts.
-    const third = realServer(home, shim);
+    const third = realServer(home);
     await third.url;
     third.child.kill("SIGKILL");
     await third.exited;
   });
 
   it("after a crash where the agent died too, the next start fails its node", TIMEOUT, async () => {
-    const { home, shim, first, post, project } = await setUp();
+    const { home, first, post, project } = await setUp();
     const pidFile = join(home, "agent.pid");
     const node = await post<NodeView>(`/projects/${project.id}/nodes`, {
       type: "hotfix",
@@ -487,7 +486,7 @@ describe("a real server process", () => {
     await killTree(pid);
     await waitGone(pid, 10_000);
 
-    const second = realServer(home, shim);
+    const second = realServer(home);
     await second.url;
     try {
       await until("the node to fail", () => dbNode(home, node.id).stage === "failed");

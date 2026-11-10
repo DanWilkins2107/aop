@@ -1,6 +1,6 @@
 {
   "name": "aop",
-  "description": "Skills that teach agents to work AOP nodes through the aop CLI: context, rules and writing style.",
+  "description": "Skills that teach agents to work AOP nodes through AOP's MCP tools: context, rules and writing style.",
   "version": "0.0.0",
   "author": { "name": "Dan Wilkins" },
   "repository": "https://github.com/DanWilkins2107/aop"

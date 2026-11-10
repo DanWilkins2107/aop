@@ -10,7 +10,7 @@ export class InitFailure extends Error {}
 /** What each setting is for, both when asking for it and in the written config. */
 export const ABOUT = {
   agent_session_command:
-    `This is the session your agents are starting in. Strongly consider having this command start sessions inside a sandbox. The sandbox must allow 127.0.0.1:${MCP_PORT}, AOP's MCP server.`,
+    `This is the session your agents are starting in. It must have AOP's MCP server (http://127.0.0.1:${MCP_PORT}/mcp) configured. Strongly consider having this command start sessions inside a sandbox. The sandbox must allow 127.0.0.1:${MCP_PORT}.`,
   out_of_sandbox_command:
     "Sometimes you may need to run and supervise a session that runs outside of a sandbox (using `aop steer --no-sandbox`). Not needed if you're not running sessions sandboxed.",
   open_from: "Where sessions start for projects with no path.",

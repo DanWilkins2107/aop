@@ -93,7 +93,7 @@ export async function runServer(argv: string[], usage: string): Promise<void> {
     // SIGHUP is a closed terminal, and on Windows SIGBREAK is Ctrl+Break.
     for (const signal of ["SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK"] as const) process.on(signal, shutdown);
 
-    await orchestrator.start(url, mcpUrl);
+    await orchestrator.start(mcpUrl);
     // After the orchestrator, so the first children it creates are picked up straight away.
     if (!stopping) scheduler.start();
   } catch (error) {

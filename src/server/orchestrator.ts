@@ -104,7 +104,6 @@ export class Orchestrator {
   private readonly closingProjects = new Set<string>();
   /** Clear-ups that outlive their run, which shutdown has to wait for. */
   private readonly background = new Set<Promise<unknown>>();
-  private url = "";
   private mcpUrl = "";
   private running = false;
   /** Set for good by `shutdown`, which can come while `start` is still waiting on its first sweep. */
@@ -125,11 +124,9 @@ export class Orchestrator {
   /**
    * Deals with whatever a previous server left behind, then begins starting agents. Before this, no
    * run is active, so every process on record and every `running` row is left over from a crash.
-   * Agents get both URLs. Real ones reach MCP at the fixed port their own config names; the fake
-   * agent in tests uses `AOP_MCP_URL`, because there the port is any free one.
+   * `mcpUrl` goes to agents as `AOP_MCP_URL`.
    */
-  async start(url: string, mcpUrl: string): Promise<void> {
-    this.url = url;
+  async start(mcpUrl: string): Promise<void> {
     this.mcpUrl = mcpUrl;
     prepareSweeps();
     await this.reap();
@@ -238,13 +235,15 @@ export class Orchestrator {
       if (!isFolder(cwd)) throw new Error(`The start folder doesn't exist: ${cwd}`);
       prompt = buildPrompt(this.db, config, node, id);
       // The command is the user's own string, so it may need a shell. Nothing from a node goes in
-      // it: the node's ID goes in the environment and everything else goes in on stdin.
+      // it: the node's context, with its ID and the run's, goes in on stdin.
       child = spawn(command, {
         shell: true,
         cwd,
         // The run's marker is inherited by everything the agent starts, so a crash at any moment,
         // even before anything below has been recorded, leaves its whole tree findable.
-        env: { ...process.env, AOP_NODE_ID: node.id, AOP_URL: this.url, AOP_MCP_URL: this.mcpUrl, [RUN_MARKER]: id },
+        // `AOP_MCP_URL` is read only by the fake agent in tests, where the MCP port is any free one.
+        // Real agents reach MCP at the fixed port their own config names.
+        env: { ...process.env, AOP_MCP_URL: this.mcpUrl, [RUN_MARKER]: id },
         stdio: "pipe",
         windowsHide: true,
         // Its own process group, so that it can be killed along with its children. On Windows the

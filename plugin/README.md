@@ -4,11 +4,16 @@ Skills that teach an agent how to behave on any AOP stage. Stage prompts say wha
 
 | Skill | What it covers |
 |---|---|
-| `aop-context` | What nodes, stages and types are, and every agent-facing `aop` command |
+| `aop-context` | What nodes, stages and types are, and every AOP MCP tool |
 | `aop-rulebook` | Rules for every stage, including keeping AOP out of repos |
 | `aop-brevity` | Writing style and length budgets |
 
-The skills are plain `SKILL.md` files in `skills/`, shared by every tool. Each tool gets a thin manifest beside them. Agents also need `aop` on `PATH`.
+The skills are plain `SKILL.md` files in `skills/`, shared by every tool. Each tool gets a thin manifest beside them.
+
+## MCP server
+Agents also need AOP's MCP server, which `aop serve` runs at `http://127.0.0.1:4319/mcp`. A sandbox must allow `127.0.0.1:4319`.
+- Claude Code: `claude mcp add --scope user --transport http aop http://127.0.0.1:4319/mcp`
+- Copilot: add an HTTP MCP server at `http://127.0.0.1:4319/mcp`. Untested.
 
 ## Claude Code
 ```

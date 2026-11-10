@@ -8,6 +8,7 @@ import { ConfigError } from "../server/errors.js";
 import { aopHome, configPath, resolveConfigPath } from "../server/paths.js";
 import { loadStagesFile, promptFiles } from "../server/stages.js";
 import { parseYamlFile } from "../server/yamlFile.js";
+import { MCP_PORT } from "../shared/port.js";
 import { ABOUT, expandPath, gatherSettings, InitFailure, lineReader, type Settings, type Values } from "./initSettings.js";
 
 /** What `aop init --help` adds under the CLI's usage line. */
@@ -285,9 +286,7 @@ async function init(argv: string[], io: InitIo): Promise<void> {
       "\nAgents run headless, so they can't ask you to approve commands or edits. Consider Claude Code's auto mode: add `--permission-mode auto` to agent_session_command, or set permissions.defaultMode to \"auto\" in ~/.claude/settings.json.",
     );
   }
-  if (findOnPath("aop", io.env, io.platform) === undefined) {
-    say("\nAgents also need `aop` on PATH. Run `npm link` in the AOP package, or install it globally.");
-  }
+  say(`\nAgents need AOP's MCP server. For Claude Code: claude mcp add --scope user --transport http aop http://127.0.0.1:${MCP_PORT}/mcp`);
 }
 
 /** Runs `aop init`. Returns the exit code: 0 done, 1 stopped, 2 bad usage. */

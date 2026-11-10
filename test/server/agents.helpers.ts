@@ -1,5 +1,5 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { delimiter, join, resolve } from "node:path";
+import { mkdirSync, mkdtempSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { expect, onTestFinished } from "vitest";
 import { ChangeFeed } from "../../src/server/changes.js";
@@ -23,15 +23,6 @@ const TSX_LOADER = pathToFileURL(join(ROOT, "node_modules", "tsx", "dist", "load
 /** Runs the real source through tsx, on any platform, as the `aop` command does after `npm link`. */
 export function nodeArgs(script: string): string[] {
   return ["--import", TSX_LOADER, join(ROOT, script)];
-}
-
-/** A folder holding an `aop` command for fake agents to find on PATH. */
-export function aopShim(): string {
-  const folder = mkdtempSync(join(aopHome(), "bin-"));
-  const [imp, loader, main] = nodeArgs("src/cli/main.ts");
-  writeFileSync(join(folder, "aop.cmd"), `@"${process.execPath}" ${imp} "${loader}" "${main}" %*\r\n`);
-  writeFileSync(join(folder, "aop"), `#!/bin/sh\nexec "${process.execPath}" ${imp} "${loader}" "${main}" "$@"\n`, { mode: 0o755 });
-  return folder;
 }
 
 export const fakeCommand = `"${process.execPath}" "${FAKE_AGENT}"`;
@@ -104,15 +95,14 @@ const CLOSE_TIMEOUT_MS = 60_000;
 
 /**
  * A real server and orchestrator on a free port, in a throwaway AOP_HOME, launching fake agents that
- * call AOP's MCP tools (and, while some remain, the CLI). Only ever launches `fakeCommand`, or `fakeClaudeCommand` with `claude`. Call it inside
- * a test or `beforeEach`: it closes itself when the test finishes, pass or fail, and puts the environment
- * back even if it fails to start.
+ * call AOP's MCP tools. Only ever launches `fakeCommand`, or `fakeClaudeCommand` with `claude`. Call it
+ * inside a test or `beforeEach`: it closes itself when the test finishes, pass or fail, and puts the
+ * environment back even if it fails to start.
  */
 export async function world(
   options: { config?: string; graceMs?: number; reconcileIntervalMs?: number; home?: Record<string, string>; claude?: boolean } = {},
 ): Promise<World> {
-  const outer = { home: process.env["AOP_HOME"], path: process.env["PATH"], url: process.env["AOP_URL"] };
-  const shim = aopShim();
+  const outer = { home: process.env["AOP_HOME"], url: process.env["AOP_URL"] };
   const fake = options.claude ? FAKE_CLAUDE : FAKE_AGENT;
   const home = makeHome({ "config.yaml": fakeConfig(options.config, options.claude ? fakeClaudeCommand : fakeCommand), ...options.home });
   expect(readFileSync(join(home, "config.yaml"), "utf8")).toContain(fake.replaceAll("\\", "\\\\"));
@@ -130,10 +120,8 @@ export async function world(
   onTestFinished(close, CLOSE_TIMEOUT_MS);
 
   process.env["AOP_HOME"] = home;
-  process.env["PATH"] = `${shim}${delimiter}${outer.path}`;
   undo.push(() => {
     process.env["AOP_HOME"] = outer.home;
-    process.env["PATH"] = outer.path;
     if (outer.url === undefined) delete process.env["AOP_URL"];
     else process.env["AOP_URL"] = outer.url;
   });
@@ -174,7 +162,7 @@ export async function world(
   undo.push(() => mcp.close());
   const mcpUrl = `http://127.0.0.1:${mcp.port}${MCP_PATH}`;
   undo.push(() => holder.current.shutdown());
-  await holder.current.start(url, mcpUrl);
+  await holder.current.start(mcpUrl);
 
   const self: World = {
     home,
@@ -240,7 +228,7 @@ export async function world(
     async restartOrchestrator({ graceMs } = {}) {
       await holder.current.shutdown();
       holder.current = makeOrchestrator(graceMs);
-      await holder.current.start(url, mcpUrl);
+      await holder.current.start(mcpUrl);
     },
     close,
   };

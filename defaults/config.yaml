@@ -5,7 +5,9 @@
 # prompt on stdin. AOP doesn't ship or check a sandbox, so point this at your own
 # sandboxed wrapper before letting agents run unattended. Agents can't ask you to
 # approve tool use, so consider auto mode: add `--permission-mode auto` here, or set
-# permissions.defaultMode to "auto" in ~/.claude/settings.json.
+# permissions.defaultMode to "auto" in ~/.claude/settings.json. The session must have
+# AOP's MCP server (http://127.0.0.1:4319/mcp) configured, and a sandbox must allow
+# 127.0.0.1:4319.
 agent_session_command: claude
 
 # Optional. Used only by `aop steer <node> --no-sandbox`.

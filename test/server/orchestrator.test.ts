@@ -31,8 +31,8 @@ describe("starting", () => {
     expect(seen.argv).toEqual([HEADLESS_AGENT_FLAGS.other]);
     expect(seen.argv).toEqual(["-p"]);
     expect(seen.cwd.toLowerCase()).toBe(w.repo.toLowerCase());
-    expect(seen.env["AOP_NODE_ID"]).toBe(node.id);
-    expect(seen.env["AOP_URL"]).toBe(w.url);
+    // The node's ID reaches the agent only in its prompt.
+    expect(seen.env["AOP_NODE_ID"]).toBe(process.env["AOP_NODE_ID"]);
     expect(seen.env["AOP_MCP_URL"]).toBe(w.mcpUrl);
     expect(seen.stdin.indexOf("aop-rulebook")).toBeGreaterThanOrEqual(0);
     expect(seen.stdin.indexOf("aop-context")).toBeGreaterThanOrEqual(0);

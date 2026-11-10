@@ -71,7 +71,7 @@ Finds the server through AOP_URL, or AOP_PORT on localhost, or else port ${DEFAU
 const usageError = (usage: Usage, problem?: string) =>
   new UsageError(`${problem === undefined ? "" : `${problem}\n`}Usage: ${usage.join("\n       ")}`);
 
-/** Every command is a human's, and names its node rather than reading AOP_NODE_ID. `actor` is self-reported. */
+/** Every command is a human's, and names its node. `actor` is self-reported. */
 const HUMAN = "human";
 /** How much of a log `aop logs` prints unless asked for more or less. */
 const DEFAULT_LOG_LINES = 50;
@@ -157,15 +157,15 @@ async function steerCommand(c: Ctx, argv: string[]): Promise<number> {
   const id = only(positionals, HUMAN_COMMANDS.steer);
   const session = await send<SteerSession>(c, "POST", apiPaths.nodeAction(id, "steer"), { no_sandbox: values["no-sandbox"] === true } satisfies SteerRequest);
   c.log(`Claimed ${id}. Opening a session in ${session.cwd}. Release the claim in the UI or with \`aop release ${id}\` when you're done.`);
-  c.log(`Run ID for this session: ${session.steer_id}. Tell your agent to pass it as run_id. It works until you release the claim.`);
+  c.log(`Run ID for this session: ${session.steer_id}. Tell your agent to pass it as run_id, with ${id} as node_id. It works until you release the claim.`);
   // The command is the user's own config string, which may need a shell. No node text goes in it.
   // A steered session is the human's, not an agent run, even when steered from inside one: its run
-  // ID is the session's own, tied to the human's claim.
+  // ID is the session's own, tied to the human's claim. AOP_URL is for any `aop` the human runs there.
   const child = spawn(session.command, {
     shell: true,
     cwd: session.cwd,
     stdio: "inherit",
-    env: { ...c.env, AOP_NODE_ID: id, AOP_URL: serverUrl(c), AOP_RUN_ID: session.steer_id },
+    env: { ...c.env, AOP_URL: serverUrl(c), AOP_RUN_ID: session.steer_id },
   });
   return new Promise<number>((done, fail) => {
     child.once("error", (error) => fail(new CliFailure(`Couldn't open the session: ${error.message}`)));
