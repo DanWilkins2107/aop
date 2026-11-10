@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { aopHome } from "../../src/server/paths.js";
-import type { ImprovementView, NodeView } from "../../src/shared/api.js";
+import type { ImprovementView, NodeView, ProposalView } from "../../src/shared/api.js";
 import { CONFIG_YAML } from "../server/helpers.js";
 import { mcpHarness, resultText, type McpHarness } from "./helpers.js";
 
@@ -38,6 +38,9 @@ describe("the apply tool", () => {
     const node = await improvement(m, "save_locally");
     expect(await m.text("apply", { node_id: node.id, run_id: await m.run(node.id) })).toBe(`Wrote ${skill()}`);
     expect(readFileSync(skill(), "utf8")).toBe("New.\n");
+    // Applying keeps the proposals.
+    const proposals = (await m.call<ProposalView[]>("GET", `/api/improvements/${node.id}/proposals`)).body;
+    expect(proposals.map((p) => p.display_path)).toEqual(["write-tests/SKILL.md"]);
   });
 
   it("writes into another checkout at raise_pr, leaving the real files alone", async () => {
@@ -50,6 +53,14 @@ describe("the apply tool", () => {
     expect(await m.text("apply", { node_id: node.id, run_id: await m.run(node.id), into: worktree })).toBe(`Wrote ${written}`);
     expect(readFileSync(written, "utf8")).toBe("New.\n");
     expect(readFileSync(skill(), "utf8")).toBe("Old skill.\n");
+  });
+
+  it("refuses into before raise_pr, saying so", async () => {
+    const m = await mcpHarness(IMPROVEMENTS);
+    const node = await improvement(m, "save_locally");
+    const result = await m.tool("apply", { node_id: node.id, run_id: await m.run(node.id), into: aopHome() });
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toMatch(/The `apply` tool's `into` is only for raise_pr, and this improvement is at save_locally/);
   });
 
   it("refuses a relative into", async () => {

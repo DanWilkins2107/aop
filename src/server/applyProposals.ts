@@ -57,7 +57,7 @@ export function applyProposals(
     for (const proposal of proposals) plan.push({ target: allowedTarget(config, proposal.path), content: proposal.content });
   } else {
     if (node.stage !== RAISE_PR_STAGE) {
-      throw refused(`apply --into is only for ${RAISE_PR_STAGE}, and this improvement is at ${node.stage}`);
+      throw refused(`The \`apply\` tool's \`into\` is only for ${RAISE_PR_STAGE}, and this improvement is at ${node.stage}`);
     }
     if (config.improvementsRepo === null) throw refused(`${config.improvementsDir} isn't inside a git repo`);
     if (!isAbsolute(input.into)) throw badRequest(`into must be a full path: ${input.into}`);

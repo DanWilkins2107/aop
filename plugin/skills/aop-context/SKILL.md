@@ -43,15 +43,12 @@ These come from AOP's MCP server. Each takes your node's ID as `node_id`: the `N
 ### Improvements
 An **improvement** is a node that changes how agents work: a skill or a stage prompt. It belongs to no project. You start in the improvements folder, and you never edit real files: you propose their new contents, a human reviews the diff, and a later stage applies it.
 
-| Command | Use |
-|---|---|
-| `aop apply [--into <checkout>]` | Write the proposals: to the real files at `save_locally`, or into a worktree at `raise_pr` |
-
 | Tool | Use |
 |---|---|
 | `proposals` tool (with `show`) | List the proposals, or print one |
 | `propose` tool with `path` and `content` | Store a file's full proposed contents. `path` is the real file's absolute path. The real file is unchanged |
 | `withdraw_proposal` tool with `path` | Drop that proposal |
+| `apply` tool (with `into` at `raise_pr`) | Write the proposals: to the real files at `save_locally`, or into a worktree at `raise_pr` |
 
 ## Notes
 - Your node's ID is on the `Node:` line of `aop context`.

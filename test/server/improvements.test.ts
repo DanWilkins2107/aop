@@ -483,7 +483,7 @@ describe("stale proposals", () => {
     expect(readFileSync(skill(), "utf8")).toBe("Proposed.\n");
   });
 
-  it("is checked on apply --into too, against the real file", async () => {
+  it("is checked when applying into another checkout too, against the real file", async () => {
     mkdirSync(join(skills(), ".git"));
     const worktree = mkdtempSync(join(aopHome(), "worktree-"));
     mkdirSync(join(worktree, ".git"));

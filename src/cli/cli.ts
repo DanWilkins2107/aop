@@ -2,7 +2,6 @@
 // `main.ts` runs it on the real process. Tests run it in-process through `runCli`, with their own environment and output.
 
 import { spawn } from "node:child_process";
-import { resolve } from "node:path";
 import { parseArgs, type ParseArgsConfig } from "node:util";
 import {
   RUN_ID_HEADER,
@@ -10,8 +9,6 @@ import {
   type AddProjectRequest,
   type AgentProcessView,
   type ApiErrorBody,
-  type ApplyRequest,
-  type ApplyResult,
   type CreateNodeRequest,
   type LogTail,
   type NodeView,
@@ -47,7 +44,6 @@ export const AGENT_COMMANDS = {
   context: ["aop context [<id>]"],
   "node create": ["aop node create --title ... [--body ...] [--parent ...] [--project ...] [--type ... | --stage ...]"],
   split: ["aop split start", "aop split finish"],
-  apply: ["aop apply [--into <checkout>]"],
 } as const;
 export const HUMAN_COMMANDS = {
   init: [
@@ -289,19 +285,6 @@ async function logsCommand(c: Ctx, argv: string[]): Promise<void> {
   c.log(tail.lines.join("\n"));
 }
 
-/** A path as the user typed it, made absolute from where the command runs. */
-const absolute = (c: Ctx, path: string) => resolve(c.io.cwd ?? process.cwd(), path);
-
-async function applyCommand(c: Ctx, argv: string[]): Promise<void> {
-  const { values, positionals } = args(argv, COMMANDS.apply, { into: { type: "string" } });
-  if (positionals.length > 0) throw usageError(COMMANDS.apply);
-  const result = await send<ApplyResult>(c, "POST", apiPaths.improvementAction(ownNode(c), "apply"), {
-    actor: ACTOR,
-    ...(values.into !== undefined ? { into: absolute(c, values.into) } : {}),
-  } satisfies ApplyRequest);
-  for (const path of result.written) c.log(`Wrote ${path}`);
-  for (const path of result.skipped) c.log(`Skipped ${path}: it's outside the repo`);
-}
 
 function printAgents(c: Ctx, agents: AgentProcessView[]): void {
   if (agents.length === 0) {
@@ -345,8 +328,6 @@ async function run(c: Ctx, argv: string[]): Promise<number | void> {
       movedTo(c, await send(c, "POST", apiPaths.nodeAction(ownNode(c), `split/${action}`)));
       return;
     }
-    case "apply":
-      return applyCommand(c, rest);
     case "project": {
       const [action, path, ...extra] = args(rest, COMMANDS.project, {}).positionals;
       if (action !== "add" || path === undefined || extra.length > 0) throw usageError(COMMANDS.project);
