@@ -55,7 +55,7 @@ describe("the node_create tool", () => {
     expect(byStage).toMatchObject({ type: "dev", stage: "spec_review" });
   });
 
-  it("takes type and stage together, as the CLI does", async () => {
+  it("takes type and stage together", async () => {
     const m = await mcpHarness();
     const own = await m.create("dev");
     const run_id = await m.run(own.id);
@@ -63,7 +63,7 @@ describe("the node_create tool", () => {
     expect(both).toMatchObject({ type: "dev", stage: "implement" });
   });
 
-  it("fails for an unknown project, with the CLI's message", async () => {
+  it("fails for an unknown project", async () => {
     const m = await mcpHarness();
     const own = await m.create("dev");
     const run_id = await m.run(own.id);

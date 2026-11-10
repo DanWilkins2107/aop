@@ -23,8 +23,8 @@ function markdownFiles(): string[] {
   return [...skills, ...prompts, join(PLUGIN, "README.md")];
 }
 
-/** Commands whose second word picks the action, such as `aop node create`. */
-const WITH_ACTION = new Set(["node", "split", "project"]);
+/** Commands whose second word picks the action, such as `aop split start`. */
+const WITH_ACTION = new Set(["split", "project"]);
 
 function commandKeys(tokens: string[]): string[] {
   const [command, action] = tokens;

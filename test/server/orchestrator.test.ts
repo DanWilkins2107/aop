@@ -474,7 +474,7 @@ describe("splitting", () => {
       directives(
         `pid ${w.file("parent.pid")}`,
         'aop ["split","start"]',
-        `aop ["node","create","--title","Made by the agent","--type","hotfix","--parent","$NODE","--body","@@hang"]`,
+        toolCall("node_create", { title: "Made by the agent", type: "hotfix", parent: "$NODE", body: "@@hang" }),
         "hang",
       ),
       { type: "triage", stage: "split_approved" },

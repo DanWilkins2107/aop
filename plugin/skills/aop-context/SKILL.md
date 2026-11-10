@@ -21,7 +21,6 @@ Commands act on your own node (`AOP_NODE_ID`) unless they take an ID. You can on
 | Command | Use |
 |---|---|
 | `aop context [<id>]` | Read a node. Without an ID, your own |
-| `aop node create --title ... [--body ...] [--parent <id>] [--project ...] [--type ... \| --stage ...]` | Create a node. `--type` starts it at that type's first stage; `--stage` starts it exactly there |
 | `aop split start` | Begin a split. Children you create are held until it finishes |
 | `aop split finish` | End the split. Your node becomes `broken_down` and the children start |
 
@@ -34,6 +33,7 @@ These come from AOP's MCP server. Each takes your node's ID as `node_id`: the `N
 | `message` tool with `body` | Post a message. Any node's ID as `node_id` posts it there instead |
 | `fail` tool with `reason` | Mark your node failed, only when the work can't be done and asking won't help. Then exit |
 | `ask` tool with `question` | Ask a human. The node waits, and this stage restarts with the answer. Then exit |
+| `node_create` tool with `title` (and `body`, `parent`, `project`, `type` or `stage`) | Create a node. `type` starts it at that type's first stage; `stage` starts it exactly there |
 | `node_edit` tool with `title` and/or `body` | Edit a title or description. Any node's ID as `node_id` edits that one instead |
 | `link` tool with `kind` and `url` | Attach a PR or ticket link to your node |
 | `search` tool with `query` (and `all`) | Search this project's nodes, or every project with `all` |

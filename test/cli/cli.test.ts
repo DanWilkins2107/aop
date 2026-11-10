@@ -3,10 +3,8 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { EdgeRow, EventView } from "../../src/shared/api.js";
 import { MCP_PORT } from "../../src/shared/port.js";
 import { directives, fakeCommand, settle, toolCall, until, world, type World } from "../server/agents.helpers.js";
-import { makeRepo } from "../server/helpers.js";
 import { aopInProcess } from "./cli.helpers.js";
 
 let w: World;
@@ -21,7 +19,6 @@ const aop = (args: string[], options: { node?: string; env?: Record<string, stri
   aopInProcess(args, { AOP_URL: w.url, ...(options.node ? { AOP_NODE_ID: options.node } : {}), ...options.env });
 
 const parked = (extra: Record<string, unknown> = {}) => w.create("", { type: "dev", stage: "pr_review", ...extra });
-const eventsOf = async (id: string) => (await w.call<EventView[]>("GET", `/nodes/${id}/events`)).body;
 
 describe("the agent commands", () => {
   it("context prints the node's place in the tree, its messages, links and outcomes", async () => {
@@ -58,47 +55,8 @@ describe("the agent commands", () => {
     expect(w.node(node.id).stage).toBe("pr_review");
   });
 
-  it("node create goes in the session's project, with a parent, type and stage", async () => {
-    const parent = await parked();
-    const made = await aop(["node", "create", "--title", "A child", "--body", "b", "--parent", parent.id, "--type", "dev", "--stage", "pr_review"], {
-      node: parent.id,
-    });
-    expect(made.code).toBe(0);
-    const id = /^Created (\S+) at pr_review/.exec(made.stdout)?.[1] as string;
-    expect(w.node(id)).toMatchObject({ title: "A child", body: "b", type: "dev", stage: "pr_review", project_id: w.projectId });
-    expect((await eventsOf(id))[0]).toMatchObject({ actor: "agent", kind: "node_created" });
-    const edges = (await w.call<EdgeRow[]>("GET", `/nodes/${id}/edges`)).body;
-    expect(edges).toMatchObject([{ source_id: parent.id, target_id: id, kind: "subtask" }]);
-
-    const bare = await aop(["node", "create", "--title", "x"]);
-    expect(bare.code).toBe(1);
-    expect(bare.stderr).toContain("--project");
-    const named = await aop(["node", "create", "--title", "x", "--project", w.projectId, "--stage", "pr_review"]);
-    expect(named.code).toBe(0);
-  });
-
-  it("node create's --project takes a name", async () => {
-    const added = await aop(["project", "add", makeRepo()]);
-    const otherName = /^Added project "(.+)"/.exec(added.stdout)?.[1] as string;
-    const there = await aop(["node", "create", "--title", "Elsewhere", "--project", otherName, "--stage", "pr_review"]);
-    expect(there.code).toBe(0);
-
-    const unknown = await aop(["node", "create", "--title", "x", "--project", "no-such-project"]);
-    expect(unknown.code).toBe(1);
-    expect(unknown.stderr).toContain('No project "no-such-project"');
-  });
-
-  it("a new child can't start before its parent holds it", async () => {
-    const parent = await w.create(directives('ifnot Stage: splitting :: aop ["split","start"]', "hang"), { type: "triage", stage: "split_approved" });
-    await w.atStage(parent.id, "splitting");
-    const made = await aop(["node", "create", "--title", "Held", "--type", "hotfix", "--parent", parent.id]);
-    const id = /^Created (\S+)/.exec(made.stdout)?.[1] as string;
-    await settle();
-    expect(w.runs(id)).toEqual([]);
-  });
-
   it("bad usage is a clear message and exit code 2, with no stack trace", async () => {
-    const bad = [["logs"], ["node", "create"], ["nonsense"], ["logs", "x", "--bad"], ["ps", "x"], ["reap", "--bad"], ["next"], ["ask"], ["fail"], ["message"], ["link"], ["search"], ["edge"], ["node", "edit"]];
+    const bad = [["logs"], ["node"], ["nonsense"], ["logs", "x", "--bad"], ["ps", "x"], ["reap", "--bad"], ["next"], ["ask"], ["fail"], ["message"], ["link"], ["search"], ["edge"], ["node", "edit"], ["node", "create"]];
     for (const args of bad) {
       const res = await aop(args, { node: "n" });
       expect(res.code, args.join(" ")).toBe(2);
@@ -145,7 +103,7 @@ describe("the agent commands", () => {
     const badJson = await stub(200, "application/json", "{not json");
     const oddError = await stub(500, "application/json", JSON.stringify({ error: "a string, not the API's shape" }));
     try {
-      for (const [server, args] of [[page, ["context", "x"]], [page, ["ps"]], [page, ["node", "create", "--title", "x", "--project", "p"]], [badJson, ["ps"]]] as const) {
+      for (const [server, args] of [[page, ["context", "x"]], [page, ["ps"]], [badJson, ["ps"]]] as const) {
         const res = await aop([...args], { env: { AOP_URL: urlOf(server) } });
         expect(res.code, args.join(" ")).toBe(1);
         expect(res.stderr).toContain("isn't the AOP server's API");
