@@ -1,7 +1,8 @@
 # AOP Setup
 
 ## Install
-You need Node 22 or newer.
+- You need Node 22 or newer.
+- Run:
 
 ```
 git clone https://github.com/DanWilkins2107/aop.git
@@ -9,44 +10,49 @@ cd aop
 npm run setup
 ```
 
-This builds AOP, puts `aop` on your PATH and runs `aop init`, which creates `~/.aop` and asks for:
-
-- Agent session command: what AOP runs to start an agent. Defaults to `claude --permission-mode auto`. Agents run headless, so keep auto mode or an equivalent. AOP has no sandbox of its own, here is where you put the command to start a session in a sandbox if you use one. See the security documentation page for more on this.
-- Out of sandbox command (optional): what `aop steer <node> --no-sandbox` runs. Not needed if not using a sandbox. 
-- Open from: where agents start from by default
-- Agent timeout: minutes before an agent is stopped and its node fails. Defaults to 60.
-- Process: the default, or your own `stages.yaml`.
-
-To change a setting later, edit `~/.aop/config.yaml`. To update AOP, `git pull` and restart `aop serve`.
+- This builds AOP, puts `aop` on your PATH and runs `aop init`, which creates `~/.aop` and asks for:
+  - Agent session command: what starts an agent. Defaults to `claude --permission-mode auto`. Agents run headless, so keep auto mode or an equivalent. To sandbox agents, put the sandbox in this command: see [security](security.md).
+  - Out of sandbox command (optional): what `aop steer <node> --no-sandbox` runs.
+  - Open from: where agents start by default.
+  - Agent timeout: minutes before an agent is stopped and its node fails. Defaults to 60.
+  - Process: the default, or your own `stages.yaml`.
+- Change settings later in `~/.aop/config.yaml`.
+- To update AOP, `git pull` and restart `aop serve`.
 
 ## Connect agents to AOP
-Agents don't use the `aop` CLI, which is for you. They act on AOP through its MCP server, which `aop serve` runs at http://127.0.0.1:4319/mcp. The port is always 4319, so a sandbox can allow just that.
+- Agents use AOP's MCP server, not the `aop` CLI.
+- `aop serve` runs it at http://127.0.0.1:4319/mcp.
+- Add it once, before your first node. In Claude Code:
 
-Do this once, before your first node. `aop serve` doesn't need to be running. In Claude Code, for every project:
 ```
 claude mcp add --scope user --transport http aop http://127.0.0.1:4319/mcp
 ```
-Other harnesses: add an HTTP MCP server at the same URL. Call it `aop` to match the plugin.
+
+- In other harnesses, add an HTTP MCP server at the same URL, named `aop` to match the plugin.
 
 ## Install the plugin
-The plugin teaches agents how to work on AOP stages and which MCP tools to use. In Claude Code, from the AOP clone:
+- The plugin teaches agents how to work AOP stages.
+- In Claude Code, from the AOP clone:
+
 ```
 /plugin marketplace add ./plugin
 /plugin install aop@aop
 ```
-Then turn on auto-update for the marketplace in `/plugin` → Marketplaces.
+
+- Then turn on auto-update for the marketplace in `/plugin` → Marketplaces.
 
 ## Your first node
 1. Run `aop serve` in its own terminal and open http://127.0.0.1:4317.
 2. Add a project, with a repo path if it has one.
 3. Open the project, create a node and describe the work.
-4. An agent picks it up. It may ask you a question, propose splitting the node, hand it to you as human-only work, or start implementing. The node page shows what it needs from you.
+4. An agent picks it up. The node page shows anything it needs from you, such as a question or a proposed split.
 
 ## Working with agents
 - Stopping `aop serve` stops every agent. They pick up again when it restarts.
-- `aop steer <node>` takes a node over and opens your agent session in the project's folder. The session uses the same MCP tools, acting under your claim on that node. Agents leave the node alone until you release it from the node page or with `aop release <node>`.
+- `aop steer <node>` claims a node and opens your own agent session in the project's folder. Agents leave the node alone until you release it, from the node page or with `aop release <node>`.
 
 ## Customising your process
-Your process is `~/.aop/stages.yaml`, with each agent stage's prompt in `~/.aop/prompts`. Edit a prompt to change what that agent does, including any project-specific rules. Changes apply without a restart, and the Process page shows the result and any errors.
-
-Built-in stages such as `done`, `failed` and `ask_human_question` are always there and can't be changed.
+- Your process is `~/.aop/stages.yaml`, with each agent stage's prompt in `~/.aop/prompts`.
+- Edit a prompt to change what that agent does.
+- Changes apply without a restart, and the Process page shows the result and any errors.
+- Built-in stages such as `done`, `failed` and `ask_human_question` can't be changed. See [features](features.md) for more information on this.
