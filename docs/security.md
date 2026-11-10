@@ -28,3 +28,31 @@ This document sets out what is AOP's security posture.
 - In a sandbox, allow agents to reach `127.0.0.1:4319` and not `4317` (the API and web app). That keeps them to the MCP tools.
 - It's recommended to use sandboxing so that AOP agents cannot get around your process, but also cannot edit percieved history.
 - As everything is stored locally, access to AOP config would allow your agents to create their own process. Again this arguably isn't much more of a risk compared to an existing setup where an agent can spawn infinite subagents, but it's worth considering. 
+
+### Sandbox checklist
+Your `agent_session_command` should start the session in a sandbox that does all of these.
+
+Network:
+- [ ] Allows `127.0.0.1:4319`, AOP's MCP server.
+- [ ] Blocks `127.0.0.1:4317`, the API and web app. Through it an agent could force stages, claim nodes or stop runs.
+- [ ] Shares the host's localhost. AOP only listens on `127.0.0.1` and only answers a `localhost` or `127.0.0.1` Host, so a container or VM with its own network can't reach it. Use a sandbox that runs on the same machine, such as Claude Code's own sandbox, rather than Docker.
+- [ ] Allows whatever else the agent needs, such as the model's API, your git remote and package registries, and nothing else.
+
+Files:
+- [ ] No write access to `~/.aop` (or your `AOP_HOME`). It holds your config, process, prompts and the database, which is the node history. Agents never need to write there: AOP writes improvements itself when they're applied.
+- [ ] No read access to `~/.aop/aop.db` or `~/.aop/logs`. They hold every node, message and run, including other runs' IDs.
+- [ ] If you use improvements, read access to your improvements folder and `~/.aop/prompts`. Improvement agents start in the improvements folder and read the files they propose changes to.
+- [ ] Write access to the project folders and worktrees the agents work in.
+
+Session:
+- [ ] Passes the environment through, in particular `AOP_RUN_ID`. AOP uses it to find and kill everything a run started.
+- [ ] Keeps the agent's processes in the session, so it can't leave something running in the background when AOP stops it.
+- [ ] Has AOP's MCP server configured for the agent inside the sandbox (see [setup](setup.md#connect-agents-to-aop)).
+- [ ] Runs headless with no approval prompts (auto mode or an equivalent). A session that stops for approval ends, and its node fails.
+
+Check it from inside the sandbox before you rely on it:
+- [ ] `curl -s -o /dev/null -w "%{http_code}" -X POST http://127.0.0.1:4319/mcp` answers (any code, not a connection error).
+- [ ] `curl http://127.0.0.1:4317/api/projects` fails to connect.
+- [ ] Reading `~/.aop/config.yaml` and writing a file in `~/.aop` both fail.
+
+If you need a session outside the sandbox, set `out_of_sandbox_command` and use `aop steer <node> --no-sandbox`. That session is yours, not an agent run.
