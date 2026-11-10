@@ -16,7 +16,6 @@ import {
   type LogTail,
   type NodeView,
   type ProjectRow,
-  type ProposalView,
   type ReapResult,
   type SteerRequest,
   type SteerSession,
@@ -48,7 +47,6 @@ export const AGENT_COMMANDS = {
   context: ["aop context [<id>]"],
   "node create": ["aop node create --title ... [--body ...] [--parent ...] [--project ...] [--type ... | --stage ...]"],
   split: ["aop split start", "aop split finish"],
-  proposals: ["aop proposals [--show <path>]"],
   apply: ["aop apply [--into <checkout>]"],
 } as const;
 export const HUMAN_COMMANDS = {
@@ -294,24 +292,6 @@ async function logsCommand(c: Ctx, argv: string[]): Promise<void> {
 /** A path as the user typed it, made absolute from where the command runs. */
 const absolute = (c: Ctx, path: string) => resolve(c.io.cwd ?? process.cwd(), path);
 
-async function proposalsCommand(c: Ctx, argv: string[]): Promise<void> {
-  const { values, positionals } = args(argv, COMMANDS.proposals, { show: { type: "string" } });
-  if (positionals.length > 0) throw usageError(COMMANDS.proposals);
-  const proposals = await send<ProposalView[]>(c, "GET", apiPaths.improvementAction(ownNode(c), "proposals"));
-  if (values.show !== undefined) {
-    const wanted = absolute(c, values.show).toLowerCase();
-    const proposal = proposals.find((p) => p.path.toLowerCase() === wanted || p.display_path === values.show);
-    if (!proposal) throw new CliFailure(`No proposal for ${values.show}`);
-    c.io.stdout.write(proposal.proposed);
-    return;
-  }
-  if (proposals.length === 0) c.log("No proposals.");
-  for (const p of proposals) {
-    const what = p.current === null ? "new file" : "changes the file";
-    c.log(`${p.path}  (${what}, last by ${p.updated_by}${p.stale ? "; the file has changed since" : ""})`);
-  }
-}
-
 async function applyCommand(c: Ctx, argv: string[]): Promise<void> {
   const { values, positionals } = args(argv, COMMANDS.apply, { into: { type: "string" } });
   if (positionals.length > 0) throw usageError(COMMANDS.apply);
@@ -365,8 +345,6 @@ async function run(c: Ctx, argv: string[]): Promise<number | void> {
       movedTo(c, await send(c, "POST", apiPaths.nodeAction(ownNode(c), `split/${action}`)));
       return;
     }
-    case "proposals":
-      return proposalsCommand(c, rest);
     case "apply":
       return applyCommand(c, rest);
     case "project": {

@@ -10,8 +10,8 @@ This node asks for a change to how agents work: a skill, or a stage prompt. Draf
 ## Draft
 - Make the smallest change that does what was asked. Match the file's existing style and length.
 - Call the `propose` tool with the real file's absolute path and its full new contents. A new skill is a new `SKILL.md` in its own folder.
-- On a redraft, start from the current proposals (`aop proposals --show <path>`), which may include the human's edits, and apply their review messages. The `withdraw_proposal` tool drops a file that no longer belongs.
-- Check that `aop proposals` lists exactly the files you meant.
+- On a redraft, start from the current proposals (the `proposals` tool with `show`), which may include the human's edits, and apply their review messages. The `withdraw_proposal` tool drops a file that no longer belongs.
+- Check that the `proposals` tool lists exactly the files you meant.
 
 ## Finish
 Post a 1-3 line summary of what changes and why, then the `next` tool with outcome `drafted`.

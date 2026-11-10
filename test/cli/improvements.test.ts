@@ -37,17 +37,13 @@ async function propose(id: string, path: string, content: string): Promise<void>
   expect(res.status, JSON.stringify(res.body)).toBe(200);
 }
 
-describe("the proposal commands", () => {
-  it("list, show and apply", async () => {
+describe("aop apply", () => {
+  it("writes the proposals once the stage allows it", async () => {
     const { node } = (await h.call<ImprovementView>("POST", "/api/improvements", { body: "Better tests" })).body;
     const skill = join(aopHome(), "skills", "write-tests", "SKILL.md");
     await propose(node.id, skill, "New skill.\n");
     await propose(node.id, join(aopHome(), "skills", "other", "SKILL.md"), "Another.\n");
 
-    const listed = await aop(["proposals"], node.id);
-    expect(listed.stdout).toContain("new file");
-    expect(listed.stdout).toContain(skill);
-    expect((await aop(["proposals", "--show", "write-tests/SKILL.md"], node.id)).stdout).toBe("New skill.\n");
     expect((await aop(["apply"], node.id)).code).toBe(1);
 
     await h.post(node.id, "next", { outcome: "drafted", actor: "agent" });

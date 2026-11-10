@@ -45,11 +45,11 @@ An **improvement** is a node that changes how agents work: a skill or a stage pr
 
 | Command | Use |
 |---|---|
-| `aop proposals [--show <path>]` | List the proposals, or print one |
 | `aop apply [--into <checkout>]` | Write the proposals: to the real files at `save_locally`, or into a worktree at `raise_pr` |
 
 | Tool | Use |
 |---|---|
+| `proposals` tool (with `show`) | List the proposals, or print one |
 | `propose` tool with `path` and `content` | Store a file's full proposed contents. `path` is the real file's absolute path. The real file is unchanged |
 | `withdraw_proposal` tool with `path` | Drop that proposal |
 
