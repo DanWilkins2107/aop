@@ -631,6 +631,14 @@ describe("history text", () => {
     expect(change("split_finish")).toBe("Finished splitting");
   });
 
+  it("describes a human's save, and what older versions wrote into a checkout", () => {
+    expect(line("stage_changed", { via: "save_locally", from_stage: "review_change", to_stage: "done" })).toBe(
+      "Saved locally: Review change → Done",
+    );
+    expect(line("proposals_applied", { written: ["a", "b"] })).toBe("Wrote 2 files");
+    expect(line("proposals_applied", { written: ["a"], skipped: [], into: "C:/wt" })).toBe("Wrote 1 file into C:/wt");
+  });
+
   it("describes title edits and claims", () => {
     expect(line("title_edited", { previous: "Old" })).toBe("Title edited, was: Old");
     expect(line("claim_taken", { holder: "human" })).toBe("Claimed by a human");

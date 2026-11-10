@@ -14,7 +14,6 @@ async function improvement(): Promise<{ m: McpHarness; id: string }> {
     "config.yaml": `${CONFIG_YAML}improvement_stages: ./improvement_stages.yaml\nimprovements_path: ./skills\n`,
     "improvement_stages.yaml": readFileSync(join(ROOT, "defaults", "improvement_stages.yaml"), "utf8"),
     "prompts/draft_change.md": "Draft it.",
-    "prompts/save_locally.md": "Save it.",
     "prompts/raise_pr.md": "Raise it.",
     "skills/write-tests/SKILL.md": "Old skill.\n",
   });

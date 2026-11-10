@@ -77,6 +77,11 @@ export function ProcessPage() {
           <p className="settings-note">
             How improvements to your skills and stage prompts move. Edit <code>{data.improvement_stages_path}</code> to change it.
           </p>
+          {data.improvement_notes.map((note) => (
+            <p key={note} className="banner banner-danger" role="note">
+              {note}
+            </p>
+          ))}
           <ul className="process-list">
             {data.improvement_process.types.map((type) => (
               <li key={type.name} className="process-type">

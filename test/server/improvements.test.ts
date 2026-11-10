@@ -6,10 +6,12 @@ import { ChangeFeed, type ChangeNotice } from "../../src/server/changes.js";
 import { loadConfig } from "../../src/server/config.js";
 import { nodeContext } from "../../src/server/context.js";
 import { aopHome } from "../../src/server/paths.js";
+import { describeProcess } from "../../src/server/processView.js";
 import { IMPROVEMENTS_PROJECT_ID, nodeStartPath } from "../../src/server/projects.js";
 import type {
   ApiErrorBody,
   ApplyResult,
+  EventView,
   ImprovementDetail,
   ImprovementsList,
   ImprovementView,
@@ -27,7 +29,6 @@ const ON = {
   "config.yaml": `${CONFIG_YAML}improvement_stages: ./improvement_stages.yaml\nimprovements_path: ./skills\n`,
   "improvement_stages.yaml": defaultFile("improvement_stages.yaml"),
   "prompts/draft_change.md": "Draft it.",
-  "prompts/save_locally.md": "Save it.",
   "prompts/raise_pr.md": "Raise it.",
   "skills/write-tests/SKILL.md": "Old skill.\n",
 };
@@ -50,16 +51,21 @@ async function capture(body: Record<string, unknown>): Promise<ImprovementView> 
 const propose = (id: string, path: string, content: string, actor = "agent") =>
   h.call<ProposalView>("PUT", `/api/improvements/${id}/proposals`, { path, content, actor });
 
-const apply = (id: string, into?: string) =>
-  h.call<ApplyResult>("POST", `/api/improvements/${id}/apply`, into === undefined ? {} : { into });
+const listed = async (id: string) => (await h.call<ProposalView[]>("GET", `/api/improvements/${id}/proposals`)).body;
+const reviewedOf = (proposals: ProposalView[]) => proposals.map(({ path, revision }) => ({ path, revision }));
 
-/** Drafted by the agent, then a human picks the outcome. */
-async function reviewAndChoose(id: string, outcome: string): Promise<NodeView> {
-  expect((await h.post(id, "next", { outcome: "drafted", actor: "agent" })).status).toBe(200);
-  const res = await h.post(id, "next", { outcome, actor: "human" });
+/** A human's Save locally, sending back the proposals their page shows, as the web app does. */
+const save = async (id: string, extra: Record<string, unknown> = {}) =>
+  h.call<ApplyResult>("POST", `/api/improvements/${id}/apply`, { reviewed: reviewedOf(await listed(id)), ...extra });
+
+/** The agent finishes its draft, which hands the improvement to a human at review_change. */
+async function toReview(id: string): Promise<void> {
+  const res = await h.post(id, "next", { outcome: "drafted", actor: "agent" });
   expect(res.status, JSON.stringify(res.body)).toBe(200);
-  return res.body;
+  expect(res.body.stage).toBe("review_change");
 }
+
+const eventsOf = async (id: string) => (await h.call<EventView[]>("GET", `/api/nodes/${id}/events`)).body;
 
 describe("capturing", () => {
   beforeEach(() => {
@@ -176,12 +182,12 @@ describe("the improvement pipeline", () => {
     const improvement = await capture({ body: "x" });
     await h.post(improvement.node.id, "next", { outcome: "drafted", actor: "agent" });
     const outcomes = (await h.node(improvement.node.id)).available_outcomes.map((o) => o.outcome);
-    expect(outcomes).toEqual(["save_locally", "redraft"]);
+    expect(outcomes).toEqual(["redraft"]);
     expect((await h.post(improvement.node.id, "next", { outcome: "raise_pr" })).status).toBe(409);
 
     mkdirSync(join(skills(), ".git"));
     const withGit = (await h.node(improvement.node.id)).available_outcomes.map((o) => o.outcome);
-    expect(withGit).toEqual(["raise_pr", "save_locally", "redraft"]);
+    expect(withGit).toEqual(["raise_pr", "redraft"]);
   });
 
   it("starts its agents in the improvements folder, and says what they may change", async () => {
@@ -195,6 +201,32 @@ describe("the improvement pipeline", () => {
     expect(context).toContain(`Files inside ${skills()}`);
     expect(context).toContain(join(aopHome(), "prompts", "implement.md"));
     expect(context).toContain("the `next` tool with outcome `drafted`");
+  });
+
+  it("tells the agent where each proposal is in the repo, for a PR's worktree", async () => {
+    h = harness(ON);
+    mkdirSync(join(skills(), ".git"));
+    const { node } = await capture({ body: "x" });
+    const prompt = join(aopHome(), "prompts", "implement.md");
+    await propose(node.id, skill(), "New.\n");
+    await propose(node.id, prompt, "Prompt.\n");
+    const context = nodeContext(h.db, node.id);
+    expect(context).toContain(`That folder is in the git repo ${skills()}.`);
+    expect(context).toContain(`- ${skill()} (changes the file, last by agent; in the repo at write-tests/SKILL.md)`);
+    expect(context).toContain(`- ${prompt} (changes the file, last by agent; outside the repo)`);
+  });
+
+  it("says on the process page when the pipeline still sends improvements to an agent to be saved", () => {
+    h = harness(ON);
+    expect(describeProcess().improvement_notes).toEqual([]);
+    const old = defaultFile("improvement_stages.yaml")
+      .replace("raise_pr:      { turn: agent,", "save_locally:  { turn: agent, color: \"#12b886\", prompt: ./prompts/raise_pr.md }\n  raise_pr:      { turn: agent,")
+      .replace("redraft: draft_change } }", "save_locally: save_locally, redraft: draft_change } }\n      save_locally:  { next: { done: done } }");
+    writeFiles(aopHome(), { "improvement_stages.yaml": old });
+    const view = describeProcess();
+    expect(view.problems).toEqual([]);
+    expect(view.improvement_notes).toHaveLength(1);
+    expect(view.improvement_notes[0]).toMatch(/still has the agent stage "save_locally"/);
   });
 });
 
@@ -279,8 +311,7 @@ describe("proposals", () => {
     expect(human.status).toBe(200);
     expect(human.body.updated_by).toBe("human");
 
-    await h.post(node.id, "next", { outcome: "save_locally" });
-    await h.post(node.id, "next", { outcome: "done", actor: "agent" });
+    expect((await save(node.id)).status).toBe(200);
     expect((await propose(node.id, skill(), "late", "human")).status).toBe(409);
   });
 
@@ -304,34 +335,119 @@ describe("proposals", () => {
   });
 });
 
-describe("applying", () => {
+describe("saving locally", () => {
   beforeEach(() => {
     h = harness(ON);
   });
 
-  it("writes nothing before save_locally", async () => {
-    const { node } = await capture({ body: "x" });
-    await propose(node.id, skill(), "New.\n");
-    expect((await apply(node.id)).status).toBe(409);
-    await h.post(node.id, "next", { outcome: "drafted", actor: "agent" });
-    expect((await apply(node.id)).status).toBe(409);
-    expect(readFileSync(skill(), "utf8")).toBe("Old skill.\n");
-  });
-
-  it("writes every proposal to its real file at save_locally, creating folders", async () => {
+  it("writes the reviewed proposals to their real files and finishes the improvement, in one human action", async () => {
     const { node } = await capture({ body: "x" });
     const fresh = join(skills(), "deep", "new", "SKILL.md");
     await propose(node.id, skill(), "New.\n");
     await propose(node.id, fresh, "Fresh.\n");
-    await reviewAndChoose(node.id, "save_locally");
+    await toReview(node.id);
+    // The human's own edit at review is part of what they save.
+    expect((await propose(node.id, skill(), "Reviewed.\n", "human")).status).toBe(200);
 
-    const res = await apply(node.id);
+    const res = await save(node.id);
     expect(res.status, JSON.stringify(res.body)).toBe(200);
-    expect(res.body.written.sort()).toEqual([fresh, skill()].sort());
-    expect(readFileSync(skill(), "utf8")).toBe("New.\n");
+    expect([...res.body.written].sort()).toEqual([fresh, skill()].sort());
+    expect(readFileSync(skill(), "utf8")).toBe("Reviewed.\n");
     expect(readFileSync(fresh, "utf8")).toBe("Fresh.\n");
-    const events = (await h.call<{ kind: string }[]>("GET", `/api/nodes/${node.id}/events`)).body;
-    expect(events.map((e) => e.kind)).toContain("proposals_applied");
+    expect(await h.node(node.id)).toMatchObject({ stage: "done", type: "improvement" });
+
+    const events = await eventsOf(node.id);
+    const applied = events.find((e) => e.kind === "proposals_applied");
+    expect(applied).toMatchObject({ actor: "human" });
+    expect([...(applied?.data as { written: string[] }).written].sort()).toEqual([fresh, skill()].sort());
+    expect(events.at(-1)).toMatchObject({
+      kind: "stage_changed",
+      actor: "human",
+      data: { via: "save_locally", from_stage: "review_change", to_stage: "done" },
+    });
+    // No agent stage came between the review and the write.
+    expect(events.filter((e) => e.kind === "stage_changed").map((e) => (e.data as { to_stage: string }).to_stage)).toEqual([
+      "review_change",
+      "done",
+    ]);
+    // Saving keeps the proposals, and can't be done twice.
+    expect((await listed(node.id)).map((p) => p.display_path)).toEqual(["deep/new/SKILL.md", "write-tests/SKILL.md"]);
+    expect((await save(node.id)).status).toBe(409);
+  });
+
+  it("is refused at an agent stage, for an agent, and for a node that isn't an improvement, writing nothing", async () => {
+    const { node } = await capture({ body: "x" });
+    await propose(node.id, skill(), "New.\n");
+    // draft_change is the agent's.
+    expect((await save(node.id)).status).toBe(409);
+    await toReview(node.id);
+    expect((await save(node.id, { actor: "agent" })).status).toBe(409);
+    expect((await save(node.id, { actor: "system" })).status).toBe(409);
+
+    mkdirSync(join(skills(), ".git"));
+    expect((await h.post(node.id, "next", { outcome: "raise_pr", actor: "human" })).status).toBe(200);
+    expect((await save(node.id)).status).toBe(409);
+
+    const work = await h.create("dev");
+    expect((await h.call("POST", `/api/improvements/${work.id}/apply`, { reviewed: [] })).status).toBe(409);
+
+    expect(readFileSync(skill(), "utf8")).toBe("Old skill.\n");
+    expect((await h.node(node.id)).stage).toBe("raise_pr");
+    expect((await eventsOf(node.id)).map((e) => e.kind)).not.toContain("proposals_applied");
+  });
+
+  it("is refused where the human stage is a built-in one, such as a question the agent asked", async () => {
+    const { node } = await capture({ body: "x" });
+    await propose(node.id, skill(), "Half done.\n");
+    expect((await h.post(node.id, "ask", { question: "Which skill?" })).status).toBe(200);
+    expect((await h.node(node.id)).turn).toBe("human");
+    expect((await save(node.id)).status).toBe(409);
+    expect(readFileSync(skill(), "utf8")).toBe("Old skill.\n");
+  });
+
+  it("no longer accepts into, or a body that doesn't say what was reviewed", async () => {
+    mkdirSync(join(skills(), ".git"));
+    const worktree = mkdtempSync(join(aopHome(), "worktree-"));
+    mkdirSync(join(worktree, ".git"));
+    const { node } = await capture({ body: "x" });
+    await propose(node.id, skill(), "New.\n");
+    await toReview(node.id);
+
+    expect((await save(node.id, { into: worktree })).status).toBe(400);
+    expect((await h.call("POST", `/api/improvements/${node.id}/apply`, { into: worktree })).status).toBe(400);
+    expect((await h.call("POST", `/api/improvements/${node.id}/apply`, {})).status).toBe(400);
+    // Nor at raise_pr, where it used to export.
+    expect((await h.post(node.id, "next", { outcome: "raise_pr", actor: "human" })).status).toBe(200);
+    expect((await save(node.id, { into: worktree })).status).toBe(400);
+
+    expect(readdirSync(worktree)).toEqual([".git"]);
+    expect(readFileSync(skill(), "utf8")).toBe("Old skill.\n");
+  });
+
+  it("refuses when the proposals aren't the ones the human was shown, writing nothing", async () => {
+    const { node } = await capture({ body: "x" });
+    await propose(node.id, skill(), "First draft.\n");
+    await toReview(node.id);
+    const shown = reviewedOf(await listed(node.id));
+
+    // Redrafted behind an open page: different contents, and one more file.
+    await h.post(node.id, "next", { outcome: "redraft", actor: "human" });
+    await propose(node.id, skill(), "Second draft.\n");
+    await toReview(node.id);
+    const stale = await h.call("POST", `/api/improvements/${node.id}/apply`, { reviewed: shown });
+    expect(stale.status).toBe(409);
+    expect((stale.body as unknown as ApiErrorBody).error.message).toMatch(/changed since they were shown/);
+
+    await h.post(node.id, "next", { outcome: "redraft", actor: "human" });
+    await propose(node.id, skill(), "First draft.\n");
+    await propose(node.id, join(skills(), "extra", "SKILL.md"), "Extra.\n");
+    await toReview(node.id);
+    expect((await h.call("POST", `/api/improvements/${node.id}/apply`, { reviewed: shown })).status).toBe(409);
+    expect((await h.call("POST", `/api/improvements/${node.id}/apply`, { reviewed: [] })).status).toBe(409);
+
+    expect(readFileSync(skill(), "utf8")).toBe("Old skill.\n");
+    expect(existsSync(join(skills(), "extra"))).toBe(false);
+    expect((await h.node(node.id)).stage).toBe("review_change");
   });
 
   it("refuses a proposal whose path stopped being allowed, writing nothing", async () => {
@@ -339,64 +455,40 @@ describe("applying", () => {
     await propose(node.id, skill(), "New.\n");
     const prompt = join(aopHome(), "prompts", "implement.md");
     await propose(node.id, prompt, "Prompt.\n");
-    await reviewAndChoose(node.id, "save_locally");
+    await toReview(node.id);
     // The prompt is no longer one, because the process stopped using it.
     writeFiles(aopHome(), { "stages.yaml": readFileSync(join(aopHome(), "stages.yaml"), "utf8").replace("./prompts/implement.md", "./prompts/write_spec.md") });
-    expect((await apply(node.id)).status).toBe(400);
+    expect((await save(node.id)).status).toBe(400);
     expect(readFileSync(skill(), "utf8")).toBe("Old skill.\n");
+    expect((await h.node(node.id)).stage).toBe("review_change");
   });
 
-  it("leaves every real file as it was when one of them can't be written", async () => {
+  it("leaves every real file as it was, and the improvement in review, when one of them can't be written", async () => {
     // A file where the second proposal needs a folder, so only writing it can find the problem.
     writeFiles(aopHome(), { "skills/zz": "In the way.\n" });
     const { node } = await capture({ body: "x" });
     await propose(node.id, skill(), "New.\n");
     await propose(node.id, join(skills(), "zz", "SKILL.md"), "Blocked.\n");
-    await reviewAndChoose(node.id, "save_locally");
+    await toReview(node.id);
 
-    const res = await apply(node.id);
+    const res = await save(node.id);
     expect(res.status, JSON.stringify(res.body)).toBe(409);
     expect(readFileSync(skill(), "utf8")).toBe("Old skill.\n");
     expect(readdirSync(join(skills(), "write-tests"))).toEqual(["SKILL.md"]);
-    const events = (await h.call<{ kind: string }[]>("GET", `/api/nodes/${node.id}/events`)).body;
-    expect(events.map((e) => e.kind)).not.toContain("proposals_applied");
+    expect((await h.node(node.id)).stage).toBe("review_change");
+    expect((await eventsOf(node.id)).map((e) => e.kind)).not.toContain("proposals_applied");
   });
 
-  it("exports into another checkout at raise_pr, skipping files outside the repo", async () => {
-    mkdirSync(join(skills(), ".git"));
-    const worktree = mkdtempSync(join(aopHome(), "worktree-"));
-    mkdirSync(join(worktree, ".git"));
+  it("is how a human saves an improvement left at an agent stage by an older pipeline, after moving it back", async () => {
     const { node } = await capture({ body: "x" });
     await propose(node.id, skill(), "New.\n");
-    const prompt = join(aopHome(), "prompts", "implement.md");
-    await propose(node.id, prompt, "Prompt.\n");
-    await reviewAndChoose(node.id, "raise_pr");
-
-    expect((await apply(node.id, skills())).status).toBe(409);
-    expect((await apply(node.id, mkdtempSync(join(aopHome(), "plain-")))).status).toBe(409);
-    const res = await apply(node.id, worktree);
-    expect(res.status, JSON.stringify(res.body)).toBe(200);
-    expect(res.body).toEqual({ written: [join(worktree, "write-tests", "SKILL.md")], skipped: [prompt] });
-    expect(readFileSync(join(worktree, "write-tests", "SKILL.md"), "utf8")).toBe("New.\n");
-    expect(readFileSync(skill(), "utf8")).toBe("Old skill.\n");
-    // The real files are only for save_locally.
-    expect((await apply(node.id)).status).toBe(409);
-  });
-
-  it("refuses to follow a link in the other checkout out of it, writing nothing", async () => {
     mkdirSync(join(skills(), ".git"));
-    const worktree = mkdtempSync(join(aopHome(), "worktree-"));
-    mkdirSync(join(worktree, ".git"));
-    const outside = mkdtempSync(join(aopHome(), "outside-"));
-    // A junction needs no special rights on Windows, and is a plain symlink elsewhere.
-    symlinkSync(outside, join(worktree, "write-tests"), "junction");
-    const { node } = await capture({ body: "x" });
-    await propose(node.id, skill(), "New.\n");
-    await reviewAndChoose(node.id, "raise_pr");
-
-    const res = await apply(node.id, worktree);
-    expect(res.status, JSON.stringify(res.body)).toBe(400);
-    expect(existsSync(join(outside, "SKILL.md"))).toBe(false);
+    await toReview(node.id);
+    await h.post(node.id, "next", { outcome: "raise_pr", actor: "human" });
+    expect((await save(node.id)).status).toBe(409);
+    expect((await h.post(node.id, "move", { stage: "review_change" })).status).toBe(200);
+    expect((await save(node.id)).status).toBe(200);
+    expect(readFileSync(skill(), "utf8")).toBe("New.\n");
   });
 });
 
@@ -405,32 +497,32 @@ describe("stale proposals", () => {
     h = harness(ON);
   });
 
-  const list = async (id: string) => (await h.call<ProposalView[]>("GET", `/api/improvements/${id}/proposals`)).body;
-
-  it("refuses to apply any file when one changed since it was drafted, naming it and writing nothing", async () => {
+  it("refuses to save any file when one changed since it was drafted, naming it, writing nothing and moving nothing", async () => {
     const { node } = await capture({ body: "x" });
     const fresh = join(skills(), "new-skill", "SKILL.md");
     await propose(node.id, skill(), "Proposed.\n");
     await propose(node.id, fresh, "Fresh.\n");
-    expect((await list(node.id)).map((p) => p.stale)).toEqual([false, false]);
+    expect((await listed(node.id)).map((p) => p.stale)).toEqual([false, false]);
 
     writeFiles(aopHome(), { "skills/write-tests/SKILL.md": "Edited by hand.\n" });
-    const proposals = await list(node.id);
+    const proposals = await listed(node.id);
     expect(proposals.map((p) => [p.display_path, p.stale, p.current])).toEqual([
       ["new-skill/SKILL.md", false, null],
       ["write-tests/SKILL.md", true, "Edited by hand.\n"],
     ]);
 
-    await reviewAndChoose(node.id, "save_locally");
-    const res = await apply(node.id);
+    await toReview(node.id);
+    const res = await save(node.id);
     expect(res.status, JSON.stringify(res.body)).toBe(409);
     const error = (res.body as unknown as ApiErrorBody).error;
     expect(error.details).toEqual({ stale: [skill()] });
     expect(error.message).toContain(skill());
     expect(readFileSync(skill(), "utf8")).toBe("Edited by hand.\n");
     expect(existsSync(fresh)).toBe(false);
-    const events = (await h.call<{ kind: string }[]>("GET", `/api/nodes/${node.id}/events`)).body;
+    expect((await h.node(node.id)).stage).toBe("review_change");
+    const events = await eventsOf(node.id);
     expect(events.map((e) => e.kind)).not.toContain("proposals_applied");
+    expect(events.at(-1)).toMatchObject({ kind: "stage_changed", data: { to_stage: "review_change" } });
   });
 
   it("counts a new file as stale once something is written there", async () => {
@@ -438,37 +530,36 @@ describe("stale proposals", () => {
     const fresh = join(skills(), "new-skill", "SKILL.md");
     await propose(node.id, fresh, "Fresh.\n");
     writeFiles(aopHome(), { "skills/new-skill/SKILL.md": "Got there first.\n" });
-    expect((await list(node.id))[0]?.stale).toBe(true);
-    await reviewAndChoose(node.id, "save_locally");
-    expect((await apply(node.id)).status).toBe(409);
+    expect((await listed(node.id))[0]?.stale).toBe(true);
+    await toReview(node.id);
+    expect((await save(node.id)).status).toBe(409);
     expect(readFileSync(fresh, "utf8")).toBe("Got there first.\n");
   });
 
-  it("goes stale when another improvement is applied first", async () => {
+  it("goes stale when another improvement is saved first", async () => {
     const first = (await capture({ body: "first" })).node;
     const second = (await capture({ body: "second" })).node;
     await propose(first.id, skill(), "First.\n");
     await propose(second.id, skill(), "Second.\n");
-    await reviewAndChoose(first.id, "save_locally");
-    expect((await apply(first.id)).status).toBe(200);
+    await toReview(first.id);
+    expect((await save(first.id)).status).toBe(200);
 
-    await reviewAndChoose(second.id, "save_locally");
-    expect((await apply(second.id)).status).toBe(409);
+    await toReview(second.id);
+    expect((await save(second.id)).status).toBe(409);
     expect(readFileSync(skill(), "utf8")).toBe("First.\n");
   });
 
   it("is re-based on the current file when a human saves an edit", async () => {
     const { node } = await capture({ body: "x" });
     await propose(node.id, skill(), "Proposed.\n");
-    await h.post(node.id, "next", { outcome: "drafted", actor: "agent" });
+    await toReview(node.id);
     writeFiles(aopHome(), { "skills/write-tests/SKILL.md": "Edited by hand.\n" });
-    expect((await list(node.id))[0]?.stale).toBe(true);
+    expect((await listed(node.id))[0]?.stale).toBe(true);
 
     const saved = await propose(node.id, skill(), "Edited by hand, then proposed.\n", "human");
     expect(saved.status, JSON.stringify(saved.body)).toBe(200);
     expect(saved.body.stale).toBe(false);
-    expect((await h.post(node.id, "next", { outcome: "save_locally", actor: "human" })).status).toBe(200);
-    expect((await apply(node.id)).status).toBe(200);
+    expect((await save(node.id)).status).toBe(200);
     expect(readFileSync(skill(), "utf8")).toBe("Edited by hand, then proposed.\n");
   });
 
@@ -477,22 +568,10 @@ describe("stale proposals", () => {
     await propose(node.id, skill(), "Proposed.\n");
     h.db.prepare("UPDATE proposals SET base = 'unknown'").run();
     writeFiles(aopHome(), { "skills/write-tests/SKILL.md": "Edited by hand.\n" });
-    expect((await list(node.id))[0]?.stale).toBe(false);
-    await reviewAndChoose(node.id, "save_locally");
-    expect((await apply(node.id)).status).toBe(200);
+    expect((await listed(node.id))[0]?.stale).toBe(false);
+    await toReview(node.id);
+    expect((await save(node.id)).status).toBe(200);
     expect(readFileSync(skill(), "utf8")).toBe("Proposed.\n");
-  });
-
-  it("is checked when applying into another checkout too, against the real file", async () => {
-    mkdirSync(join(skills(), ".git"));
-    const worktree = mkdtempSync(join(aopHome(), "worktree-"));
-    mkdirSync(join(worktree, ".git"));
-    const { node } = await capture({ body: "x" });
-    await propose(node.id, skill(), "Proposed.\n");
-    writeFiles(aopHome(), { "skills/write-tests/SKILL.md": "Edited by hand.\n" });
-    await reviewAndChoose(node.id, "raise_pr");
-    expect((await apply(node.id, worktree)).status).toBe(409);
-    expect(existsSync(join(worktree, "write-tests", "SKILL.md"))).toBe(false);
   });
 });
 

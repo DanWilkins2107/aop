@@ -282,7 +282,8 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
 
   app.get(at(apiPaths.improvementStages), (c) => c.json(describeStages(loadConfig().improvementGraph ?? EMPTY_GRAPH)));
 
-  // Improvements. Proposals are stored here; only apply writes files, and only where allowedTarget says.
+  // Improvements. Proposals are stored here; only apply writes files, only for a human, and only where
+  // allowedTarget says. It has no MCP tool.
   // Each write says what it touched: the improvement, and on capture the work node it came from.
   app.get(at(apiPaths.improvements), (c) => c.json(listImprovements(db)));
   app.post(at(apiPaths.improvements), async (c) => {
@@ -306,7 +307,7 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
   // Applying writes real files, which can include stage prompts, and so whether the config is valid:
   // it records nothing narrower, so every page refetches.
   app.post(routes.improvementAction("apply"), async (c) =>
-    c.json(applyProposals(db, c.req.param("id"), await readBody(c, applyBody, true))),
+    c.json(applyProposals(db, c.req.param("id"), await readBody(c, applyBody))),
   );
 
   // Read-only on purpose. Agents can reach this API, so no route may change commands.

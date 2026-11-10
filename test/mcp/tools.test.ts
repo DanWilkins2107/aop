@@ -20,7 +20,6 @@ const AGENT_TOOLS = [
   "propose",
   "withdraw_proposal",
   "proposals",
-  "apply",
 ];
 
 describe("the MCP tools", () => {

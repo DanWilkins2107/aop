@@ -8,7 +8,7 @@ export const proposals = defineTool({
   description:
     "List an AOP improvement node's proposals: the files it would change, each a new file or a change to an existing " +
     "one, and whether the real file has changed since. With `show`, return one proposal's proposed contents instead. " +
-    "Proposals are only stored in AOP: the real files are unchanged until they're applied.",
+    "Proposals are only stored in AOP. No tool writes them to the real files: only a human's save does.",
   input: {
     node_id: z.string().min(1).describe("Your own improvement node's ID, from your prompt."),
     show: z

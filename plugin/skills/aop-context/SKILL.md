@@ -37,14 +37,13 @@ If AOP's tools aren't available, its MCP server isn't configured, so the `ask` t
 | `split_finish` tool | End the split. Your node becomes `broken_down` and the children start |
 
 ### Improvements
-An **improvement** is a node that changes how agents work: a skill or a stage prompt. It belongs to no project. You start in the improvements folder, and you never edit real files: you propose their new contents, a human reviews the diff, and a later stage applies it.
+An **improvement** is a node that changes how agents work: a skill or a stage prompt. It belongs to no project. You start in the improvements folder, and you never edit real files: you propose their new contents, and a human reviews the diff. The human then saves it themselves, or sends it to `raise_pr`, where an agent copies the proposals into a worktree of its own for a PR. No tool writes a proposal to its real file.
 
 | Tool | Use |
 |---|---|
 | `proposals` tool (with `show`) | List the proposals, or print one |
 | `propose` tool with `path` and `content` | Store a file's full proposed contents. `path` is the real file's absolute path. The real file is unchanged |
 | `withdraw_proposal` tool with `path` | Drop that proposal |
-| `apply` tool (with `into` at `raise_pr`) | Write the proposals: to the real files at `save_locally`, or into a worktree at `raise_pr` |
 
 ## Notes
 - The `next` tool, the `ask` tool and the `fail` tool end your turn. Stop working once you've used one.

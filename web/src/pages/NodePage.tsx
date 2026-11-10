@@ -204,7 +204,7 @@ export function NodePage() {
             </p>
           ) : null}
           <Links links={data.links} />
-          <MovingOn node={node} stages={stages} events={events} reload={reload} />
+          <MovingOn node={node} stages={stages} events={events} proposals={data.improvement ? data.proposals : undefined} reload={reload} />
           <div className="panel-part header-parts">
             <Part title="Pipeline">
               {onGlobalStage ? (

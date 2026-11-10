@@ -4,6 +4,8 @@ import type {
   AddProjectRequest,
   AnswerRequest,
   ApiErrorBody,
+  ApplyRequest,
+  ApplyResult,
   ApiErrorCode,
   BlockRequest,
   ConfigView,
@@ -127,6 +129,11 @@ export const api = {
   proposals: (id: string) => send<ProposalView[]>("GET", apiPaths.improvementAction(id, "proposals")),
   saveProposal: (id: string, path: string, content: string) =>
     send<ProposalView>("PUT", apiPaths.improvementAction(id, "proposals"), { path, content } satisfies ProposalRequest),
+  /** Writes the proposals to their real files and finishes the improvement, if they're still the ones shown. */
+  saveLocally: (id: string, shown: ProposalView[]) =>
+    send<ApplyResult>("POST", apiPaths.improvementAction(id, "apply"), {
+      reviewed: shown.map(({ path, revision }) => ({ path, revision })),
+    } satisfies ApplyRequest),
 };
 
 /** A project's whole graph, with the stages and the project itself. The graph page and the node page both need it. */

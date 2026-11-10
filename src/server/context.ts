@@ -4,8 +4,10 @@ import { readFileSync } from "node:fs";
 import { allPromptFiles, type AopConfig, loadConfig } from "./config.js";
 import type { Db } from "./db.js";
 import { ConfigError } from "./errors.js";
-import { getImprovement, listProposals } from "./improvements.js";
+import { relative } from "node:path";
+import { canonicalPath, getImprovement, listProposals } from "./improvements.js";
 import { getNode, graphFor, graphsOf, listLinks, listMessages, type NodeRow } from "./nodes.js";
+import { isWithin } from "./paths.js";
 import { getProject } from "./projects.js";
 
 interface Neighbour {
@@ -130,6 +132,12 @@ function improvementSections(db: Db, nodeId: string): string[] {
   const improvement = getImprovement(db, nodeId, config);
   const source = improvement.source;
   const prompts = allPromptFiles(config);
+  const repo = config.improvementsRepo === null ? null : canonicalPath(config.improvementsRepo);
+  /** Where a proposal's file is in that repo, which is where a PR's worktree has it. */
+  const inRepo = (path: string) => {
+    if (repo === null) return "";
+    return isWithin(path, repo) ? `; in the repo at ${relative(repo, path).replaceAll("\\", "/")}` : "; outside the repo";
+  };
   return [
     ...section(
       "Source message",
@@ -143,14 +151,14 @@ function improvementSections(db: Db, nodeId: string): string[] {
     ...section("What can change", [
       `- Files inside ${config.improvementsDir}, where you start`,
       ...prompts.map((path) => `- ${path}`),
-      "Never edit them directly: the `propose` tool stores each change for review.",
+      "Never edit them directly: the `propose` tool stores each change for review, and only a human saves one to its real file.",
       config.improvementsRepo === null
         ? "That folder isn't in a git repo, so Raise PR isn't offered."
         : `That folder is in the git repo ${config.improvementsRepo}.`,
     ]),
     ...section(
       "Proposed changes",
-      listProposals(db, nodeId, config).map((p) => `- ${p.path} (${p.current === null ? "new file" : "changes the file"}, last by ${p.updated_by})`),
+      listProposals(db, nodeId, config).map((p) => `- ${p.path} (${p.current === null ? "new file" : "changes the file"}, last by ${p.updated_by}${inRepo(p.path)})`),
     ),
   ];
 }

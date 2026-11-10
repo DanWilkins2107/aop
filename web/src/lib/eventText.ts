@@ -111,6 +111,8 @@ export function describeEvent(event: EventView, titleOf: (id: string) => string)
           return `Started splitting at ${from}`;
         case "split_finish":
           return "Finished splitting";
+        case "save_locally":
+          return `Saved locally: ${from} → ${to}`;
         default:
           return unlisted(data.via, `${from} → ${to}`);
       }
@@ -157,7 +159,8 @@ export function describeEvent(event: EventView, titleOf: (id: string) => string)
       return `Withdrew the change to ${text(event.data.path)}`;
     case "proposals_applied": {
       const written = Array.isArray(event.data.written) ? event.data.written.length : 0;
-      return `Applied: wrote ${written} file${written === 1 ? "" : "s"}${event.data.into ? ` into ${text(event.data.into)}` : ""}`;
+      // Older versions also wrote into a checkout for a PR, and said which.
+      return `Wrote ${written} file${written === 1 ? "" : "s"}${event.data.into ? ` into ${text(event.data.into)}` : ""}`;
     }
     default:
       return unlisted(event, humanize((event as EventView).kind));
