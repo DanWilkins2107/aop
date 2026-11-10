@@ -62,7 +62,11 @@ export const proposalBody = z.strictObject({
   actor: actor.default("human"),
 });
 export const withdrawBody = z.strictObject({ path: nonBlank, actor: actor.default("human") });
-export const applyBody = z.strictObject({ into: nonBlank.optional(), actor: actor.default("agent") });
+/** Saving locally. `reviewed` is every proposal the human's page showed, by the `revision` each had. */
+export const applyBody = z.strictObject({
+  reviewed: z.array(z.strictObject({ path: nonBlank, revision: nonBlank })).max(10_000),
+  actor: actor.default("human"),
+});
 /** A time of day and the days to fire on, or null for no schedule. */
 export const scheduleBody = z
   .strictObject({

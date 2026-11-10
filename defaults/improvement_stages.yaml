@@ -1,8 +1,9 @@
 # The improvement pipeline: how a change to your skills or stage prompts is drafted, reviewed and
 # applied. config.yaml links here. Same format as stages.yaml.
-# Two stage names mean something here: the `apply` tool writes real files only at save_locally,
-# and the `apply` tool with `into` exports only at raise_pr. An outcome leading to raise_pr is
-# hidden unless improvements_path is inside a git repo.
+# At a human stage, the improvement's page also offers Save locally: AOP writes the proposals the
+# human is looking at to their real files and finishes the improvement. No agent stage writes them.
+# One stage name means something here: an outcome leading to raise_pr is hidden unless
+# improvements_path is inside a git repo.
 
 start: improvement
 
@@ -10,13 +11,11 @@ stages:
   draft_change:  { turn: agent, color: "#5c7cfa", prompt: ./prompts/draft_change.md }
   review_change: { turn: human, color: "#9775fa" }
   raise_pr:      { turn: agent, color: "#12b886", prompt: ./prompts/raise_pr.md }
-  save_locally:  { turn: agent, color: "#12b886", prompt: ./prompts/save_locally.md }
 
 types:
   improvement:
     start: draft_change
     stages:
       draft_change:  { next: { drafted: review_change } }
-      review_change: { next: { raise_pr: raise_pr, save_locally: save_locally, redraft: draft_change } }
+      review_change: { next: { raise_pr: raise_pr, redraft: draft_change } }
       raise_pr:      { next: { done: done } }
-      save_locally:  { next: { done: done } }

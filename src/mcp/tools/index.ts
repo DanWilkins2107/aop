@@ -2,7 +2,6 @@
 // new file here, plus its import and its entry in `TOOLS`.
 
 import type { AopTool } from "../tool.js";
-import { apply } from "./apply.js";
 import { ask } from "./ask.js";
 import { context } from "./context.js";
 import { edgeAdd } from "./edge_add.js";
@@ -21,7 +20,6 @@ import { splitStart } from "./split_start.js";
 import { withdrawProposal } from "./withdraw_proposal.js";
 
 export const TOOLS: readonly AopTool[] = [
-  apply,
   ask,
   context,
   edgeAdd,

@@ -1,6 +1,6 @@
 // The node state machine. Every stage change goes through `applyStageChange`, and every stage action
 // a human or agent takes on a node is a function here: create, edit, next, move, ask, answer, fail,
-// retry, invalidate, restore, block, unblock and split.
+// retry, invalidate, restore, block, unblock, split and saving an improvement locally.
 
 import { openSteerSessionNode } from "./claims.js";
 import type { Db } from "./db.js";
@@ -197,6 +197,14 @@ export function markFailed(db: Db, node: NodeRow, input: { reason: string; runId
     actor: "system",
     detail: { reason: input.reason, run_id: input.runId },
   });
+}
+
+/**
+ * Finishes an improvement whose proposals a human has just saved to their real files. The caller,
+ * `applyProposals`, has checked it may, and holds the transaction that also records what was written.
+ */
+export function markSavedLocally(db: Db, node: NodeRow): void {
+  applyStageChange(db, node, { stage: "done", type: node.type, via: "save_locally", actor: "human" });
 }
 
 function hasSubtaskChildren(db: Db, nodeId: string): boolean {

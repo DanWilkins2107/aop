@@ -455,11 +455,10 @@ describe("config cache", () => {
       "config.yaml": `${CONFIG_YAML}improvement_stages: ./improvement_stages.yaml\n`,
       "improvement_stages.yaml": pipeline,
       "prompts/draft_change.md": "Draft it.",
-      "prompts/save_locally.md": "Save it.",
       "prompts/raise_pr.md": "Raise it.",
       "skills/README.md": "Skills.",
     });
-    const files = [...FILES, "improvement_stages.yaml", "prompts/draft_change.md", "prompts/save_locally.md", "prompts/raise_pr.md"];
+    const files = [...FILES, "improvement_stages.yaml", "prompts/draft_change.md", "prompts/raise_pr.md"];
     age(home, ...files);
     const first = loadConfig(home);
     expect(loadConfig(home)).toBe(first);

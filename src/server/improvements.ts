@@ -248,6 +248,11 @@ export function isStale(row: { path: string; base: string }): boolean {
   return row.base !== "unknown" && baseOf(row.path) !== row.base;
 }
 
+/** Names a proposal's path and contents, so a save can tell that what a human reviewed is what's stored. */
+export function revisionOf(row: { path: string; content: string }): string {
+  return createHash("sha256").update(row.path).update("\0").update(row.content).digest("hex");
+}
+
 export function proposalRows(db: Db, nodeId: string): ProposalRow[] {
   return db.prepare("SELECT * FROM proposals WHERE node_id = ? ORDER BY path").all(nodeId) as ProposalRow[];
 }
@@ -262,6 +267,7 @@ export function listProposals(db: Db, nodeId: string, config: AopConfig = loadCo
     proposed: row.content,
     current: readCurrent(row.path),
     stale: isStale(row),
+    revision: revisionOf(row),
     updated_at: row.updated_at,
     updated_by: row.updated_by,
   }));

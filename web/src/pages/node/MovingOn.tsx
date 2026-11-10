@@ -1,5 +1,5 @@
 import { Fragment, useLayoutEffect, useRef, useState, type FocusEvent } from "react";
-import type { EventView, NodeView, StagesView } from "../../../../src/shared/api.js";
+import type { EventView, NodeView, ProposalView, StagesView } from "../../../../src/shared/api.js";
 import { FINISHED_STAGES } from "../../../../src/shared/builtInStages.js";
 import { FormError } from "../../components/FormError.js";
 import { api, urls } from "../../lib/api.js";
@@ -47,9 +47,18 @@ function SingleAction({
   );
 }
 
-/** Every outcome looks the same, with none styled as the default: the UI shouldn't nudge work down the pipeline. */
-function Outcomes({ node, reload }: { node: NodeView; reload: Reload }) {
+/**
+ * Every outcome looks the same, with none styled as the default: the UI shouldn't nudge work down the pipeline.
+ * `proposals` are an improvement's at a human stage, where saving them locally is one more way on.
+ */
+function Outcomes({ node, proposals, reload }: { node: NodeView; proposals: ProposalView[] | null; reload: Reload }) {
   const { busy, error, run } = useAction(reload);
+  const unsaveable =
+    proposals === null || proposals.length === 0
+      ? "There are no proposed changes to save"
+      : proposals.some((p) => p.stale)
+        ? "A file has changed since its proposal was drafted"
+        : null;
   return (
     <div>
       {node.turn !== "human" ? <p className="action-text muted">Agent's turn. Choosing an outcome here stands in for the agent.</p> : null}
@@ -64,6 +73,16 @@ function Outcomes({ node, reload }: { node: NodeView; reload: Reload }) {
             {toTarget(humanize(outcome), target)}
           </button>
         ))}
+        {proposals !== null ? (
+          <button
+            type="button"
+            disabled={busy || unsaveable !== null}
+            title={unsaveable ?? "Writes the proposed changes below to their real files"}
+            onClick={() => void run(() => api.saveLocally(node.id, proposals))}
+          >
+            {toTarget("Save locally", "done")}
+          </button>
+        ) : null}
       </div>
       <FormError error={error} />
     </div>
@@ -74,11 +93,13 @@ function Content({
   node,
   stages,
   events,
+  proposals,
   reload,
 }: {
   node: NodeView;
   stages: StagesView;
   events: EventView[];
+  proposals?: ProposalView[] | undefined;
   reload: Reload;
 }) {
   if (!node.stage_exists) {
@@ -136,7 +157,9 @@ function Content({
       <p className="action-text muted">{node.stage === "broken_down" ? "Finished. The work continues in the children." : "Finished."}</p>
     );
   }
-  if (node.available_outcomes.length > 0) return <Outcomes node={node} reload={reload} />;
+  // The server saves an improvement's proposals from a human stage of its pipeline, which is any reached here.
+  const saveable = node.kind === "improvement" && node.turn === "human" ? (proposals ?? []) : null;
+  if (node.available_outcomes.length > 0 || saveable !== null) return <Outcomes node={node} proposals={saveable} reload={reload} />;
   return <p className="action-text muted">This stage has no outcomes. It moves on by itself, or through Force stage.</p>;
 }
 
@@ -145,7 +168,14 @@ function Content({
  * outcome button can vanish. The panel then takes focus itself rather than letting it drop to the
  * top of the page, and a polite status region says which stage the node is now in.
  */
-export function MovingOn(props: { node: NodeView; stages: StagesView; events: EventView[]; reload: Reload }) {
+export function MovingOn(props: {
+  node: NodeView;
+  stages: StagesView;
+  events: EventView[];
+  /** An improvement's proposals, which Save locally writes. */
+  proposals?: ProposalView[] | undefined;
+  reload: Reload;
+}) {
   const stage = props.node.stage;
   const panel = useRef<HTMLDivElement>(null);
   const holdsFocus = useRef(false);

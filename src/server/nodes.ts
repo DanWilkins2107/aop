@@ -9,7 +9,7 @@ import { getNodeRow } from "./nodeCore.js";
 
 export type { EdgeRow, EventView, LinkRow, MessageRow, NodeRow, NodeView };
 
-export { getNodeRow, graphFor, graphsOf, RAISE_PR_STAGE, type Graphs } from "./nodeCore.js";
+export { getNodeRow, graphFor, graphsOf, RAISE_PR_STAGE, turnOf, type Graphs } from "./nodeCore.js";
 export { getNode, holdersOf, invalidatedAncestors, listNodes, startableNodes, viewsOf, type Holder } from "./nodeViews.js";
 export {
   answer,
@@ -20,6 +20,7 @@ export {
   fail,
   invalidate,
   markFailed,
+  markSavedLocally,
   move,
   next,
   restore,

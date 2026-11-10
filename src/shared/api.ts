@@ -182,7 +182,9 @@ export type StageChangeVia =
   | "block"
   | "unblock"
   | "split_start"
-  | "split_finish";
+  | "split_finish"
+  /** A human saved an improvement's proposals to their real files, which finished it. */
+  | "save_locally";
 
 /** Why an agent run ended, stored on the run as `end_reason`. */
 export type RunEndReason = "reported" | "failed" | "stopped" | "held" | "shutdown";
@@ -238,8 +240,8 @@ export interface EventDataByKind {
   improvement_sourced: { node_id: string; message_id: string };
   proposal_saved: { path: string };
   proposal_withdrawn: { path: string };
-  /** `into`: the checkout written to, or null for the improvements folder itself. */
-  proposals_applied: { written: string[]; skipped: string[]; into: string | null };
+  /** The real files a human's save wrote. `skipped` and `into` are only on rows from older versions. */
+  proposals_applied: { written: string[]; skipped?: string[]; into?: string | null };
 }
 
 export type EventKind = keyof EventDataByKind;
@@ -350,6 +352,8 @@ export interface ProcessView {
   /** The improvement pipeline, when the config is valid and improvements are on. */
   improvement_stages_path: string | null;
   improvement_process: StagesView | null;
+  /** Things in the improvement pipeline that still load but no longer do what they did. */
+  improvement_notes: string[];
 }
 
 /** Where an improvement came from. The IDs are cleared if the source project is deleted; the text stays. */
@@ -395,10 +399,12 @@ export interface ProposalView {
   /** Null when the file doesn't exist yet. */
   current: string | null;
   /**
-   * The real file has changed since this was last saved, so applying is refused until it's saved
-   * again. False when that's unknown, for proposals saved before AOP recorded it.
+   * The real file has changed since this was last saved, so saving locally is refused until it's
+   * saved again. False when that's unknown, for proposals saved before AOP recorded it.
    */
   stale: boolean;
+  /** Names this path and these proposed contents. A save sends back the ones it was shown. */
+  revision: string;
   updated_at: string;
   updated_by: "human" | "agent";
 }
@@ -406,8 +412,6 @@ export interface ProposalView {
 export interface ApplyResult {
   /** Absolute paths written. */
   written: string[];
-  /** With `into`: proposals outside the repo, which have no place in the checkout. */
-  skipped: string[];
 }
 
 /**

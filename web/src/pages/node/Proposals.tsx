@@ -34,13 +34,13 @@ function Diff({ proposal }: { proposal: ProposalView }) {
   );
 }
 
-/** A file that changed after its proposal was drafted: applying would undo that change, so it's refused. */
+/** A file that changed after its proposal was drafted: saving it would undo that change, so it's refused. */
 function StaleNote({ node, editable }: { node: NodeView; editable: boolean }) {
   const canRedraft = node.available_outcomes.some((o) => o.outcome === "redraft");
   const ways = [canRedraft ? "Redraft to draft it again" : null, editable ? "Edit and save to keep it as it is" : null].filter(Boolean);
   return (
     <p className="section-text proposal-stale">
-      This file has changed since the proposal was drafted, so nothing can be applied until it's updated. The diff is against
+      This file has changed since the proposal was drafted, so nothing can be saved locally until it's updated. The diff is against
       the file as it is now.{ways.length > 0 ? ` ${ways.join(", or ")}.` : ""}
     </p>
   );
@@ -101,7 +101,7 @@ function Proposal({ node, proposal, editable, reload }: { node: NodeView; propos
   );
 }
 
-/** What the improvement would change, as a diff against the real files, which stay untouched until it's applied. */
+/** What the improvement would change, as a diff against the real files, which stay untouched until a human saves it. */
 export function Proposals({ node, proposals, reload }: { node: NodeView; proposals: ProposalView[]; reload: () => Promise<void> }) {
   const editable = node.turn === "human" && !CLOSED_STAGES.includes(node.stage) && node.stage_exists;
   return (
