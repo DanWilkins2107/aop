@@ -81,7 +81,7 @@ describe("recovery with the orchestrator restarted in place", () => {
 
   it("a shutdown during a split keeps the split, and its children held", TIMEOUT, async () => {
     w = await world();
-    const parent = await w.create(directives('ifnot Stage: splitting :: aop ["split","start"]', "hang"), {
+    const parent = await w.create(directives(`ifnot Stage: splitting :: ${toolCall("split_start")}`, "hang"), {
       type: "triage",
       stage: "split_approved",
     });

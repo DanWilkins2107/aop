@@ -64,13 +64,13 @@ export function nodeContext(db: Db, nodeId: string, runId?: string): string {
   const moves: string[] = [];
   if (node.stage === "splitting") {
     moves.push(
-      `A split is in progress, begun from ${node.return_stage}. Don't run \`aop split start\` again.`,
+      `A split is in progress, begun from ${node.return_stage}. Don't use the \`split_start\` tool again.`,
       "Any children listed above already exist, so carry on from them rather than recreating them.",
-      "Finish with `aop split finish`.",
+      "Finish with the `split_finish` tool.",
     );
   } else if (node.turn === "agent") {
     moves.push(...node.available_outcomes.map(({ outcome, target }) => `- the \`next\` tool with outcome \`${outcome}\` moves this node to ${target}`));
-    moves.push("- `aop split start` then `aop split finish` holds new children until the split is done");
+    moves.push("- the `split_start` tool then the `split_finish` tool holds new children until the split is done");
   } else {
     moves.push(`This node is at ${node.stage}, where no agent tool moves it.`);
   }

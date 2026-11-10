@@ -23,8 +23,8 @@ function markdownFiles(): string[] {
   return [...skills, ...prompts, join(PLUGIN, "README.md")];
 }
 
-/** Commands whose second word picks the action, such as `aop split start`. */
-const WITH_ACTION = new Set(["split", "project"]);
+/** Commands whose second word picks the action, such as `aop project add`. */
+const WITH_ACTION = new Set(["project"]);
 
 function commandKeys(tokens: string[]): string[] {
   const [command, action] = tokens;
@@ -103,7 +103,7 @@ describe("plugin and prompts", () => {
 
   it("reads the CLI's usage", () => {
     expect(help.code).toBe(0);
-    expect(known.size).toBeGreaterThan(10);
+    expect(known.size).toBeGreaterThan(5);
   });
 
   it("only name aop commands and flags the CLI has", () => {

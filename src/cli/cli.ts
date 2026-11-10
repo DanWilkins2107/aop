@@ -41,7 +41,6 @@ interface Ctx {
 /** Each command's usage, for both the help and its own usage errors, so the two can't drift apart. */
 export const AGENT_COMMANDS = {
   context: ["aop context [<id>]"],
-  split: ["aop split start", "aop split finish"],
 } as const;
 export const HUMAN_COMMANDS = {
   init: [
@@ -178,7 +177,6 @@ function none(argv: string[], usage: Usage): void {
   if (args(argv, usage, {}).positionals.length > 0) throw usageError(usage);
 }
 
-const movedTo = (c: Ctx, node: NodeView) => c.log(`${node.id} is now at ${node.stage}`);
 
 async function steerCommand(c: Ctx, argv: string[]): Promise<number> {
   const { values, positionals } = args(argv, COMMANDS.steer, { "no-sandbox": { type: "boolean" } });
@@ -269,12 +267,6 @@ async function run(c: Ctx, argv: string[]): Promise<number | void> {
       const { positionals } = args(rest, COMMANDS.context, {});
       if (positionals.length > 1) throw usageError(COMMANDS.context);
       c.log(await sendForText(c, apiPaths.nodeAction(positionals[0] ?? ownNode(c), "context")));
-      return;
-    }
-    case "split": {
-      const action = only(args(rest, COMMANDS.split, {}).positionals, COMMANDS.split);
-      if (action !== "start" && action !== "finish") throw usageError(COMMANDS.split);
-      movedTo(c, await send(c, "POST", apiPaths.nodeAction(ownNode(c), `split/${action}`)));
       return;
     }
     case "project": {

@@ -473,7 +473,7 @@ describe("splitting", () => {
     const parent = await w.create(
       directives(
         `pid ${w.file("parent.pid")}`,
-        'aop ["split","start"]',
+        toolCall("split_start"),
         toolCall("node_create", { title: "Made by the agent", type: "hotfix", parent: "$NODE", body: "@@hang" }),
         "hang",
       ),
@@ -483,7 +483,7 @@ describe("splitting", () => {
     expect(claimOf(parent.id)).toBe("agent");
     expect(w.runs(parent.id)).toHaveLength(1);
     expect(w.runs(parent.id)[0]?.status).toBe("running");
-    // `split start` didn't stop it.
+    // The `split_start` tool didn't stop it.
     expect(isAlive(await w.pidFrom("parent.pid"))).toBe(true);
 
     // Add the children by hand as the agent would, from the API, to hold the moment of release still.
@@ -520,9 +520,9 @@ describe("splitting", () => {
     const parent = await w.create(
       directives(
         `ifnot Stage: splitting :: record ${w.file("first.json")}`,
-        'ifnot Stage: splitting :: aop ["split","start"]',
+        `ifnot Stage: splitting :: ${toolCall("split_start")}`,
         `if Stage: splitting :: record ${w.file("second.json")}`,
-        'if Stage: splitting :: aop ["split","finish"]',
+        `if Stage: splitting :: ${toolCall("split_finish")}`,
         "exit 1",
       ),
       { type: "triage", stage: "split_approved" },
@@ -551,10 +551,10 @@ describe("splitting", () => {
     w = await world();
     const parent = await w.create(
       directives(
-        'ifnot Stage: splitting :: aop ["split","start"]',
+        `ifnot Stage: splitting :: ${toolCall("split_start")}`,
         `ifnot Stage: splitting :: ${toolCall("ask", { question: "Which way?" })}`,
         `if Stage: splitting :: record ${w.file("second.json")}`,
-        'if Stage: splitting :: aop ["split","finish"]',
+        `if Stage: splitting :: ${toolCall("split_finish")}`,
       ),
       { type: "triage", stage: "split_approved" },
     );

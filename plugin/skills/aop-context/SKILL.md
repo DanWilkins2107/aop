@@ -21,8 +21,6 @@ Commands act on your own node (`AOP_NODE_ID`) unless they take an ID. You can on
 | Command | Use |
 |---|---|
 | `aop context [<id>]` | Read a node. Without an ID, your own |
-| `aop split start` | Begin a split. Children you create are held until it finishes |
-| `aop split finish` | End the split. Your node becomes `broken_down` and the children start |
 
 ### MCP tools
 These come from AOP's MCP server. Each takes your node's ID as `node_id`: the `Node:` line of `aop context`. Write tools also take your run ID as `run_id`: the `Run:` line of your prompt, or `AOP_RUN_ID` in a session `aop steer` opened. A write with an ended run's ID is refused.
@@ -39,6 +37,8 @@ These come from AOP's MCP server. Each takes your node's ID as `node_id`: the `N
 | `search` tool with `query` (and `all`) | Search this project's nodes, or every project with `all` |
 | `edge_add` tool with `from` and `to` | Node `from` must finish before node `to` starts. Takes no `node_id` |
 | `edge_remove` tool with `from` and `to` | Remove that block. Takes no `node_id` |
+| `split_start` tool | Begin a split. Children you create are held until it finishes |
+| `split_finish` tool | End the split. Your node becomes `broken_down` and the children start |
 
 ### Improvements
 An **improvement** is a node that changes how agents work: a skill or a stage prompt. It belongs to no project. You start in the improvements folder, and you never edit real files: you propose their new contents, a human reviews the diff, and a later stage applies it.
