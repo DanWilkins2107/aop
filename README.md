@@ -3,7 +3,7 @@ AOP is an agent orchestration platform. It provides the building blocks for you 
 
 ## Other Pages
 - See [docs/setup.md](docs/setup.md) for the setup process for aop.
-- See [docs/contributions.md](docs/contributions.md) if you'd like to contribute to AOP
+- See [docs/roadmap.md](docs/roadmap.md#contributing) if you'd like to contribute to AOP
 - See [docs/features.md](docs/features.md) for how AOP works
 - See [docs/security.md](docs/security.md) for AOP's security posture.
 

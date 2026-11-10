@@ -37,7 +37,7 @@ Nodes in an agent step are always claimed by agents, however there may be cases 
 
 There is a "Claim" section on the individual node page that stops it being picked up by an agent. 
 
-If you want closer supervision over a session, you can use `aop steer <nodeid>` to run it 
+If you want closer supervision over a session, you can use `aop steer <nodeid>` to run it yourself, in your own agent session.
 
 If you use sandboxing but want to run an individual session outside of the sandbox with supervision, use `aop steer <nodeid> --no-sandbox`
 
