@@ -20,6 +20,6 @@ Read the code for the area you change. `docs/` is written by humans: don't edit 
 - A new test file that spawns processes goes in the `integration` list in `vitest.config.ts`.
 
 ## Files kept in step by tests
-- Every `` `aop ...` `` in `plugin/` and `defaults/prompts/` must be in `AGENT_COMMANDS` or `HUMAN_COMMANDS` in `src/cli/cli.ts`.
+- Every `` `aop ...` `` in `plugin/` and `defaults/prompts/` must be in `HUMAN_COMMANDS` in `src/cli/cli.ts`, and agent-facing text names only the ones agents tell a human about, such as `aop steer`.
 - `defaults/prompts/` has one file per agent stage in `defaults/stages.yaml`.
 - Stage colours pass the contrast checks in `test/web/lib.test.ts`.

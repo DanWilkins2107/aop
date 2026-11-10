@@ -14,39 +14,15 @@ beforeEach(async () => {
   w = await world({ config: `out_of_sandbox_command: ${JSON.stringify(fakeCommand + " --out")}\n` });
 });
 
-/** The CLI in-process, as an agent on a node would run it. `cli.smoke.test.ts` runs the real entry point. */
+/** The CLI in-process, with AOP_NODE_ID set if `node` is, as in a session on a node. `cli.smoke.test.ts` runs the real entry point. */
 const aop = (args: string[], options: { node?: string; env?: Record<string, string> } = {}) =>
   aopInProcess(args, { AOP_URL: w.url, ...(options.node ? { AOP_NODE_ID: options.node } : {}), ...options.env });
 
 const parked = (extra: Record<string, unknown> = {}) => w.create("", { type: "dev", stage: "pr_review", ...extra });
 
-describe("the agent commands", () => {
-  it("context prints the node's place in the tree, its messages, links and outcomes", async () => {
-    const parent = await parked({ title: "The parent" });
-    const node = await parked({ title: "The child", parent_id: parent.id, body: "The description" });
-    const sibling = await parked({ title: "The sibling", parent_id: parent.id });
-    const blocker = await parked({ title: "The blocker" });
-    await w.call("POST", `/nodes/${blocker.id}/edges`, { target_id: node.id, kind: "blocks" });
-    await w.call("POST", `/nodes/${node.id}/messages`, { body: "A human message" });
-    await w.call("POST", `/nodes/${node.id}/links`, { kind: "pr", url: "https://example.com/1" });
-
-    const fromEnv = await aop(["context"], { node: node.id });
-    expect(fromEnv.code).toBe(0);
-    for (const text of [node.id, "The child", "The parent", "The sibling", "The blocker", "The description", "A human message", "https://example.com/1", "Type: dev", "Stage: pr_review"]) {
-      expect(fromEnv.stdout).toContain(text);
-    }
-    expect(sibling.id).toBeTruthy();
-    expect((await aop(["context", node.id])).stdout).toBe(fromEnv.stdout);
-  });
-
-  it("context needs a node from the environment", async () => {
-    const res = await aop(["context"]);
-    expect(res.code).toBe(1);
-    expect(res.stderr).toContain("AOP_NODE_ID");
-  });
-
+describe("the commands", () => {
   it("bad usage is a clear message and exit code 2, with no stack trace", async () => {
-    const bad = [["logs"], ["node"], ["nonsense"], ["logs", "x", "--bad"], ["ps", "x"], ["reap", "--bad"], ["next"], ["ask"], ["fail"], ["message"], ["link"], ["search"], ["edge"], ["node", "edit"], ["node", "create"], ["split"]];
+    const bad = [["logs"], ["node"], ["nonsense"], ["logs", "x", "--bad"], ["ps", "x"], ["reap", "--bad"], ["next"], ["ask"], ["fail"], ["message"], ["link"], ["search"], ["edge"], ["node", "edit"], ["node", "create"], ["split"], ["context"]];
     for (const args of bad) {
       const res = await aop(args, { node: "n" });
       expect(res.code, args.join(" ")).toBe(2);
@@ -70,12 +46,12 @@ describe("the agent commands", () => {
     for (const line of ["aop logs <node> [--lines N]", "aop project add <path>", "aop ps"]) {
       expect(help).toContain(`\n  ${line}\n`);
     }
-    expect(help).toContain("Agent commands that remain while agents move to MCP");
+    expect(help).not.toContain("aop context");
     expect(help).toContain(`Agents use AOP's MCP server at http://127.0.0.1:${MCP_PORT}/mcp.\n`);
   });
 
   it("says when the server can't be reached", async () => {
-    const res = await aop(["context", "x"], { env: { AOP_URL: "http://127.0.0.1:1" } });
+    const res = await aop(["ps"], { env: { AOP_URL: "http://127.0.0.1:1" } });
     expect(res.code).toBe(1);
     expect(res.stderr).toContain("aop serve");
     expect(res.stderr).not.toContain("    at ");
@@ -93,7 +69,7 @@ describe("the agent commands", () => {
     const badJson = await stub(200, "application/json", "{not json");
     const oddError = await stub(500, "application/json", JSON.stringify({ error: "a string, not the API's shape" }));
     try {
-      for (const [server, args] of [[page, ["context", "x"]], [page, ["ps"]], [badJson, ["ps"]]] as const) {
+      for (const [server, args] of [[page, ["ps"]], [badJson, ["ps"]]] as const) {
         const res = await aop([...args], { env: { AOP_URL: urlOf(server) } });
         expect(res.code, args.join(" ")).toBe(1);
         expect(res.stderr).toContain("isn't the AOP server's API");
@@ -194,13 +170,6 @@ describe("the human commands", () => {
     expect((await aop(["logs"], { node: node.id })).code).toBe(2);
   });
 
-  it("the plugin's skills never tell agents about the human commands", () => {
-    for (const skill of ["aop-context", "aop-rulebook", "aop-brevity"]) {
-      const text = readFileSync(join("plugin", "skills", skill, "SKILL.md"), "utf8");
-      for (const command of ["aop stop", "aop release", "aop logs"]) expect(text).not.toContain(command);
-    }
-  });
-
   describe("steer", () => {
     /** Writes what the session was given, and exits. Stands in for the interactive tool, and never is one. */
     const session = (name: string, code = 0) =>
@@ -260,13 +229,17 @@ describe("the human commands", () => {
       expect(w.node(node.id).claimed_by).toBe("agent");
     });
 
-    it("passes on the session's exit code, and a steered session's commands work", async () => {
+    it("passes on the session's exit code, and the commands are the human's, not the session's", async () => {
       const node = await w.create("", { stage: "pr_review", type: "dev" });
       useCommands(session("in.json", 7));
       expect((await aop(["steer", node.id])).code).toBe(7);
-      const context = await aop(["context"], { node: node.id });
-      expect(context.code).toBe(0);
-      expect(context.stdout).toContain(node.id);
+      const { run } = JSON.parse(readFileSync(w.file("in.json"), "utf8")) as { run: string };
+      // Run in the session, even after its claim is released, they don't send its run ID, so aren't refused.
+      const inSession = { node: node.id, env: { AOP_RUN_ID: run } };
+      expect((await aop(["release", node.id], inSession)).code).toBe(0);
+      const added = await aop(["project", "add", w.home], inSession);
+      expect(added.stderr).toBe("");
+      expect(added.code).toBe(0);
     });
 
     it("a human claim keeps agents off, and releasing lets them on", async () => {

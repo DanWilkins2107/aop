@@ -1,11 +1,11 @@
 import { cpSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { HUMAN_COMMANDS } from "../../src/cli/cli.js";
 import { TOOLS } from "../../src/mcp/tools/index.js";
 import { loadConfig } from "../../src/server/config.js";
 import { aopHome } from "../../src/server/paths.js";
 import { ROOT } from "../server/agents.helpers.js";
-import { aopInProcess } from "../cli/cli.helpers.js";
 
 const DEFAULTS = join(ROOT, "defaults");
 const PLUGIN = join(ROOT, "plugin");
@@ -17,11 +17,20 @@ function installDefaults(): string {
   return home;
 }
 
-function markdownFiles(): string[] {
+/** What agents read: the skills and the stage prompts. */
+function agentFiles(): string[] {
   const skills = readdirSync(join(PLUGIN, "skills")).map((name) => join(PLUGIN, "skills", name, "SKILL.md"));
   const prompts = readdirSync(join(DEFAULTS, "prompts")).map((name) => join(DEFAULTS, "prompts", name));
-  return [...skills, ...prompts, join(PLUGIN, "README.md")];
+  return [...skills, ...prompts];
 }
+
+const markdownFiles = () => [...agentFiles(), join(PLUGIN, "README.md")];
+
+const aopMentions = (files: string[]) =>
+  files.flatMap((file) => [...readFileSync(file, "utf8").matchAll(/`(aop [^`]+)`/g)].map((m) => ({ file, text: m[1]! })));
+
+/** The only commands agents may name, all a human's: agents use the MCP tools, and only tell a human about these. */
+const AGENTS_MAY_NAME = new Set(["steer"]);
 
 /** Commands whose second word picks the action, such as `aop project add`. */
 const WITH_ACTION = new Set(["project"]);
@@ -90,26 +99,19 @@ describe("shipped defaults", () => {
   });
 });
 
-// The CLI's own help, which lists every command's usage.
-const help = await aopInProcess(["help"]);
-
 describe("plugin and prompts", () => {
-  const usage = help.stdout
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.startsWith("aop "));
+  // Every command's usage, as the CLI's help lists it.
   const known = new Map<string, string[]>();
-  for (const line of usage) for (const key of commandKeys(tokensOf(line))) known.set(key, [...(known.get(key) ?? []), line]);
+  for (const line of Object.values(HUMAN_COMMANDS).flat()) {
+    for (const key of commandKeys(tokensOf(line))) known.set(key, [...(known.get(key) ?? []), line]);
+  }
 
   it("reads the CLI's usage", () => {
-    expect(help.code).toBe(0);
     expect(known.size).toBeGreaterThan(5);
   });
 
   it("only name aop commands and flags the CLI has", () => {
-    const mentions = markdownFiles().flatMap((file) =>
-      [...readFileSync(file, "utf8").matchAll(/`(aop [^`]+)`/g)].map((m) => ({ file, text: m[1]! })),
-    );
+    const mentions = aopMentions(markdownFiles());
     expect(mentions.length).toBeGreaterThan(0);
     for (const { file, text } of mentions) {
       const tokens = tokensOf(text);
@@ -121,6 +123,12 @@ describe("plugin and prompts", () => {
           expect(lines!.some((l) => l.includes(name)), `${file}: \`${text}\` uses unknown flag ${name}`).toBe(true);
         }
       }
+    }
+  });
+
+  it("never tell agents to run an aop command, only name the human ones agents tell a human about", () => {
+    for (const { file, text } of aopMentions(agentFiles())) {
+      for (const key of commandKeys(tokensOf(text))) expect(AGENTS_MAY_NAME, `${file}: \`${text}\``).toContain(key);
     }
   });
 

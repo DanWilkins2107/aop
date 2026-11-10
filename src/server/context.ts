@@ -1,4 +1,4 @@
-// The text agents read: `aop context` for a node, and the prompt each launched agent gets on stdin.
+// The text agents read: what the `context` tool returns for a node, and the prompt each launched agent gets on stdin.
 
 import { readFileSync } from "node:fs";
 import { allPromptFiles, type AopConfig, loadConfig } from "./config.js";
