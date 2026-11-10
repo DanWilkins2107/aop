@@ -10,8 +10,6 @@ import {
   type AddProjectRequest,
   type AgentProcessView,
   type ApiErrorBody,
-  type ApplyRequest,
-  type ApplyResult,
   type CreateNodeRequest,
   type LogTail,
   type NodeView,
@@ -49,7 +47,6 @@ export const AGENT_COMMANDS = {
   "node create": ["aop node create --title ... [--body ...] [--parent ...] [--project ...] [--type ... | --stage ...]"],
   split: ["aop split start", "aop split finish"],
   proposals: ["aop proposals [--show <path>]"],
-  apply: ["aop apply [--into <checkout>]"],
 } as const;
 export const HUMAN_COMMANDS = {
   init: [
@@ -312,17 +309,6 @@ async function proposalsCommand(c: Ctx, argv: string[]): Promise<void> {
   }
 }
 
-async function applyCommand(c: Ctx, argv: string[]): Promise<void> {
-  const { values, positionals } = args(argv, COMMANDS.apply, { into: { type: "string" } });
-  if (positionals.length > 0) throw usageError(COMMANDS.apply);
-  const result = await send<ApplyResult>(c, "POST", apiPaths.improvementAction(ownNode(c), "apply"), {
-    actor: ACTOR,
-    ...(values.into !== undefined ? { into: absolute(c, values.into) } : {}),
-  } satisfies ApplyRequest);
-  for (const path of result.written) c.log(`Wrote ${path}`);
-  for (const path of result.skipped) c.log(`Skipped ${path}: it's outside the repo`);
-}
-
 function printAgents(c: Ctx, agents: AgentProcessView[]): void {
   if (agents.length === 0) {
     c.log("No agents running.");
@@ -367,8 +353,6 @@ async function run(c: Ctx, argv: string[]): Promise<number | void> {
     }
     case "proposals":
       return proposalsCommand(c, rest);
-    case "apply":
-      return applyCommand(c, rest);
     case "project": {
       const [action, path, ...extra] = args(rest, COMMANDS.project, {}).positionals;
       if (action !== "add" || path === undefined || extra.length > 0) throw usageError(COMMANDS.project);
