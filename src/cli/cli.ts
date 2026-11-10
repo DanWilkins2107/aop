@@ -52,7 +52,6 @@ interface Ctx {
 export const AGENT_COMMANDS = {
   context: ["aop context [<id>]"],
   "node create": ["aop node create --title ... [--body ...] [--parent ...] [--project ...] [--type ... | --stage ...]"],
-  split: ["aop split start", "aop split finish"],
   propose: ["aop propose <path> [--from <file>]", "aop propose <path> --withdraw"],
   proposals: ["aop proposals [--show <path>]"],
   apply: ["aop apply [--into <checkout>]"],
@@ -191,8 +190,6 @@ function only<T>(values: T[], usage: Usage): T {
 function none(argv: string[], usage: Usage): void {
   if (args(argv, usage, {}).positionals.length > 0) throw usageError(usage);
 }
-
-const movedTo = (c: Ctx, node: NodeView) => c.log(`${node.id} is now at ${node.stage}`);
 
 async function resolveProject(c: Ctx, reference: string): Promise<string> {
   const projects = await send<ProjectRow[]>(c, "GET", apiPaths.projects);
@@ -399,12 +396,6 @@ async function run(c: Ctx, argv: string[]): Promise<number | void> {
     }
     case "node":
       return nodeCommand(c, rest);
-    case "split": {
-      const action = only(args(rest, COMMANDS.split, {}).positionals, COMMANDS.split);
-      if (action !== "start" && action !== "finish") throw usageError(COMMANDS.split);
-      movedTo(c, await send(c, "POST", apiPaths.nodeAction(ownNode(c), `split/${action}`)));
-      return;
-    }
     case "propose":
       return proposeCommand(c, rest);
     case "proposals":

@@ -42,20 +42,10 @@ describe("the agent commands", () => {
     expect((await aop(["context", node.id])).stdout).toBe(fromEnv.stdout);
   });
 
-  it("split needs a node from the environment", async () => {
-    for (const args of [["split", "start"], ["split", "finish"], ["context"]]) {
-      const res = await aop(args);
-      expect(res.code).toBe(1);
-      expect(res.stderr).toContain("AOP_NODE_ID");
-    }
-  });
-
-  it("agent commands are refused on human stages", async () => {
-    const node = await parked();
-    const res = await aop(["split", "start"], { node: node.id });
+  it("context needs a node from the environment", async () => {
+    const res = await aop(["context"]);
     expect(res.code).toBe(1);
-    expect(res.stderr).toContain("not an agent stage");
-    expect(w.node(node.id).stage).toBe("pr_review");
+    expect(res.stderr).toContain("AOP_NODE_ID");
   });
 
   it("node create goes in the session's project, with a parent, type and stage", async () => {
@@ -89,7 +79,7 @@ describe("the agent commands", () => {
   });
 
   it("a new child can't start before its parent holds it", async () => {
-    const parent = await w.create(directives('ifnot Stage: splitting :: aop ["split","start"]', "hang"), { type: "triage", stage: "split_approved" });
+    const parent = await w.create(directives(`ifnot Stage: splitting :: ${toolCall("split_start")}`, "hang"), { type: "triage", stage: "split_approved" });
     await w.atStage(parent.id, "splitting");
     const made = await aop(["node", "create", "--title", "Held", "--type", "hotfix", "--parent", parent.id]);
     const id = /^Created (\S+)/.exec(made.stdout)?.[1] as string;
@@ -98,14 +88,14 @@ describe("the agent commands", () => {
   });
 
   it("bad usage is a clear message and exit code 2, with no stack trace", async () => {
-    const bad = [["logs"], ["node", "create"], ["nonsense"], ["logs", "x", "--bad"], ["ps", "x"], ["reap", "--bad"], ["next"], ["ask"], ["fail"], ["message"], ["link"], ["search"], ["edge"], ["node", "edit"]];
+    const bad = [["logs"], ["node", "create"], ["nonsense"], ["logs", "x", "--bad"], ["ps", "x"], ["reap", "--bad"], ["next"], ["ask"], ["fail"], ["message"], ["link"], ["search"], ["edge"], ["node", "edit"], ["split"]];
     for (const args of bad) {
       const res = await aop(args, { node: "n" });
       expect(res.code, args.join(" ")).toBe(2);
       expect(res.stderr).not.toContain("    at ");
     }
     // Usage comes before the node, so it's the usage that's reported without one.
-    for (const args of [["logs"], ["logs", "a", "b"], ["split", "sideways"]]) {
+    for (const args of [["logs"], ["logs", "a", "b"]]) {
       const res = await aop(args);
       expect(res.code, args.join(" ")).toBe(2);
       expect(res.stderr).toContain("Usage: aop ");
@@ -117,9 +107,9 @@ describe("the agent commands", () => {
     const option = await aop(["logs", "x", "--bad"], { node: "n" });
     expect(option.stderr).toContain("--bad");
     expect(option.stderr).toContain("Usage: aop logs <node> [--lines N]");
-    const split = await aop(["split", "sideways"]);
-    expect(split.stderr).toBe("Usage: aop split start\n       aop split finish\n");
-    for (const line of ["aop logs <node> [--lines N]", "aop split start", "aop split finish", "aop ps"]) {
+    const project = await aop(["project", "sideways"]);
+    expect(project.stderr).toBe("Usage: aop project add <path>\n");
+    for (const line of ["aop logs <node> [--lines N]", "aop project add <path>", "aop ps"]) {
       expect(help).toContain(`\n  ${line}\n`);
     }
     expect(help).toContain("Agent commands that remain while agents move to MCP");
@@ -316,10 +306,9 @@ describe("the human commands", () => {
       const node = await w.create("", { stage: "pr_review", type: "dev" });
       useCommands(session("in.json", 7));
       expect((await aop(["steer", node.id])).code).toBe(7);
-      // Human stages can only be passed from the UI, even in a steered session.
-      const refused = await aop(["split", "start"], { node: node.id });
-      expect(refused.code).toBe(1);
-      expect(refused.stderr).toContain("not an agent stage");
+      const context = await aop(["context"], { node: node.id });
+      expect(context.code).toBe(0);
+      expect(context.stdout).toContain(node.id);
     });
 
     it("a human claim keeps agents off, and releasing lets them on", async () => {
