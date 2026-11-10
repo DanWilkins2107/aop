@@ -9,7 +9,6 @@ import {
   type AddProjectRequest,
   type AgentProcessView,
   type ApiErrorBody,
-  type CreateNodeRequest,
   type LogTail,
   type NodeView,
   type ProjectRow,
@@ -42,7 +41,6 @@ interface Ctx {
 /** Each command's usage, for both the help and its own usage errors, so the two can't drift apart. */
 export const AGENT_COMMANDS = {
   context: ["aop context [<id>]"],
-  "node create": ["aop node create --title ... [--body ...] [--parent ...] [--project ...] [--type ... | --stage ...]"],
   split: ["aop split start", "aop split finish"],
 } as const;
 export const HUMAN_COMMANDS = {
@@ -182,53 +180,6 @@ function none(argv: string[], usage: Usage): void {
 
 const movedTo = (c: Ctx, node: NodeView) => c.log(`${node.id} is now at ${node.stage}`);
 
-async function resolveProject(c: Ctx, reference: string): Promise<string> {
-  const projects = await send<ProjectRow[]>(c, "GET", apiPaths.projects);
-  const matches = projects.filter((p) => p.id === reference || p.name === reference);
-  const [project] = matches;
-  if (project === undefined) throw new CliFailure(`No project "${reference}"`);
-  if (matches.length > 1) throw new CliFailure(`Several projects are called "${reference}". Use its ID`);
-  return project.id;
-}
-
-/** Where a new node goes: as named, or else the parent's project, or else this session's. */
-async function projectForNewNode(c: Ctx, reference: string | undefined, parent: string | undefined): Promise<string> {
-  if (reference !== undefined) return resolveProject(c, reference);
-  const nearby = parent ?? c.env["AOP_NODE_ID"];
-  if (nearby) return (await send<NodeView>(c, "GET", apiPaths.node(nearby))).project_id;
-  throw new CliFailure("Say which project with --project, or --parent, or run this in a session on a node.");
-}
-
-async function nodeCommand(c: Ctx, argv: string[]): Promise<void> {
-  const [action, ...rest] = argv;
-  if (action === "create") {
-    const usage = COMMANDS["node create"];
-    const { values, positionals } = args(rest, usage, {
-      title: { type: "string" },
-      body: { type: "string" },
-      parent: { type: "string" },
-      project: { type: "string" },
-      type: { type: "string" },
-      stage: { type: "string" },
-    });
-    if (values.title === undefined || positionals.length > 0) {
-      throw usageError(usage);
-    }
-    const project = await projectForNewNode(c, values.project, values.parent);
-    const node = await send<NodeView>(c, "POST", apiPaths.projectAction(project, "nodes"), {
-      title: values.title,
-      actor: ACTOR,
-      ...(values.body !== undefined ? { body: values.body } : {}),
-      ...(values.parent !== undefined ? { parent_id: values.parent } : {}),
-      ...(values.type !== undefined ? { type: values.type } : {}),
-      ...(values.stage !== undefined ? { stage: values.stage } : {}),
-    } satisfies CreateNodeRequest);
-    c.log(`Created ${node.id} at ${node.stage}`);
-    return;
-  }
-  throw usageError(COMMANDS["node create"]);
-}
-
 async function steerCommand(c: Ctx, argv: string[]): Promise<number> {
   const { values, positionals } = args(argv, COMMANDS.steer, { "no-sandbox": { type: "boolean" } });
   const id = only(positionals, COMMANDS.steer);
@@ -320,8 +271,6 @@ async function run(c: Ctx, argv: string[]): Promise<number | void> {
       c.log(await sendForText(c, apiPaths.nodeAction(positionals[0] ?? ownNode(c), "context")));
       return;
     }
-    case "node":
-      return nodeCommand(c, rest);
     case "split": {
       const action = only(args(rest, COMMANDS.split, {}).positionals, COMMANDS.split);
       if (action !== "start" && action !== "finish") throw usageError(COMMANDS.split);

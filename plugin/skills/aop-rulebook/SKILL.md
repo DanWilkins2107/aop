@@ -29,8 +29,8 @@ Apply these on every stage, on top of the stage prompt.
 - If the work can't be done and asking won't help, the `fail` tool with a reason is your one ending, then exit.
 
 ## Splitting
-- `aop split start`, then create the children with `aop node create --parent <your node> ...`, then `aop split finish`.
-- Choose each child's `--type` or `--stage`, so it starts where it belongs.
+- `aop split start`, then create the children with the `node_create` tool with `parent` set to your node, then `aop split finish`.
+- Choose each child's `type` or `stage`, so it starts where it belongs.
 - Block a child with the `edge_add` tool only when all of its work waits on another node. If any part can start now, don't block it.
 - Move the parent's blocks to the children they apply to: the `edge_remove` tool from the parent, the `edge_add` tool on the child. `aop split finish` is refused while the parent still has blocks.
 - Use as few edges as you need. Don't copy one block onto every child when a single child carries the dependency.
