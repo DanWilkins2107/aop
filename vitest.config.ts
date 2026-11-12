@@ -22,7 +22,7 @@ export default defineConfig({
         extends: true,
         test: {
           name: "unit",
-          include: ["test/**/*.test.ts"],
+          include: ["test/**/*.test.ts", "src/**/*.test.ts", "meta/**/*.test.ts"],
           exclude: INTEGRATION,
           // Generous for in-process tests, because the dev machine is Windows and often busy.
           testTimeout: 30_000,
