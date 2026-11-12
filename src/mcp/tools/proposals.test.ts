@@ -1,12 +1,12 @@
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { aopHome } from "../../src/server/paths.js";
-import type { ImprovementView, ProposalView } from "../../src/shared/api.js";
-import { CONFIG_YAML } from "../server/helpers.js";
-import { mcpHarness, resultText, type McpHarness } from "./helpers.js";
+import { aopHome } from "../../server/paths.js";
+import type { ImprovementView, ProposalView } from "../../shared/api.js";
+import { CONFIG_YAML } from "../../../test/server/helpers.js";
+import { mcpHarness, resultText, type McpHarness } from "../shared/mcpHarness.helpers.js";
 
-const ROOT = resolve(import.meta.dirname, "../..");
+const ROOT = resolve(import.meta.dirname, "../../..");
 
 /** An MCP harness with improvements on, and an improvement node to propose on. */
 async function improvement(): Promise<{ m: McpHarness; id: string }> {

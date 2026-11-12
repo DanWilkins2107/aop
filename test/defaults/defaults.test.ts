@@ -2,7 +2,7 @@ import { cpSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { HUMAN_COMMANDS } from "../../src/cli/cli.js";
-import { TOOLS } from "../../src/mcp/tools/index.js";
+import { TOOLS } from "../../src/mcp/tools/registry.js";
 import { loadConfig } from "../../src/server/config.js";
 import { aopHome } from "../../src/server/paths.js";
 import { ROOT } from "../server/agents.helpers.js";

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { NodeView } from "../../shared/api.js";
 import { apiPaths } from "../../shared/paths.js";
-import { defineTool } from "../tool.js";
+import { defineTool } from "../shared/defineTool.js";
 
 export const splitStart = defineTool({
   name: "split_start",

@@ -1,7 +1,9 @@
 import { z } from "zod";
 import type { CreateNodeRequest, NodeView, ProjectRow } from "../../shared/api.js";
 import { apiPaths } from "../../shared/paths.js";
-import { ACTOR, ApiFailure, defineTool, type ToolApi } from "../tool.js";
+import { ACTOR } from "../shared/actor.js";
+import { defineTool } from "../shared/defineTool.js";
+import { ApiFailure, type ToolApi } from "../shared/toolApi.js";
 
 /** A project named by ID or name. */
 async function resolveProject(api: ToolApi, reference: string): Promise<string> {

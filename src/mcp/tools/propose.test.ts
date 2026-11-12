@@ -1,12 +1,12 @@
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { aopHome } from "../../src/server/paths.js";
-import type { EventView, ImprovementView, ProposalView } from "../../src/shared/api.js";
-import { CONFIG_YAML } from "../server/helpers.js";
-import { mcpHarness, resultText, type McpHarness } from "./helpers.js";
+import { aopHome } from "../../server/paths.js";
+import type { EventView, ImprovementView, ProposalView } from "../../shared/api.js";
+import { CONFIG_YAML } from "../../../test/server/helpers.js";
+import { mcpHarness, resultText, type McpHarness } from "../shared/mcpHarness.helpers.js";
 
-const ROOT = resolve(import.meta.dirname, "../..");
+const ROOT = resolve(import.meta.dirname, "../../..");
 
 /** Improvements switched on, with one skill to change, as in `test/server/improvements.test.ts`. */
 const ON = {

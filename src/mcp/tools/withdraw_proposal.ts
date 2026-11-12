@@ -1,8 +1,9 @@
 import { z } from "zod";
 import type { WithdrawRequest } from "../../shared/api.js";
 import { apiPaths } from "../../shared/paths.js";
-import { ACTOR, defineTool } from "../tool.js";
-import { absolutePath } from "./propose.js";
+import { absolutePath } from "../shared/absolutePath.js";
+import { ACTOR } from "../shared/actor.js";
+import { defineTool } from "../shared/defineTool.js";
 
 export const withdrawProposal = defineTool({
   name: "withdraw_proposal",

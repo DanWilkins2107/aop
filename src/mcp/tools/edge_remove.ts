@@ -1,7 +1,9 @@
 import { z } from "zod";
 import type { ActorRequest, EdgeRow } from "../../shared/api.js";
 import { apiPaths } from "../../shared/paths.js";
-import { ACTOR, ApiFailure, defineTool } from "../tool.js";
+import { ACTOR } from "../shared/actor.js";
+import { defineTool } from "../shared/defineTool.js";
+import { ApiFailure } from "../shared/toolApi.js";
 
 export const edgeRemove = defineTool({
   name: "edge_remove",

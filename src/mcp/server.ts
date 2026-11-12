@@ -10,8 +10,8 @@ import { Hono } from "hono";
 import { type AppOptions, createApp } from "../server/api.js";
 import type { Db } from "../server/db.js";
 import { HOSTNAME, type RunningServer } from "../server/server.js";
-import { toolApi } from "./tool.js";
-import { TOOLS } from "./tools/index.js";
+import { toolApi } from "./shared/toolApi.js";
+import { TOOLS } from "./tools/registry.js";
 
 export const MCP_PATH = "/mcp";
 

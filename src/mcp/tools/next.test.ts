@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { EventView } from "../../src/shared/api.js";
-import { mcpHarness, resultText } from "./helpers.js";
+import type { EventView } from "../../shared/api.js";
+import { mcpHarness, resultText } from "../shared/mcpHarness.helpers.js";
 
 describe("the next tool", () => {
   it("finishes the node's stage with the outcome, as the agent", async () => {

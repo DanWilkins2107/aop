@@ -3,11 +3,11 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { onTestFinished } from "vitest";
-import { createMcpApp, MCP_PATH } from "../../src/mcp/server.js";
-import { createApp } from "../../src/server/api.js";
-import { getNodeRow } from "../../src/server/nodes.js";
-import { beginRun } from "../../src/server/runs.js";
-import { harness, type Harness } from "../server/helpers.js";
+import { createMcpApp, MCP_PATH } from "../server.js";
+import { createApp } from "../../server/api.js";
+import { getNodeRow } from "../../server/nodes.js";
+import { beginRun } from "../../server/runs.js";
+import { harness, type Harness } from "../../../test/server/helpers.js";
 
 export interface McpHarness extends Harness {
   /** Calls a tool through a real MCP client, so its input schema is checked as an agent's call would be. */

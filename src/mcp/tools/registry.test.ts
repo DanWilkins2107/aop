@@ -1,14 +1,66 @@
 import { mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { TOOLS } from "../../src/mcp/tools/index.js";
-import { aopHome } from "../../src/server/paths.js";
-import { closeRun, runningRuns } from "../../src/server/runs.js";
-import type { ApplyResult, ImprovementView, ProposalView } from "../../src/shared/api.js";
-import { CONFIG_YAML } from "../server/helpers.js";
-import { mcpHarness, resultText, type McpHarness } from "./helpers.js";
+import { CONFIG_YAML } from "../../../test/server/helpers.js";
+import { HUMAN_COMMANDS } from "../../cli/cli.js";
+import { aopHome } from "../../server/paths.js";
+import { closeRun, runningRuns } from "../../server/runs.js";
+import type { ApplyResult, ImprovementView, ProposalView } from "../../shared/api.js";
+import { mcpHarness, resultText, type McpHarness } from "../shared/mcpHarness.helpers.js";
+import { TOOLS } from "./registry.js";
 
-const ROOT = resolve(import.meta.dirname, "../..");
+const ROOT = resolve(import.meta.dirname, "../../..");
+const MCP = join(ROOT, "src", "mcp");
+
+/** The source files below `src/mcp`, tests and their helpers aside, as paths from it with `/`. */
+const sourceFiles = () =>
+  (readdirSync(MCP, { recursive: true }) as string[])
+    .map((file) => file.replaceAll("\\", "/"))
+    .filter((file) => /\.ts$/.test(file) && !/\.(test|helpers)\.ts$/.test(file));
+
+/** Every tool an agent is designed to use. The server offers these and nothing else, though not all exist yet. */
+const AGENT_TOOLS = [
+  "context",
+  "next",
+  "ask",
+  "fail",
+  "message",
+  "link",
+  "search",
+  "node_create",
+  "node_edit",
+  "edge_add",
+  "edge_remove",
+  "split_start",
+  "split_finish",
+  "propose",
+  "withdraw_proposal",
+  "proposals",
+];
+
+describe("the MCP tools", () => {
+  it("have unique snake_case names", () => {
+    const names = TOOLS.map((t) => t.name);
+    expect(new Set(names).size).toBe(names.length);
+    for (const name of names) expect(name).toMatch(/^[a-z]+(_[a-z]+)*$/);
+  });
+
+  it("are each one file or folder in `tools/`, named as the tool, and nothing else is there", () => {
+    const entries = sourceFiles()
+      .filter((file) => file.startsWith("tools/") && file !== "tools/registry.ts")
+      .map((file) => file.split("/")[1]!.replace(/\.ts$/, ""));
+    expect([...new Set(entries)].sort()).toEqual(TOOLS.map((t) => t.name).sort());
+  });
+
+  it("are each one of the agent tools", () => {
+    for (const { name } of TOOLS) expect(AGENT_TOOLS, `${name} isn't an agent tool`).toContain(name);
+  });
+
+  it("never share a name with a human command", () => {
+    const human = Object.keys(HUMAN_COMMANDS).map((command) => command.replaceAll(" ", "_"));
+    for (const name of AGENT_TOOLS) expect(human, `${name} is a human command`).not.toContain(name);
+  });
+});
 
 /** Improvements switched on, as in `test/server/improvements.test.ts`. */
 const IMPROVEMENTS = {
@@ -72,11 +124,10 @@ describe("saving an improvement, as seen from the MCP tools", () => {
   });
 
   it("has no tool that calls the route which writes them", () => {
-    const dir = join(ROOT, "src", "mcp");
-    const files = [...readdirSync(dir), ...readdirSync(join(dir, "tools")).map((name) => join("tools", name))].filter((f) => f.endsWith(".ts"));
+    const files = sourceFiles();
     expect(files.length).toBeGreaterThan(10);
     for (const file of files) {
-      const source = readFileSync(join(dir, file), "utf8");
+      const source = readFileSync(join(MCP, file), "utf8");
       expect(source, file).not.toMatch(/["'`]apply["'`]|\/apply\b|applyProposals/);
     }
   });

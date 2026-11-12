@@ -15,7 +15,6 @@ import { isAlive, waitGone } from "../../src/server/osProcesses.js";
 import { addProject } from "../../src/server/projects.js";
 import { beginRun } from "../../src/server/runs.js";
 import type { NodeView } from "../../src/shared/api.js";
-import { resultText } from "../mcp/helpers.js";
 import { directives, fakeConfig, settle, toolCall, world, type World } from "./agents.helpers.js";
 import { harness, makeHome, makeRepo, STAGES_YAML } from "./helpers.js";
 
@@ -27,7 +26,7 @@ async function toolAs(w: World, name: string, args: Record<string, unknown>): Pr
   await client.connect(new StreamableHTTPClientTransport(new URL(w.mcpUrl)));
   try {
     const result = (await client.callTool({ name, arguments: args })) as CallToolResult;
-    return { isError: result.isError === true, text: resultText(result) };
+    return { isError: result.isError === true, text: result.content.map((part) => (part.type === "text" ? part.text : `[${part.type}]`)).join("\n") };
   } finally {
     await client.close();
   }

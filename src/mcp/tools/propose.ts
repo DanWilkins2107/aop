@@ -1,14 +1,10 @@
-import { isAbsolute, resolve } from "node:path";
 import { z } from "zod";
 import type { ProposalRequest, ProposalView } from "../../shared/api.js";
 import { apiPaths } from "../../shared/paths.js";
-import { ACTOR, ApiFailure, defineTool } from "../tool.js";
-
-/** The MCP server has no working directory, so a relative path has nothing to start from. */
-export function absolutePath(path: string): string {
-  if (!isAbsolute(path)) throw new ApiFailure(`Give an absolute path, not ${path}`);
-  return resolve(path);
-}
+import { absolutePath } from "../shared/absolutePath.js";
+import { ACTOR } from "../shared/actor.js";
+import { defineTool } from "../shared/defineTool.js";
+import { ApiFailure } from "../shared/toolApi.js";
 
 export const propose = defineTool({
   name: "propose",

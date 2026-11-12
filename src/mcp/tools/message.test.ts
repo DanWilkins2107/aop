@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { MessageRow } from "../../src/shared/api.js";
-import { mcpHarness, resultText } from "./helpers.js";
+import type { MessageRow } from "../../shared/api.js";
+import { mcpHarness, resultText } from "../shared/mcpHarness.helpers.js";
 
 describe("the message tool", () => {
   it("posts on the given node, as the agent", async () => {

@@ -1,7 +1,8 @@
 import { z } from "zod";
 import type { EdgeRequest, EdgeRow } from "../../shared/api.js";
 import { apiPaths } from "../../shared/paths.js";
-import { ACTOR, defineTool } from "../tool.js";
+import { ACTOR } from "../shared/actor.js";
+import { defineTool } from "../shared/defineTool.js";
 
 export const edgeAdd = defineTool({
   name: "edge_add",

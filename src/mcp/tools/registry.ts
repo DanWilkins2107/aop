@@ -1,7 +1,7 @@
 // Every tool the MCP server offers: reads, and writes that take the caller's run ID. Adding one is a
 // new file here, plus its import and its entry in `TOOLS`.
 
-import type { AopTool } from "../tool.js";
+import type { AopTool } from "../shared/defineTool.js";
 import { ask } from "./ask.js";
 import { context } from "./context.js";
 import { edgeAdd } from "./edge_add.js";

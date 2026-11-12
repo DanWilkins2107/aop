@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { addProject } from "../../src/server/projects.js";
-import type { EventView, NodeView } from "../../src/shared/api.js";
-import { makeRepo } from "../server/helpers.js";
-import { mcpHarness, resultText, type McpHarness } from "./helpers.js";
+import { addProject } from "../../server/projects.js";
+import type { EventView, NodeView } from "../../shared/api.js";
+import { makeRepo } from "../../../test/server/helpers.js";
+import { mcpHarness, resultText, type McpHarness } from "../shared/mcpHarness.helpers.js";
 
 /** The node a tool's "Created <id> at <stage>" names. */
 async function created(m: McpHarness, text: string): Promise<NodeView> {

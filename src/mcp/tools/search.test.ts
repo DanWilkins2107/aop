@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { addProject } from "../../src/server/projects.js";
-import type { NodeView } from "../../src/shared/api.js";
-import { makeRepo } from "../server/helpers.js";
-import { mcpHarness, resultText } from "./helpers.js";
+import { addProject } from "../../server/projects.js";
+import type { NodeView } from "../../shared/api.js";
+import { makeRepo } from "../../../test/server/helpers.js";
+import { mcpHarness, resultText } from "../shared/mcpHarness.helpers.js";
 
 describe("the search tool", () => {
   it("keeps to the node's project, unless all", async () => {

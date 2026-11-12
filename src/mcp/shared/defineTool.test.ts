@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { TOOLS } from "../../src/mcp/tools/index.js";
-import { deleteProject } from "../../src/server/projects.js";
-import { closeRun, getRun } from "../../src/server/runs.js";
-import type { MessageRow, SteerSession } from "../../src/shared/api.js";
-import { mcpHarness, resultText, type McpHarness } from "./helpers.js";
+import { TOOLS } from "../tools/registry.js";
+import { deleteProject } from "../../server/projects.js";
+import { closeRun, getRun } from "../../server/runs.js";
+import type { MessageRow, SteerSession } from "../../shared/api.js";
+import { mcpHarness, resultText, type McpHarness } from "./mcpHarness.helpers.js";
 
 const READS = ["context", "proposals", "search"];
 
