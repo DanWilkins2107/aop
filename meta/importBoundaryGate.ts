@@ -1,6 +1,6 @@
 import path from "node:path";
 
-/** What the code in one folder may reach. Its tests aren't checked. */
+/** What the code in one folder may reach. Its tests, and the `.helpers.ts` files only tests import, aren't checked. */
 export interface Boundary {
   /** The other folders it may import from, besides itself. */
   folders: string[];
@@ -13,11 +13,12 @@ export interface Boundary {
 /** Boundaries by folder. Files outside every folder aren't checked. */
 export type Boundaries = Record<string, Boundary>;
 
-const TEST = /\.test\.ts$/;
-const IMPORT = /\b(?:from|import)\s*\(?\s*["']([^"']+)["']/g;
+const TEST = /\.(test|helpers)\.ts$/;
+const HELPERS = /\.helpers\.js$/;
+export const IMPORT = /\b(?:from|import)\s*\(?\s*["']([^"']+)["']/g;
 const NODE_GLOBAL = /\b(?:process|Buffer)(?=\.\w)|\b__(?:dir|file)name\b|\brequire(?=\()|\bimport\.meta\.(?:dirname|filename)\b/;
 
-/** The imports that leave a folder's boundary, and the uses of Node in code the browser loads. */
+/** The imports that leave a folder's boundary or reach a test helper, and the uses of Node in code the browser loads. */
 export function importBoundaryProblems(sources: Record<string, string>, boundaries: Boundaries): string[] {
   const problems: string[] = [];
   for (const [file, text] of Object.entries(sources)) {
@@ -35,6 +36,7 @@ export function importBoundaryProblems(sources: Record<string, string>, boundari
 }
 
 function importProblem(file: string, specifier: string, root: string, boundary: Boundary): string | null {
+  if (HELPERS.test(specifier)) return "which only tests may import";
   if (specifier.startsWith(".")) {
     const target = path.posix.join(path.posix.dirname(file), specifier);
     return [root, ...boundary.folders].some((folder) => within(target, folder)) ? null : `which is outside ${root}`;

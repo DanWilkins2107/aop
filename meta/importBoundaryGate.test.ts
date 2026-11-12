@@ -64,11 +64,25 @@ describe("importBoundaryProblems", () => {
     ).toEqual(["src/tools/bad.ts: imports ../server/db.js, which is outside src/tools"]);
   });
 
-  it("leaves tests and folders without a boundary alone", () => {
+  it("rejects a test helper imported by anything but a test or another helper", () => {
+    expect(
+      importBoundaryProblems(
+        {
+          "src/area/one/thing.ts": 'import { fake } from "./fake.helpers.js";',
+          "src/area/one/thing.test.ts": 'import { fake } from "./fake.helpers.js";',
+          "src/area/one/other.helpers.ts": 'import { fake } from "./fake.helpers.js";',
+        },
+        BROWSER,
+      ),
+    ).toEqual(["src/area/one/thing.ts: imports ./fake.helpers.js, which only tests may import"]);
+  });
+
+  it("leaves tests, their helpers and folders without a boundary alone", () => {
     expect(
       importBoundaryProblems(
         {
           "src/area/one/thing.test.ts": lines('import { it } from "vitest";', 'import fs from "node:fs";'),
+          "src/area/one/fake.helpers.ts": lines('import fs from "node:fs";', 'import { db } from "../../server/db.js";'),
           "src/other/thing.ts": 'import fs from "node:fs";',
         },
         BROWSER,
