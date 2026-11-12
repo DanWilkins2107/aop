@@ -1,10 +1,10 @@
 /**
  * The bodies the HTTP API accepts. The server validates against these schemas, and the clients type
- * what they send with the `*Request` types in `api.ts`, so the two can't drift apart. Clients import
+ * what they send with the `*Request` types in `types.ts`, so the two can't drift apart. Clients import
  * only types from here, never the schemas, so that zod stays out of the browser's bundle.
  */
 import { z } from "zod";
-import { TIME_PATTERN } from "./schedule.js";
+import { TIME_PATTERN } from "../domain/schedule.js";
 
 const actor = z.enum(["human", "agent", "system"]);
 const nonBlank = z.string().refine((s) => s.trim().length > 0, "must not be blank");

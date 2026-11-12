@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { addProject } from "../../src/server/projects.js";
-import type { NodeView } from "../../src/shared/api.js";
+import type { NodeView } from "../../src/shared/api/types.js";
 import { makeRepo } from "../server/helpers.js";
 import { mcpHarness, resultText } from "./helpers.js";
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import type { ImprovementView } from "../../../src/shared/api.js";
+import type { ImprovementView } from "../../../src/shared/api/types.js";
 import { api } from "../lib/api.js";
 import { useAction } from "../lib/useAction.js";
 

@@ -34,8 +34,8 @@ import type {
   ScheduleRequest,
   StagesView,
   UpdateProjectRequest,
-} from "../../../src/shared/api.js";
-import { API_PREFIX, apiPaths } from "../../../src/shared/paths.js";
+} from "../../../src/shared/api/types.js";
+import { API_PREFIX, apiPaths } from "../../../src/shared/api/paths.js";
 
 /** A refusal from the API, or a failure to reach it, or an answer that isn't the API's error shape. */
 export class ApiFailure extends Error {

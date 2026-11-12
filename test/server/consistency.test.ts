@@ -14,7 +14,7 @@ import { Orchestrator } from "../../src/server/orchestrator.js";
 import { isAlive, waitGone } from "../../src/server/osProcesses.js";
 import { addProject } from "../../src/server/projects.js";
 import { beginRun } from "../../src/server/runs.js";
-import type { NodeView } from "../../src/shared/api.js";
+import type { NodeView } from "../../src/shared/api/types.js";
 import { resultText } from "../mcp/helpers.js";
 import { directives, fakeConfig, settle, toolCall, world, type World } from "./agents.helpers.js";
 import { harness, makeHome, makeRepo, STAGES_YAML } from "./helpers.js";

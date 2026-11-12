@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { EventView, MessageRow } from "../../src/shared/api.js";
+import type { EventView, MessageRow } from "../../src/shared/api/types.js";
 import { messageVisits } from "../../web/src/lib/messageVisits.js";
 import { harness, type Harness } from "../server/helpers.js";
 

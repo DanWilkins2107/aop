@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { TOOLS } from "../../src/mcp/tools/index.js";
 import { deleteProject } from "../../src/server/projects.js";
 import { closeRun, getRun } from "../../src/server/runs.js";
-import type { MessageRow, SteerSession } from "../../src/shared/api.js";
+import type { MessageRow, SteerSession } from "../../src/shared/api/types.js";
 import { mcpHarness, resultText, type McpHarness } from "./helpers.js";
 
 const READS = ["context", "proposals", "search"];

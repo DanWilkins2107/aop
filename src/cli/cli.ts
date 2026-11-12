@@ -14,9 +14,9 @@ import {
   type ReapResult,
   type SteerRequest,
   type SteerSession,
-} from "../shared/api.js";
-import { API_PREFIX, apiPaths } from "../shared/paths.js";
-import { DEFAULT_PORT, MCP_PORT } from "../shared/port.js";
+} from "../shared/api/types.js";
+import { API_PREFIX, apiPaths } from "../shared/api/paths.js";
+import { DEFAULT_PORT, MCP_PORT } from "../shared/api/port.js";
 
 /** What a run of the CLI reads and writes, instead of the process's own. */
 export interface CliIo {

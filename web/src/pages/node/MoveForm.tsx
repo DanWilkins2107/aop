@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { NodeView, StagesView } from "../../../../src/shared/api.js";
-import { FINISHED_STAGES } from "../../../../src/shared/builtInStages.js";
+import type { NodeView, StagesView } from "../../../../src/shared/api/types.js";
+import { FINISHED_STAGES } from "../../../../src/shared/domain/builtInStages.js";
 import { api } from "../../lib/api.js";
 import { FormError, useFormError } from "../../components/FormError.js";
 import { humanize, stageOptionGroups } from "../../lib/format.js";

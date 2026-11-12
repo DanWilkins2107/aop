@@ -1,6 +1,6 @@
 // Reads and writes the `runs` and `agent_processes` tables. The orchestrator decides when.
 
-import type { EventDataByKind, RunEndReason, RunView } from "../shared/api.js";
+import type { EventDataByKind, RunEndReason, RunView } from "../shared/api/types.js";
 import type { OutputFormat, Usage } from "./agentOutput.js";
 import type { Db } from "./db.js";
 import { refused } from "./errors.js";

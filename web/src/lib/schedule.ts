@@ -1,5 +1,5 @@
 // How a scheduled node's schedule reads on the node page and in its history.
-import { cronToSchedule, type Schedule } from "../../../src/shared/schedule.js";
+import { cronToSchedule, type Schedule } from "../../../src/shared/domain/schedule.js";
 
 /** The days in the order the page shows them, Monday first. Values are cron's, 0 for Sunday. */
 export const WEEK: readonly { day: number; short: string; long: string }[] = [

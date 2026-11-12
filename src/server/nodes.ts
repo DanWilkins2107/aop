@@ -4,7 +4,7 @@
 // and `nodeCore.ts` (what they share). Events are read here.
 
 import type { Db } from "./db.js";
-import type { EdgeRow, EventView, LinkRow, MessageRow, NodeRow, NodeView } from "../shared/api.js";
+import type { EdgeRow, EventView, LinkRow, MessageRow, NodeRow, NodeView } from "../shared/api/types.js";
 import { getNodeRow } from "./nodeCore.js";
 
 export type { EdgeRow, EventView, LinkRow, MessageRow, NodeRow, NodeView };

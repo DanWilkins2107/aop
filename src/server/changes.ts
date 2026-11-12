@@ -1,4 +1,4 @@
-import type { ChangeNotice } from "../shared/api.js";
+import type { ChangeNotice } from "../shared/api/types.js";
 import type { Db } from "./db.js";
 
 export type { ChangeNotice };

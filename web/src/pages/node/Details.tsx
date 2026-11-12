@@ -1,4 +1,4 @@
-import type { EdgeRow, EventView, NodeView } from "../../../../src/shared/api.js";
+import type { EdgeRow, EventView, NodeView } from "../../../../src/shared/api/types.js";
 import { Edges } from "./Edges.js";
 import { History } from "./History.js";
 import { Part } from "./Part.js";

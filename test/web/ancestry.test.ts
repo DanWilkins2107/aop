@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { EdgeRow } from "../../src/shared/api.js";
+import type { EdgeRow } from "../../src/shared/api/types.js";
 import { ancestorsOf, withDescendants } from "../../web/src/lib/ancestry.js";
 
 type Edge = Pick<EdgeRow, "source_id" | "target_id" | "kind">;

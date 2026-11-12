@@ -1,7 +1,7 @@
 import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { ApplyResult } from "../shared/api.js";
-import { isBuiltIn } from "../shared/builtInStages.js";
+import type { ApplyResult } from "../shared/api/types.js";
+import { isBuiltIn } from "../shared/domain/builtInStages.js";
 import { type AopConfig, loadConfig } from "./config.js";
 import type { Db } from "./db.js";
 import { type ApiError, refused } from "./errors.js";

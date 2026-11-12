@@ -1,7 +1,7 @@
 import { Controls, MarkerType, ReactFlow, useReactFlow, type Viewport } from "@xyflow/react";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { NON_BLOCKING_STAGES } from "../../../src/shared/builtInStages.js";
+import { NON_BLOCKING_STAGES } from "../../../src/shared/domain/builtInStages.js";
 import { ErrorNotice } from "../components/ErrorNotice.js";
 import { NewNodeDialog } from "../components/NewNodeDialog.js";
 import { RoutedEdge, type RoutedEdgeType } from "../components/RoutedEdge.js";

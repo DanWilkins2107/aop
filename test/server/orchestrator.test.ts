@@ -5,7 +5,7 @@ import { HEADLESS_AGENT_FLAGS } from "../../src/server/agentOutput.js";
 import { isAlive, waitGone } from "../../src/server/osProcesses.js";
 import { deleteProject } from "../../src/server/projects.js";
 import { listProcesses } from "../../src/server/runs.js";
-import type { EventView, MessageRow, NodeView, RunView } from "../../src/shared/api.js";
+import type { EventView, MessageRow, NodeView, RunView } from "../../src/shared/api/types.js";
 import { directives, settle, toolCall, until, world, type World } from "./agents.helpers.js";
 import { makeRepo, STAGES_YAML } from "./helpers.js";
 

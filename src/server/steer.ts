@@ -1,4 +1,4 @@
-import type { SteerSession } from "../shared/api.js";
+import type { SteerSession } from "../shared/api/types.js";
 import { loadConfig } from "./config.js";
 import type { Db } from "./db.js";
 import { refused } from "./errors.js";

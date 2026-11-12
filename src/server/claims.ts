@@ -3,7 +3,7 @@
 
 import type { Db } from "./db.js";
 import { refused } from "./errors.js";
-import type { NodeView } from "../shared/api.js";
+import type { NodeView } from "../shared/api/types.js";
 import { appendEvent, newId, now } from "./records.js";
 import { currentGraphs, getNodeRow } from "./nodeCore.js";
 import { viewOf } from "./nodeViews.js";

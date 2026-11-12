@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { TOOLS } from "../../src/mcp/tools/index.js";
 import { aopHome } from "../../src/server/paths.js";
 import { closeRun, runningRuns } from "../../src/server/runs.js";
-import type { ApplyResult, ImprovementView, ProposalView } from "../../src/shared/api.js";
+import type { ApplyResult, ImprovementView, ProposalView } from "../../src/shared/api/types.js";
 import { CONFIG_YAML } from "../server/helpers.js";
 import { mcpHarness, resultText, type McpHarness } from "./helpers.js";
 

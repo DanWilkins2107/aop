@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { NodeView } from "../../../../src/shared/api.js";
-import { cronToSchedule, scheduleToCron } from "../../../../src/shared/schedule.js";
+import type { NodeView } from "../../../../src/shared/api/types.js";
+import { cronToSchedule, scheduleToCron } from "../../../../src/shared/domain/schedule.js";
 import { FormError, useFormError } from "../../components/FormError.js";
 import { api } from "../../lib/api.js";
 import { describeSchedule, pickerStart, WEEK } from "../../lib/schedule.js";

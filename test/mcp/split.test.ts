@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { EventView, NodeView } from "../../src/shared/api.js";
+import type { EventView, NodeView } from "../../src/shared/api/types.js";
 import { mcpHarness, resultText, type McpHarness } from "./helpers.js";
 
 /** A triage node at `split_approved`, the agent stage that begins a split in these tests. */

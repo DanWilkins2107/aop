@@ -11,8 +11,8 @@ import type {
   ProjectRow,
   ProposalView,
   StagesView,
-} from "../../../src/shared/api.js";
-import { GLOBAL_STAGES } from "../../../src/shared/builtInStages.js";
+} from "../../../src/shared/api/types.js";
+import { GLOBAL_STAGES } from "../../../src/shared/domain/builtInStages.js";
 import { ClaimMark } from "../components/ClaimMark.js";
 import { ErrorNotice } from "../components/ErrorNotice.js";
 import { PipelineGraph } from "../components/PipelineGraph.js";

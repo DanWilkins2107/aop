@@ -9,8 +9,8 @@ import type {
   MessageRow,
   NodeRow,
   ProposalView,
-} from "../shared/api.js";
-import { FINISHED_STAGES } from "../shared/builtInStages.js";
+} from "../shared/api/types.js";
+import { FINISHED_STAGES } from "../shared/domain/builtInStages.js";
 import { allPromptFiles, type AopConfig, loadConfig } from "./config.js";
 import type { Db } from "./db.js";
 import { ApiError, badRequest, notFound, refused } from "./errors.js";

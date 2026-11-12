@@ -19,7 +19,7 @@ import type {
   NodeView,
   ProjectRow,
   ProposalView,
-} from "../../src/shared/api.js";
+} from "../../src/shared/api/types.js";
 import { CONFIG_YAML, harness, writeFiles, type Harness } from "./helpers.js";
 
 const ROOT = resolve(import.meta.dirname, "../..");

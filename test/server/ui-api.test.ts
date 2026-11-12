@@ -7,7 +7,7 @@ import { ChangeFeed } from "../../src/server/changes.js";
 import { openDb, type Db } from "../../src/server/db.js";
 import { aopHome } from "../../src/server/paths.js";
 import { startServer, type RunningServer } from "../../src/server/server.js";
-import type { EdgeRow, EventView, NodeView, StagesView } from "../../src/shared/api.js";
+import type { EdgeRow, EventView, NodeView, StagesView } from "../../src/shared/api/types.js";
 import { harness, makeHome, makeRepo, STAGES_YAML, type Harness } from "./helpers.js";
 
 describe("UI API", () => {

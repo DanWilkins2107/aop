@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { ProcessView } from "../../src/shared/api.js";
+import type { ProcessView } from "../../src/shared/api/types.js";
 import { harness, type Harness } from "./helpers.js";
 
 let h: Harness;

@@ -1,6 +1,6 @@
 import { Fragment, useLayoutEffect, useRef, useState, type FocusEvent } from "react";
-import type { EventView, NodeView, ProposalView, StagesView } from "../../../../src/shared/api.js";
-import { FINISHED_STAGES } from "../../../../src/shared/builtInStages.js";
+import type { EventView, NodeView, ProposalView, StagesView } from "../../../../src/shared/api/types.js";
+import { FINISHED_STAGES } from "../../../../src/shared/domain/builtInStages.js";
 import { FormError } from "../../components/FormError.js";
 import { api, urls } from "../../lib/api.js";
 import { humanize, toTarget } from "../../lib/format.js";

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { aopHome } from "../../src/server/paths.js";
-import type { ImprovementView, ProposalView } from "../../src/shared/api.js";
+import type { ImprovementView, ProposalView } from "../../src/shared/api/types.js";
 import { CONFIG_YAML } from "../server/helpers.js";
 import { mcpHarness, resultText, type McpHarness } from "./helpers.js";
 

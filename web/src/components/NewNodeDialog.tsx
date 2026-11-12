@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { NodeView, StagesView } from "../../../src/shared/api.js";
+import type { NodeView, StagesView } from "../../../src/shared/api/types.js";
 import { api } from "../lib/api.js";
 import { humanize } from "../lib/format.js";
 import { findType } from "../lib/stageStyle.js";

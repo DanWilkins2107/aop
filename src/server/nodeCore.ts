@@ -4,8 +4,8 @@
 import { type AopConfig, loadConfig } from "./config.js";
 import type { Db } from "./db.js";
 import { notFound } from "./errors.js";
-import type { NodeRow, Turn } from "../shared/api.js";
-import { AGENT_TURN_STAGES, HUMAN_TURN_STAGES, isBuiltIn } from "../shared/builtInStages.js";
+import type { NodeRow, Turn } from "../shared/api/types.js";
+import { AGENT_TURN_STAGES, HUMAN_TURN_STAGES, isBuiltIn } from "../shared/domain/builtInStages.js";
 import { EMPTY_GRAPH, type StageGraph } from "./stages.js";
 
 export function getNodeRow(db: Db, id: string): NodeRow {

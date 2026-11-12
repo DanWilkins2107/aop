@@ -1,5 +1,5 @@
-import type { NodeView, StagesView, TypeView } from "../../../src/shared/api.js";
-import { type BuiltInStage, FINISHED_STAGES, GLOBAL_STAGES, isBuiltIn } from "../../../src/shared/builtInStages.js";
+import type { NodeView, StagesView, TypeView } from "../../../src/shared/api/types.js";
+import { type BuiltInStage, FINISHED_STAGES, GLOBAL_STAGES, isBuiltIn } from "../../../src/shared/domain/builtInStages.js";
 import { mix, parseHex, readableText, visibleOn } from "./color.js";
 import { claimLabel, humanize } from "./format.js";
 

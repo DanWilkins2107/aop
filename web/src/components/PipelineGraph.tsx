@@ -1,4 +1,4 @@
-import type { NodeView, TypeView } from "../../../src/shared/api.js";
+import type { NodeView, TypeView } from "../../../src/shared/api/types.js";
 import { humanize } from "../lib/format.js";
 import { smoothPath } from "../lib/layout.js";
 import { stageDrawing, type BoxKind } from "../lib/stageGraph.js";

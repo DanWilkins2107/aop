@@ -6,8 +6,8 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult, ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import type { Hono } from "hono";
 import { z } from "zod";
-import { RUN_ID_HEADER, type ApiErrorBody } from "../shared/api.js";
-import { API_PREFIX } from "../shared/paths.js";
+import { RUN_ID_HEADER, type ApiErrorBody } from "../shared/api/types.js";
+import { API_PREFIX } from "../shared/api/paths.js";
 
 /** Every write a tool makes says it's the agent's. */
 export const ACTOR = "agent";

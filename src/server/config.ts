@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { existsSync, statSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { z } from "zod";
-import { IMPROVEMENTS_PROJECT_ID, type ConfigView } from "../shared/api.js";
+import { IMPROVEMENTS_PROJECT_ID, type ConfigView } from "../shared/api/types.js";
 import { ConfigError } from "./errors.js";
 import { aopHome, configPath, isWithin, repoAround, resolveConfigPath } from "./paths.js";
 import { loadStagesFile, promptFiles, type StageGraph } from "./stages.js";

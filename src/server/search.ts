@@ -1,4 +1,4 @@
-import type { SearchResult } from "../shared/api.js";
+import type { SearchResult } from "../shared/api/types.js";
 import type { Db } from "./db.js";
 
 const RESULT_LIMIT = 50;

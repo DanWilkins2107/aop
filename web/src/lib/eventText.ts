@@ -1,5 +1,5 @@
 // The history list's wording for each event kind the server records.
-import type { EventKind, EventView, NodeEvent, RunEndReason, ScheduleSkip } from "../../../src/shared/api.js";
+import type { EventKind, EventView, NodeEvent, RunEndReason, ScheduleSkip } from "../../../src/shared/api/types.js";
 import { humanize } from "./format.js";
 import { describeScheduleChange } from "./schedule.js";
 

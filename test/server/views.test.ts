@@ -5,7 +5,7 @@ import { loadConfig } from "../../src/server/config.js";
 import { getNode, graphsOf, holdersOf, listNodes, startableNodes, viewsOf, type NodeRow, type NodeView } from "../../src/server/nodes.js";
 import { addProject, IMPROVEMENTS_PROJECT_ID } from "../../src/server/projects.js";
 import { beginRun, closeRun, releaseAgentClaim } from "../../src/server/runs.js";
-import type { ImprovementView } from "../../src/shared/api.js";
+import type { ImprovementView } from "../../src/shared/api/types.js";
 import { ROOT } from "./agents.helpers.js";
 import { CONFIG_YAML, harness, makeRepo, STAGES_YAML, type Harness } from "./helpers.js";
 

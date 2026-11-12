@@ -5,8 +5,8 @@
 import { openSteerSessionNode } from "./claims.js";
 import type { Db } from "./db.js";
 import { badRequest, refused } from "./errors.js";
-import type { EventDataByKind, NodeKind, NodeRow, NodeView, StageChangeVia } from "../shared/api.js";
-import { FINISHED_STAGES, isBuiltIn, type OwnActionStage } from "../shared/builtInStages.js";
+import type { EventDataByKind, NodeKind, NodeRow, NodeView, StageChangeVia } from "../shared/api/types.js";
+import { FINISHED_STAGES, isBuiltIn, type OwnActionStage } from "../shared/domain/builtInStages.js";
 import { appendEvent, newId, now, type Actor } from "./records.js";
 import type { StageGraph } from "./stages.js";
 import { availableOutcomes, currentGraphs, getNodeRow, graphFor, stageIsLive, turnOf } from "./nodeCore.js";

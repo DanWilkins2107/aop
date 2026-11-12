@@ -8,7 +8,7 @@ import { ConfigError } from "../server/errors.js";
 import { aopHome, configPath, resolveConfigPath } from "../server/paths.js";
 import { loadStagesFile, promptFiles } from "../server/stages.js";
 import { parseYamlFile } from "../server/yamlFile.js";
-import { MCP_PORT } from "../shared/port.js";
+import { MCP_PORT } from "../shared/api/port.js";
 import { ABOUT, expandPath, gatherSettings, InitFailure, lineReader, type Settings, type Values } from "./initSettings.js";
 
 /** What `aop init --help` adds under the CLI's usage line. */

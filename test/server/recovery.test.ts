@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, onTestFinished } from "vitest";
 import { openDb } from "../../src/server/db.js";
 import { isAlive, killTree, readProcessStarts, waitGone } from "../../src/server/osProcesses.js";
 import { listProcesses, recordProcess } from "../../src/server/runs.js";
-import type { AgentProcessView, NodeView, ProjectRow, ReapResult } from "../../src/shared/api.js";
+import type { AgentProcessView, NodeView, ProjectRow, ReapResult } from "../../src/shared/api/types.js";
 import { directives, fakeConfig, nodeArgs, pidIn, settle, toolCall, until, world, type World } from "./agents.helpers.js";
 import { makeHome, makeRepo } from "./helpers.js";
 

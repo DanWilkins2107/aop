@@ -2,7 +2,7 @@
 
 import type { Db } from "./db.js";
 import { notFound, refused } from "./errors.js";
-import type { EdgeRow } from "../shared/api.js";
+import type { EdgeRow } from "../shared/api/types.js";
 import { appendEvent, newId, now, type Actor } from "./records.js";
 import { getNodeRow } from "./nodeCore.js";
 

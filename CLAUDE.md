@@ -10,7 +10,7 @@ Read the code for the area you change. `docs/` is written by humans: don't edit 
 - The server never writes to a project's path.
 - Every stage change goes through `applyStageChange`. Node routes don't start or stop agents: the orchestrator reconciles them to the database after each write.
 - The dev machine is Windows: keep scripts and paths cross-platform.
-- A new API route: zod body and route in `api.ts`, response type in `src/shared/api.ts`, client call in `web/src/lib/api.ts`, an MCP tool in `src/mcp/tools/` if agents need it (registered in `TOOLS`, and listed in `AGENT_TOOLS` in `test/mcp/tools.test.ts`), and a CLI command in `src/cli/cli.ts` only if humans need it.
+- A new API route: zod body and route in `api.ts`, response type in `src/shared/api/types.ts`, client call in `web/src/lib/api.ts`, an MCP tool in `src/mcp/tools/` if agents need it (registered in `TOOLS`, and listed in `AGENT_TOOLS` in `test/mcp/tools.test.ts`), and a CLI command in `src/cli/cli.ts` only if humans need it.
 - A new event kind: `appendEvent` in the same transaction as the change, and its wording in `web/src/lib/eventText.ts`.
 
 ## Testing

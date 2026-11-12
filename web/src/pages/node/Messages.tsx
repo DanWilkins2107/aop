@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
-import type { EventView, MessageRow, NodeView, StagesView } from "../../../../src/shared/api.js";
+import type { EventView, MessageRow, NodeView, StagesView } from "../../../../src/shared/api/types.js";
 import { CaptureImprovement } from "../../components/CaptureImprovement.js";
 import { api } from "../../lib/api.js";
 import { FormError, useFormError } from "../../components/FormError.js";

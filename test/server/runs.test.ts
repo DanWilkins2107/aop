@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { agentToolFor, HEADLESS_AGENT_FLAGS, readableLines, StreamJsonUsage } from "../../src/server/agentOutput.js";
 import { aopHome } from "../../src/server/paths.js";
 import { decideRunEnd, LOST_RUN_REASON, type RunEndInput, type RunEnding, type StopReason } from "../../src/server/runs.js";
-import type { LogTail, RunView } from "../../src/shared/api.js";
+import type { LogTail, RunView } from "../../src/shared/api/types.js";
 import { directives, toolCall, until, world, type World } from "./agents.helpers.js";
 
 const TIMEOUT = { timeout: 90_000 };

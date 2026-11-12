@@ -1,11 +1,11 @@
 import { useState } from "react";
-import type { NodeView, StagesView } from "../../../../src/shared/api.js";
+import type { NodeView, StagesView } from "../../../../src/shared/api/types.js";
 import { ClaimMark } from "../../components/ClaimMark.js";
 import { Dialog } from "../../components/Dialog.js";
 import { FormError } from "../../components/FormError.js";
 import { api } from "../../lib/api.js";
 import { humanize } from "../../lib/format.js";
-import { FINISHED_STAGES } from "../../../../src/shared/builtInStages.js";
+import { FINISHED_STAGES } from "../../../../src/shared/domain/builtInStages.js";
 import { useAction } from "../../lib/useAction.js";
 import { MoveForm } from "./MoveForm.js";
 import { Part } from "./Part.js";

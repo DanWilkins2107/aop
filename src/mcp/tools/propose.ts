@@ -1,7 +1,7 @@
 import { isAbsolute, resolve } from "node:path";
 import { z } from "zod";
-import type { ProposalRequest, ProposalView } from "../../shared/api.js";
-import { apiPaths } from "../../shared/paths.js";
+import type { ProposalRequest, ProposalView } from "../../shared/api/types.js";
+import { apiPaths } from "../../shared/api/paths.js";
 import { ACTOR, ApiFailure, defineTool } from "../tool.js";
 
 /** The MCP server has no working directory, so a relative path has nothing to start from. */

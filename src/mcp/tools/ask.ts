@@ -1,6 +1,6 @@
 import { z } from "zod";
-import type { AskRequest, NodeView } from "../../shared/api.js";
-import { apiPaths } from "../../shared/paths.js";
+import type { AskRequest, NodeView } from "../../shared/api/types.js";
+import { apiPaths } from "../../shared/api/paths.js";
 import { defineTool } from "../tool.js";
 
 export const ask = defineTool({
