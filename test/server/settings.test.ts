@@ -6,7 +6,7 @@ import { createApp } from "../../src/server/api.js";
 import { loadConfig } from "../../src/server/config.js";
 import { aopHome, configPath, resolveConfigPath } from "../../src/server/paths.js";
 import { agentStartPath } from "../../src/server/projects.js";
-import type { ConfigView } from "../../src/shared/api.js";
+import type { ConfigView } from "../../src/shared/config/types.js";
 import { CONFIG_YAML, harness, makeHome, STAGES_YAML, writeFiles, type Harness } from "./helpers.js";
 
 const ROOT = resolve(import.meta.dirname, "../..");

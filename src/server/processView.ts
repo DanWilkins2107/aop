@@ -2,7 +2,7 @@
 // confused with `osProcesses.ts`, which is about operating system processes.
 
 import { existsSync } from "node:fs";
-import type { ProcessView } from "../shared/api.js";
+import type { ProcessView } from "../shared/stages/types.js";
 import { loadConfig } from "./config.js";
 import { ConfigError } from "./errors.js";
 import { aopHome, configPath, resolveConfigPath } from "./paths.js";

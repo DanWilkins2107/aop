@@ -7,7 +7,9 @@ import { allowedTarget } from "../../src/server/improvements.js";
 import { getNodeRow } from "../../src/server/nodes.js";
 import { aopHome } from "../../src/server/paths.js";
 import { addProject } from "../../src/server/projects.js";
-import type { ConfigView, NodeView, ProcessView, StagesView } from "../../src/shared/api.js";
+import type { ConfigView } from "../../src/shared/config/types.js";
+import type { NodeView } from "../../src/shared/nodes/types.js";
+import type { ProcessView, StagesView } from "../../src/shared/stages/types.js";
 import { CONFIG_YAML, harness, type Harness, writeFiles } from "./helpers.js";
 
 /** A project's own process, in a folder of its own. */

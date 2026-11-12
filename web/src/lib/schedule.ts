@@ -1,5 +1,5 @@
 // How a scheduled node's schedule reads on the node page and in its history.
-import { cronToSchedule, type Schedule } from "../../../src/shared/schedule.js";
+import type { Schedule } from "../../../src/shared/schedule/types.js";
 
 /** The days in the order the page shows them, Monday first. Values are cron's, 0 for Sunday. */
 export const WEEK: readonly { day: number; short: string; long: string }[] = [
@@ -40,4 +40,17 @@ export function describeScheduleChange(cron: string | null): string {
 /** The picker's starting values: the node's schedule if it has one the picker can show, or 09:00 on weekdays. */
 export function pickerStart(cron: string | null): Schedule {
   return (cron === null ? null : cronToSchedule(cron)) ?? { time: "09:00", days: [1, 2, 3, 4, 5] };
+}
+
+const EVERY_DAY = [0, 1, 2, 3, 4, 5, 6];
+
+/** The schedule a cron stands for, or null if it isn't one the time-and-days picker could have made. */
+export function cronToSchedule(cron: string): Schedule | null {
+  const match = /^(\d{1,2}) (\d{1,2}) \* \* (\*|[0-6](?:,[0-6])*)$/.exec(cron.trim());
+  if (match === null) return null;
+  const minute = Number(match[1]);
+  const hour = Number(match[2]);
+  if (minute > 59 || hour > 23) return null;
+  const days = match[3] === "*" ? EVERY_DAY : [...new Set(match[3]!.split(",").map(Number))].sort((a, b) => a - b);
+  return { time: `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`, days };
 }

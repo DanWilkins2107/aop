@@ -3,7 +3,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
-import { MCP_PORT } from "../../src/shared/port.js";
+import { MCP_PORT } from "../../src/shared/http/mcpPort.js";
 import { directives, fakeCommand, settle, toolCall, until, world, type World } from "../server/agents.helpers.js";
 import { aopInProcess } from "./cli.helpers.js";
 

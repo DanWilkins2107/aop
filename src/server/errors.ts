@@ -1,4 +1,4 @@
-import type { ApiErrorCode } from "../shared/api.js";
+import type { ApiErrorCode } from "../shared/http/types.js";
 
 /** A request the API refuses. Rendered as an `ApiErrorBody`. */
 export class ApiError extends Error {

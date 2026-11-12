@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { FormError, useFormError } from "../../components/FormError.js";
-import type { EdgeRow, NodeView } from "../../../../src/shared/api.js";
+import type { EdgeRow, NodeView } from "../../../../src/shared/nodes/types.js";
 import { api, ApiFailure, failureText } from "../../lib/api.js";
 import { humanize } from "../../lib/format.js";
 import { useAction } from "../../lib/useAction.js";

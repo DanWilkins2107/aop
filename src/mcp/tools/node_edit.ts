@@ -1,6 +1,6 @@
 import { z } from "zod";
-import type { EditNodeRequest, NodeView } from "../../shared/api.js";
-import { apiPaths } from "../../shared/paths.js";
+import type { EditNodeRequest, NodeView } from "../../shared/nodes/types.js";
+import { apiPaths } from "../../shared/http/apiPaths.js";
 import { ACTOR } from "../shared/actor.js";
 import { defineTool } from "../shared/defineTool.js";
 

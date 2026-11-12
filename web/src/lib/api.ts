@@ -1,41 +1,42 @@
 // The browser's client for the HTTP API: one function per route the UI uses.
 
+import type { ConfigView } from "../../../src/shared/config/types.js";
+import type { EventView } from "../../../src/shared/events/types.js";
+import type { ApiErrorBody, ApiErrorCode } from "../../../src/shared/http/types.js";
 import type {
-  AddProjectRequest,
-  AnswerRequest,
-  ApiErrorBody,
   ApplyRequest,
   ApplyResult,
-  ApiErrorCode,
-  BlockRequest,
-  ConfigView,
-  CreateNodeRequest,
-  EdgeRequest,
-  EdgeRow,
-  EditNodeRequest,
-  EventView,
   ImprovementDetail,
   ImprovementRequest,
   ImprovementsList,
   ImprovementView,
-  InvalidateRequest,
-  LinkRow,
-  LogTail,
-  MessageRequest,
   ProposalRequest,
   ProposalView,
+} from "../../../src/shared/improvements/types.js";
+import type {
+  CreateNodeRequest,
+  EdgeRequest,
+  EdgeRow,
+  EditNodeRequest,
+  LinkRow,
+  MessageRequest,
   MessageRow,
+  NodeView,
+} from "../../../src/shared/nodes/types.js";
+import type { AddProjectRequest, ProjectRow, UpdateProjectRequest } from "../../../src/shared/projects/types.js";
+import type { LogTail, RunView } from "../../../src/shared/runs/types.js";
+import type { ScheduleRequest } from "../../../src/shared/schedule/types.js";
+import type {
+  AnswerRequest,
+  BlockRequest,
+  InvalidateRequest,
   MoveRequest,
   NextRequest,
-  NodeView,
-  ProjectRow,
   ProcessView,
-  RunView,
-  ScheduleRequest,
   StagesView,
-  UpdateProjectRequest,
-} from "../../../src/shared/api.js";
-import { API_PREFIX, apiPaths } from "../../../src/shared/paths.js";
+} from "../../../src/shared/stages/types.js";
+import { apiPaths } from "../../../src/shared/http/apiPaths.js";
+import { API_PREFIX } from "../../../src/shared/http/apiPrefix.js";
 
 /** A refusal from the API, or a failure to reach it, or an answer that isn't the API's error shape. */
 export class ApiFailure extends Error {

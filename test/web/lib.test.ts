@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
-import type { EventView, NodeView, TypeView } from "../../src/shared/api.js";
+import type { EventView } from "../../src/shared/events/types.js";
+import type { NodeView } from "../../src/shared/nodes/types.js";
+import type { TypeView } from "../../src/shared/stages/types.js";
 import { contrast, parseHex, readableText, visibleOn } from "../../web/src/lib/color.js";
 import {
   CARD_HEIGHT,

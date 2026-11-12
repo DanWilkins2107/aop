@@ -1,8 +1,9 @@
 import type { Cron } from "croner";
 import { type ChangeFeed, nodesNotice } from "./changes.js";
 import { loadConfig, withConfigSnapshot } from "./config.js";
-import type { EventKind, ScheduleSkip } from "../shared/api.js";
-import { FINISHED_STAGES } from "../shared/builtInStages.js";
+import type { EventKind } from "../shared/events/types.js";
+import type { ScheduleSkip } from "../shared/schedule/types.js";
+import { FINISHED_STAGES } from "../shared/stages/finishedStages.js";
 import { parseCron } from "./cron.js";
 import type { Db } from "./db.js";
 import { ConfigError } from "./errors.js";

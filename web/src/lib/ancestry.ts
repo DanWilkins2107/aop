@@ -1,4 +1,4 @@
-import type { EdgeRow } from "../../../src/shared/api.js";
+import type { EdgeRow } from "../../../src/shared/nodes/types.js";
 
 type ParentEdge = Pick<EdgeRow, "source_id" | "target_id" | "kind">;
 

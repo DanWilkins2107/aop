@@ -11,7 +11,9 @@ import { bodyLimit } from "hono/body-limit";
 import { streamSSE } from "hono/streaming";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { z } from "zod";
-import { RUN_ID_HEADER, type ApiErrorBody, type ApiErrorCode, type LogTail } from "../shared/api.js";
+import type { ApiErrorBody, ApiErrorCode } from "../shared/http/types.js";
+import { RUN_ID_HEADER } from "../shared/runs/runIdHeader.js";
+import type { LogTail } from "../shared/runs/types.js";
 import {
   actorBody,
   addProjectBody,
@@ -23,8 +25,8 @@ import {
   createNodeBody,
   edgeBody,
   editNodeBody,
-  improvementBody,
   failBody,
+  improvementBody,
   invalidateBody,
   linkBody,
   messageBody,
@@ -36,8 +38,10 @@ import {
   unblockBody,
   updateProjectBody,
   withdrawBody,
-} from "../shared/requests.js";
-import { API_PREFIX, apiPaths, routes } from "../shared/paths.js";
+} from "./requests.js";
+import { routes } from "./routes.js";
+import { apiPaths } from "../shared/http/apiPaths.js";
+import { API_PREFIX } from "../shared/http/apiPrefix.js";
 import { readableLines } from "./agentOutput.js";
 import { ChangeFeed, EVERYTHING, nodesNotice, type ChangeNotice } from "./changes.js";
 import { openSteerSessionNode } from "./claims.js";

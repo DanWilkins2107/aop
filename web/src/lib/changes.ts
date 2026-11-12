@@ -1,6 +1,6 @@
 // The server's change notices, and which pages they concern. See `useLiveData` in `live.ts`.
 
-import type { ChangeNotice } from "../../../src/shared/api.js";
+import type { ChangeNotice } from "../../../src/shared/events/types.js";
 
 export type { ChangeNotice };
 

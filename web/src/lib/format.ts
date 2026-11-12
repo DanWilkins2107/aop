@@ -1,4 +1,6 @@
-import type { NodeView, RunView, StagesView } from "../../../src/shared/api.js";
+import type { NodeView } from "../../../src/shared/nodes/types.js";
+import type { RunView } from "../../../src/shared/runs/types.js";
+import type { StagesView } from "../../../src/shared/stages/types.js";
 
 const ABBREVIATIONS = /\b(api|ci|db|id|pr|qa|sql|ui|url|ux)\b/gi;
 

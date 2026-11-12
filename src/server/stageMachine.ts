@@ -5,14 +5,20 @@
 import { openSteerSessionNode } from "./claims.js";
 import type { Db } from "./db.js";
 import { badRequest, refused } from "./errors.js";
-import type { EventDataByKind, NodeKind, NodeRow, NodeView, StageChangeVia } from "../shared/api.js";
-import { FINISHED_STAGES, isBuiltIn, type OwnActionStage } from "../shared/builtInStages.js";
+import type { EventDataByKind } from "../shared/events/types.js";
+import type { NodeKind, NodeRow, NodeView } from "../shared/nodes/types.js";
+import type { BuiltInStage, StageChangeVia } from "../shared/stages/types.js";
+import { FINISHED_STAGES } from "../shared/stages/finishedStages.js";
+import { isBuiltIn } from "../shared/stages/isBuiltIn.js";
 import { appendEvent, newId, now, type Actor } from "./records.js";
 import type { StageGraph } from "./stages.js";
 import { availableOutcomes, currentGraphs, getNodeRow, graphFor, stageIsLive, turnOf } from "./nodeCore.js";
 import { viewOf } from "./nodeViews.js";
 import { postMessage } from "./messages.js";
 import { addEdge } from "./edges.js";
+
+/** Built-ins entered only through an action of their own, which collects their state. */
+type OwnActionStage = Exclude<BuiltInStage, "done" | "broken_down" | "scheduled">;
 
 /** Built-ins with state of their own, which their actions collect. Create and move can't land on them. */
 const OWN_ACTIONS = new Map<string, string>(

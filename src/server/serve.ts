@@ -11,7 +11,9 @@ import { configPath, dbPath } from "./paths.js";
 import { Scheduler } from "./scheduler.js";
 import { HOSTNAME, startServer, type RunningServer } from "./server.js";
 import { MCP_PATH, startMcpServer } from "../mcp/server.js";
-import { DEFAULT_PORT, MCP_PORT, TEST_MCP_PORT_ENV } from "../shared/port.js";
+import { TEST_MCP_PORT_ENV } from "./testMcpPortEnv.js";
+import { DEFAULT_PORT } from "../shared/http/defaultPort.js";
+import { MCP_PORT } from "../shared/http/mcpPort.js";
 import { acquireServerLock, ServerAlreadyRunning, type ServerLock } from "./serverLock.js";
 
 /** The MCP server's fixed port is taken, most likely by another AOP with a different AOP_HOME. */

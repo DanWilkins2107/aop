@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { EventView } from "../../shared/api.js";
+import type { EventView } from "../../shared/events/types.js";
 import { mcpHarness, resultText } from "../shared/mcpHarness.helpers.js";
 
 describe("the fail tool", () => {

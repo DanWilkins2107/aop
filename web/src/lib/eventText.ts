@@ -1,7 +1,15 @@
 // The history list's wording for each event kind the server records.
-import type { EventKind, EventView, NodeEvent, RunEndReason, ScheduleSkip } from "../../../src/shared/api.js";
+import type { EventDataByKind, EventKind, EventView } from "../../../src/shared/events/types.js";
+import type { Actor } from "../../../src/shared/nodes/types.js";
+import type { RunEndReason } from "../../../src/shared/runs/types.js";
+import type { ScheduleSkip } from "../../../src/shared/schedule/types.js";
 import { humanize } from "./format.js";
 import { describeScheduleChange } from "./schedule.js";
+
+/** An event of a kind this version knows, narrowed by `kind`. */
+type NodeEvent = {
+  [K in EventKind]: { id: string; created_at: string; node_id: string; actor: Actor; kind: K; data: EventDataByKind[K] };
+}[EventKind];
 
 // A Record, so that adding a kind to `EventDataByKind` fails to compile until it's listed here.
 const KNOWN_KINDS: Record<EventKind, true> = {

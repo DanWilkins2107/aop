@@ -5,8 +5,8 @@ import { type AddressInfo, createServer } from "node:net";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { aopHome } from "../../src/server/paths.js";
-import type { StagesView } from "../../src/shared/api.js";
-import { TEST_MCP_PORT_ENV } from "../../src/shared/port.js";
+import type { StagesView } from "../../src/shared/stages/types.js";
+import { TEST_MCP_PORT_ENV } from "../../src/server/testMcpPortEnv.js";
 import { makeHome } from "./helpers.js";
 
 const ROOT = resolve(import.meta.dirname, "../..");

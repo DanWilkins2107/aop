@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { IMPROVEMENTS_PROJECT_ID, type ImprovementSource } from "../../../src/shared/api.js";
+import { IMPROVEMENTS_PROJECT_ID } from "../../../src/shared/improvements/improvementsProjectId.js";
+import type { ImprovementSource } from "../../../src/shared/improvements/types.js";
 import { CaptureImprovement } from "../components/CaptureImprovement.js";
 import { ClaimMark } from "../components/ClaimMark.js";
 import { ErrorNotice } from "../components/ErrorNotice.js";

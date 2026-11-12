@@ -1,6 +1,7 @@
 import { z } from "zod";
-import type { NextRequest, NodeView } from "../../shared/api.js";
-import { apiPaths } from "../../shared/paths.js";
+import type { NextRequest } from "../../shared/stages/types.js";
+import type { NodeView } from "../../shared/nodes/types.js";
+import { apiPaths } from "../../shared/http/apiPaths.js";
 import { ACTOR } from "../shared/actor.js";
 import { defineTool } from "../shared/defineTool.js";
 

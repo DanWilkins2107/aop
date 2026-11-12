@@ -2,7 +2,8 @@ import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { aopHome } from "../../server/paths.js";
-import type { EventView, ImprovementView, ProposalView } from "../../shared/api.js";
+import type { EventView } from "../../shared/events/types.js";
+import type { ImprovementView, ProposalView } from "../../shared/improvements/types.js";
 import { CONFIG_YAML } from "../../../test/server/helpers.js";
 import { mcpHarness, resultText, type McpHarness } from "../shared/mcpHarness.helpers.js";
 

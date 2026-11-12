@@ -1,4 +1,4 @@
-import type { EventView } from "../../../../src/shared/api.js";
+import type { EventView } from "../../../../src/shared/events/types.js";
 import { describeEvent } from "../../lib/eventText.js";
 import { timeAgo } from "../../lib/format.js";
 

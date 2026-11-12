@@ -1,4 +1,5 @@
-import type { EventView, MessageRow } from "../../../src/shared/api.js";
+import type { EventView } from "../../../src/shared/events/types.js";
+import type { MessageRow } from "../../../src/shared/nodes/types.js";
 import { stageChangeNote } from "./eventText.js";
 
 /** A message, or a line from AOP about a stage change the messages wouldn't explain. */

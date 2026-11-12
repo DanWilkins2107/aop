@@ -3,8 +3,9 @@
 
 import type { Db } from "./db.js";
 import { refused } from "./errors.js";
-import type { NodeView } from "../shared/api.js";
-import { scheduleToCron, type Schedule } from "../shared/schedule.js";
+import type { NodeView } from "../shared/nodes/types.js";
+import { scheduleToCron } from "../shared/schedule/scheduleToCron.js";
+import type { Schedule } from "../shared/schedule/types.js";
 import { currentGraphs, getNodeRow } from "./nodeCore.js";
 import { viewOf } from "./nodeViews.js";
 import { appendEvent } from "./records.js";

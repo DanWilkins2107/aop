@@ -1,6 +1,7 @@
 import { z } from "zod";
-import type { CreateNodeRequest, NodeView, ProjectRow } from "../../shared/api.js";
-import { apiPaths } from "../../shared/paths.js";
+import type { CreateNodeRequest, NodeView } from "../../shared/nodes/types.js";
+import type { ProjectRow } from "../../shared/projects/types.js";
+import { apiPaths } from "../../shared/http/apiPaths.js";
 import { ACTOR } from "../shared/actor.js";
 import { defineTool } from "../shared/defineTool.js";
 import { ApiFailure, type ToolApi } from "../shared/toolApi.js";

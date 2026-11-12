@@ -1,6 +1,8 @@
 import { realpathSync, statSync } from "node:fs";
 import { basename, isAbsolute } from "node:path";
-import { IMPROVEMENTS_PROJECT_ID, type NodeRow, type ProjectRow } from "../shared/api.js";
+import { IMPROVEMENTS_PROJECT_ID } from "../shared/improvements/improvementsProjectId.js";
+import type { NodeRow } from "../shared/nodes/types.js";
+import type { ProjectRow } from "../shared/projects/types.js";
 import type { AopConfig } from "./config.js";
 import { allowProjectDeletion, type Db } from "./db.js";
 import { ApiError, badRequest, notFound } from "./errors.js";

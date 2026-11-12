@@ -1,16 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { EventView } from "../../src/shared/api.js";
-import { cronToSchedule, scheduleToCron } from "../../src/shared/schedule.js";
+import type { EventView } from "../../src/shared/events/types.js";
+import { scheduleToCron } from "../../src/shared/schedule/scheduleToCron.js";
+import { cronToSchedule, describeSchedule, describeScheduleChange, pickerStart } from "../../web/src/lib/schedule.js";
 import { describeEvent } from "../../web/src/lib/eventText.js";
-import { describeSchedule, describeScheduleChange, pickerStart } from "../../web/src/lib/schedule.js";
 
 describe("schedules as crons", () => {
-  it("builds a cron from a time and days, in day order, with every day as *", () => {
-    expect(scheduleToCron({ time: "09:30", days: [5, 1, 3] })).toBe("30 9 * * 1,3,5");
-    expect(scheduleToCron({ time: "00:00", days: [0] })).toBe("0 0 * * 0");
-    expect(scheduleToCron({ time: "03:05", days: [6, 5, 4, 3, 2, 1, 0] })).toBe("5 3 * * *");
-  });
-
   it("reads back the crons it builds", () => {
     for (const schedule of [
       { time: "09:30", days: [1, 3, 5] },

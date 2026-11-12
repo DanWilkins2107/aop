@@ -2,7 +2,7 @@
 // answer, fail, block) put it on the node, inside their own transaction.
 
 import type { Db } from "./db.js";
-import type { LinkRow, MessageRow } from "../shared/api.js";
+import type { LinkRow, MessageRow } from "../shared/nodes/types.js";
 import { appendEvent, newId, now, type Actor } from "./records.js";
 import { getNodeRow } from "./nodeCore.js";
 

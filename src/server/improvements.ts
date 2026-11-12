@@ -1,16 +1,9 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
-import type {
-  ImprovementDetail,
-  ImprovementSource,
-  ImprovementsList,
-  ImprovementView,
-  MessageRow,
-  NodeRow,
-  ProposalView,
-} from "../shared/api.js";
-import { FINISHED_STAGES } from "../shared/builtInStages.js";
+import type { ImprovementDetail, ImprovementsList, ImprovementSource, ImprovementView, ProposalView } from "../shared/improvements/types.js";
+import type { MessageRow, NodeRow } from "../shared/nodes/types.js";
+import { FINISHED_STAGES } from "../shared/stages/finishedStages.js";
 import { allPromptFiles, type AopConfig, loadConfig } from "./config.js";
 import type { Db } from "./db.js";
 import { ApiError, badRequest, notFound, refused } from "./errors.js";

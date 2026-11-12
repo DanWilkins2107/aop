@@ -4,8 +4,9 @@
 import { type AopConfig, loadConfig } from "./config.js";
 import type { Db } from "./db.js";
 import { notFound } from "./errors.js";
-import type { NodeRow, Turn } from "../shared/api.js";
-import { AGENT_TURN_STAGES, HUMAN_TURN_STAGES, isBuiltIn } from "../shared/builtInStages.js";
+import type { NodeRow, Turn } from "../shared/nodes/types.js";
+import { isBuiltIn } from "../shared/stages/isBuiltIn.js";
+import type { BuiltInStage } from "../shared/stages/types.js";
 import { EMPTY_GRAPH, type StageGraph } from "./stages.js";
 
 export function getNodeRow(db: Db, id: string): NodeRow {
@@ -53,6 +54,12 @@ export function stageIsLive(graph: StageGraph, type: string, stage: string): boo
   if (isBuiltIn(stage) && stage !== "scheduled") return true;
   return graph.types.get(type)?.stages.has(stage) ?? false;
 }
+
+/** The built-ins where it's the human's move. */
+const HUMAN_TURN_STAGES: readonly string[] = ["ask_human_question", "failed", "externally_blocked"] as const satisfies readonly BuiltInStage[];
+
+/** The built-ins where it's the agent's move. */
+const AGENT_TURN_STAGES: readonly string[] = ["splitting"] as const satisfies readonly BuiltInStage[];
 
 export function turnOf(graph: StageGraph, node: NodeRow): Turn | null {
   if (HUMAN_TURN_STAGES.includes(node.stage)) return "human";

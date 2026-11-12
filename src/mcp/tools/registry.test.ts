@@ -5,7 +5,7 @@ import { CONFIG_YAML } from "../../../test/server/helpers.js";
 import { HUMAN_COMMANDS } from "../../cli/cli.js";
 import { aopHome } from "../../server/paths.js";
 import { closeRun, runningRuns } from "../../server/runs.js";
-import type { ApplyResult, ImprovementView, ProposalView } from "../../shared/api.js";
+import type { ApplyResult, ImprovementView, ProposalView } from "../../shared/improvements/types.js";
 import { mcpHarness, resultText, type McpHarness } from "../shared/mcpHarness.helpers.js";
 import { TOOLS } from "./registry.js";
 

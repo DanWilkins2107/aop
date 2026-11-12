@@ -1,4 +1,4 @@
-import type { NodeView } from "../../../src/shared/api.js";
+import type { NodeView } from "../../../src/shared/nodes/types.js";
 import { claimLabel } from "../lib/format.js";
 
 /** Who holds a claim: a green dot, and the human or the agent's run ID. Nothing when unclaimed. */

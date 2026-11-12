@@ -1,6 +1,8 @@
 import { Graph, layout } from "@dagrejs/dagre";
-import type { EventView, NodeView, TypeView } from "../../../src/shared/api.js";
-import { GLOBAL_STAGES } from "../../../src/shared/builtInStages.js";
+import type { EventView } from "../../../src/shared/events/types.js";
+import type { NodeView } from "../../../src/shared/nodes/types.js";
+import type { TypeView } from "../../../src/shared/stages/types.js";
+import { GLOBAL_STAGES } from "./globalStages.js";
 import { humanize } from "./format.js";
 import type { Point } from "./layout.js";
 

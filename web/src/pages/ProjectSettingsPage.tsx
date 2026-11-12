@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import type { ProjectRow } from "../../../src/shared/api.js";
+import type { ProjectRow } from "../../../src/shared/projects/types.js";
 import { FormError, useFormError } from "../components/FormError.js";
 import { DeleteProjectDialog, RepoPathHint } from "../components/ProjectDialogs.js";
 import { SubPage } from "../components/SubPage.js";

@@ -3,8 +3,8 @@
 
 import { nextFireAt } from "./cron.js";
 import type { Db } from "./db.js";
-import type { HolderVia, NodeRow, NodeView } from "../shared/api.js";
-import { NON_BLOCKING_STAGES } from "../shared/builtInStages.js";
+import type { HolderVia, NodeRow, NodeView } from "../shared/nodes/types.js";
+import { NON_BLOCKING_STAGES } from "../shared/stages/nonBlockingStages.js";
 import { availableOutcomes, currentGraphs, getNodeRow, graphFor, stageIsLive, turnOf, type Graphs } from "./nodeCore.js";
 
 /** Invalidated ancestors of a node. Derived at read time; being invalidated by a parent is never stored. */

@@ -2,7 +2,8 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSy
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { deleteProject } from "../../src/server/projects.js";
-import type { NodeView, ProjectRow } from "../../src/shared/api.js";
+import type { NodeView } from "../../src/shared/nodes/types.js";
+import type { ProjectRow } from "../../src/shared/projects/types.js";
 import { harness, makeRepo, type Harness, type Res } from "./helpers.js";
 
 let h: Harness;

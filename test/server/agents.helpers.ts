@@ -11,7 +11,7 @@ import { isAlive, killTree } from "../../src/server/osProcesses.js";
 import { addProject } from "../../src/server/projects.js";
 import type { RunRow } from "../../src/server/runs.js";
 import { startServer, type RunningServer } from "../../src/server/server.js";
-import type { NodeView } from "../../src/shared/api.js";
+import type { NodeView } from "../../src/shared/nodes/types.js";
 import { makeHome, makeRepo } from "./helpers.js";
 
 export const ROOT = resolve(import.meta.dirname, "../..");

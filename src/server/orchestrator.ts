@@ -4,7 +4,7 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import type { WriteStream } from "node:fs";
 import { setTimeout as delay } from "node:timers/promises";
-import type { AgentProcessView, ReapResult } from "../shared/api.js";
+import type { AgentProcessView, ReapResult } from "../shared/runs/types.js";
 import { headlessCommand, StreamJsonUsage, type OutputFormat } from "./agentOutput.js";
 import { type ChangeFeed, nodesNotice } from "./changes.js";
 import { type AopConfig, loadConfig, withConfigSnapshot } from "./config.js";

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import type { ProjectRow } from "../../../src/shared/api.js";
+import type { ProjectRow } from "../../../src/shared/projects/types.js";
 import { api } from "../lib/api.js";
 import { useLiveData } from "../lib/live.js";
 import { useAction } from "../lib/useAction.js";

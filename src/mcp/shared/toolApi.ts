@@ -3,8 +3,9 @@
 // guard all stay on the API's path.
 
 import type { Hono } from "hono";
-import { RUN_ID_HEADER, type ApiErrorBody } from "../../shared/api.js";
-import { API_PREFIX } from "../../shared/paths.js";
+import { RUN_ID_HEADER } from "../../shared/runs/runIdHeader.js";
+import type { ApiErrorBody } from "../../shared/http/types.js";
+import { API_PREFIX } from "../../shared/http/apiPrefix.js";
 
 /** The API, as a tool sees it. A refusal or any other failure is thrown as an `ApiFailure`. */
 export interface ToolApi {

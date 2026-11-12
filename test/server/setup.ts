@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterAll } from "vitest";
-import { TEST_MCP_PORT_ENV } from "../../src/shared/port.js";
+import { TEST_MCP_PORT_ENV } from "../../src/server/testMcpPortEnv.js";
 
 // Runs before each test file, so nothing can reach the real ~/.aop even by accident.
 const home = mkdtempSync(join(tmpdir(), "aop-test-"));

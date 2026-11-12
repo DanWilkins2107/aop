@@ -1,11 +1,13 @@
 // Parses and validates `stages.yaml` into a `StageGraph`. The built-in stages are named in
-// `src/shared/builtInStages.ts`.
+// `src/shared/stages/`.
 
 import { existsSync, realpathSync, statSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { z } from "zod";
-import type { StagesView, Turn } from "../shared/api.js";
-import { FINISHED_STAGES, isBuiltIn } from "../shared/builtInStages.js";
+import type { Turn } from "../shared/nodes/types.js";
+import type { StagesView } from "../shared/stages/types.js";
+import { FINISHED_STAGES } from "../shared/stages/finishedStages.js";
+import { isBuiltIn } from "../shared/stages/isBuiltIn.js";
 import { parseYamlFile } from "./yamlFile.js";
 
 export type { Turn };

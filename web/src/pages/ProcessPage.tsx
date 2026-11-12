@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
-import type { StagesView } from "../../../src/shared/api.js";
-import { GLOBAL_STAGES } from "../../../src/shared/builtInStages.js";
+import type { StagesView } from "../../../src/shared/stages/types.js";
+import { GLOBAL_STAGES } from "../lib/globalStages.js";
 import { ProblemBanner } from "../components/ErrorNotice.js";
 import { PipelineGraph } from "../components/PipelineGraph.js";
 import { SubPage } from "../components/SubPage.js";

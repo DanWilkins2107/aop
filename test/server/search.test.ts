@@ -7,7 +7,7 @@ import { migrations } from "../../src/server/migrations.js";
 import { aopHome } from "../../src/server/paths.js";
 import { deleteProject } from "../../src/server/projects.js";
 import { ftsQuery, search } from "../../src/server/search.js";
-import type { NodeView, SearchResult } from "../../src/shared/api.js";
+import type { NodeView, SearchResult } from "../../src/shared/nodes/types.js";
 import { harness, makeRepo, type Harness } from "./helpers.js";
 
 let h: Harness;

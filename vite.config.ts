@@ -1,6 +1,6 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
-import { DEFAULT_PORT } from "./src/shared/port.js";
+import { DEFAULT_PORT } from "./src/shared/http/defaultPort.js";
 
 const DEV_PORT = 5173;
 const server = `http://127.0.0.1:${process.env["AOP_PORT"] ?? DEFAULT_PORT}`;

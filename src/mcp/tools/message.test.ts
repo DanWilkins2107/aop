@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { MessageRow } from "../../shared/api.js";
+import type { MessageRow } from "../../shared/nodes/types.js";
 import { mcpHarness, resultText } from "../shared/mcpHarness.helpers.js";
 
 describe("the message tool", () => {

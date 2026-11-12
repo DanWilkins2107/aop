@@ -8,18 +8,11 @@ import { nodeContext } from "../../src/server/context.js";
 import { aopHome } from "../../src/server/paths.js";
 import { describeProcess } from "../../src/server/processView.js";
 import { IMPROVEMENTS_PROJECT_ID, nodeStartPath } from "../../src/server/projects.js";
-import type {
-  ApiErrorBody,
-  ApplyResult,
-  EventView,
-  ImprovementDetail,
-  ImprovementsList,
-  ImprovementView,
-  MessageRow,
-  NodeView,
-  ProjectRow,
-  ProposalView,
-} from "../../src/shared/api.js";
+import type { EventView } from "../../src/shared/events/types.js";
+import type { ApiErrorBody } from "../../src/shared/http/types.js";
+import type { ApplyResult, ImprovementDetail, ImprovementsList, ImprovementView, ProposalView } from "../../src/shared/improvements/types.js";
+import type { MessageRow, NodeView } from "../../src/shared/nodes/types.js";
+import type { ProjectRow } from "../../src/shared/projects/types.js";
 import { CONFIG_YAML, harness, writeFiles, type Harness } from "./helpers.js";
 
 const ROOT = resolve(import.meta.dirname, "../..");

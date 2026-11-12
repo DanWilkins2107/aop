@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { NodeView } from "../../../../src/shared/api.js";
+import type { NodeView } from "../../../../src/shared/nodes/types.js";
 import { FormError, useFormError } from "../../components/FormError.js";
 import { Markdown } from "../../components/Markdown.js";
 import { api } from "../../lib/api.js";

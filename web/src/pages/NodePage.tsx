@@ -1,18 +1,11 @@
 import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
-import type {
-  EdgeRow,
-  EventView,
-  ImprovementDetail,
-  ImprovementSource,
-  LinkRow,
-  MessageRow,
-  NodeView,
-  ProjectRow,
-  ProposalView,
-  StagesView,
-} from "../../../src/shared/api.js";
-import { GLOBAL_STAGES } from "../../../src/shared/builtInStages.js";
+import type { EventView } from "../../../src/shared/events/types.js";
+import type { ImprovementDetail, ImprovementSource, ProposalView } from "../../../src/shared/improvements/types.js";
+import type { EdgeRow, LinkRow, MessageRow, NodeView } from "../../../src/shared/nodes/types.js";
+import type { ProjectRow } from "../../../src/shared/projects/types.js";
+import type { StagesView } from "../../../src/shared/stages/types.js";
+import { GLOBAL_STAGES } from "../lib/globalStages.js";
 import { ClaimMark } from "../components/ClaimMark.js";
 import { ErrorNotice } from "../components/ErrorNotice.js";
 import { PipelineGraph } from "../components/PipelineGraph.js";

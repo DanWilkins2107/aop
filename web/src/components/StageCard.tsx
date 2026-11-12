@@ -1,7 +1,8 @@
 import { Handle, Position, useReactFlow, type Node, type NodeProps } from "@xyflow/react";
 import type { FocusEvent } from "react";
 import { Link } from "react-router-dom";
-import type { NodeView, StagesView } from "../../../src/shared/api.js";
+import type { NodeView } from "../../../src/shared/nodes/types.js";
+import type { StagesView } from "../../../src/shared/stages/types.js";
 import { CARD_HEIGHT, CARD_WIDTH } from "../lib/layout.js";
 import { cardKind, cardLook, cardName, cardType, stageLabel } from "../lib/stageStyle.js";
 import { ClaimMark } from "./ClaimMark.js";

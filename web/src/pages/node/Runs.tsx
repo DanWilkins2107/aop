@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import type { LogTail, NodeView, RunView } from "../../../../src/shared/api.js";
+import type { NodeView } from "../../../../src/shared/nodes/types.js";
+import type { LogTail, RunView } from "../../../../src/shared/runs/types.js";
 import { api, failureText, urls } from "../../lib/api.js";
 import { Part } from "./Part.js";
 import { formatDuration, formatStart, formatTokens, humanize, runEnding, shortRunId } from "../../lib/format.js";

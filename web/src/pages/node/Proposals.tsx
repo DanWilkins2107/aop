@@ -1,6 +1,7 @@
 import { useState } from "react";
-import type { NodeView, ProposalView } from "../../../../src/shared/api.js";
-import { FINISHED_STAGES } from "../../../../src/shared/builtInStages.js";
+import type { ProposalView } from "../../../../src/shared/improvements/types.js";
+import type { NodeView } from "../../../../src/shared/nodes/types.js";
+import { FINISHED_STAGES } from "../../../../src/shared/stages/finishedStages.js";
 import { api } from "../../lib/api.js";
 import { diffLines, diffStats, withContext } from "../../lib/diff.js";
 import { useAction } from "../../lib/useAction.js";

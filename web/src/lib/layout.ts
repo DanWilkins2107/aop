@@ -1,5 +1,5 @@
 import { Graph, layout } from "@dagrejs/dagre";
-import type { EdgeRow } from "../../../src/shared/api.js";
+import type { EdgeRow } from "../../../src/shared/nodes/types.js";
 
 export const CARD_WIDTH = 236;
 export const CARD_HEIGHT = 66;

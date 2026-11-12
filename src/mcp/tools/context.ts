@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { apiPaths } from "../../shared/paths.js";
+import { apiPaths } from "../../shared/http/apiPaths.js";
 import { defineTool } from "../shared/defineTool.js";
 
 export const context = defineTool({

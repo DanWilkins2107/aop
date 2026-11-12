@@ -3,20 +3,14 @@
 
 import { spawn } from "node:child_process";
 import { parseArgs, type ParseArgsConfig } from "node:util";
-import {
-  type ActorRequest,
-  type AddProjectRequest,
-  type AgentProcessView,
-  type ApiErrorBody,
-  type LogTail,
-  type NodeView,
-  type ProjectRow,
-  type ReapResult,
-  type SteerRequest,
-  type SteerSession,
-} from "../shared/api.js";
-import { API_PREFIX, apiPaths } from "../shared/paths.js";
-import { DEFAULT_PORT, MCP_PORT } from "../shared/port.js";
+import type { ApiErrorBody } from "../shared/http/types.js";
+import type { ActorRequest, NodeView } from "../shared/nodes/types.js";
+import type { AddProjectRequest, ProjectRow } from "../shared/projects/types.js";
+import type { AgentProcessView, LogTail, ReapResult, SteerRequest, SteerSession } from "../shared/runs/types.js";
+import { apiPaths } from "../shared/http/apiPaths.js";
+import { API_PREFIX } from "../shared/http/apiPrefix.js";
+import { DEFAULT_PORT } from "../shared/http/defaultPort.js";
+import { MCP_PORT } from "../shared/http/mcpPort.js";
 
 /** What a run of the CLI reads and writes, instead of the process's own. */
 export interface CliIo {

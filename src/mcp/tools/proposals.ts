@@ -1,6 +1,6 @@
 import { z } from "zod";
-import type { ProposalView } from "../../shared/api.js";
-import { apiPaths } from "../../shared/paths.js";
+import type { ProposalView } from "../../shared/improvements/types.js";
+import { apiPaths } from "../../shared/http/apiPaths.js";
 import { defineTool } from "../shared/defineTool.js";
 import { ApiFailure } from "../shared/toolApi.js";
 
