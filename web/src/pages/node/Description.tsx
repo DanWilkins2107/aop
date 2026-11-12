@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { NodeView } from "../../../../src/shared/api.js";
 import { FormError, useFormError } from "../../components/FormError.js";
+import { Markdown } from "../../components/Markdown.js";
 import { api } from "../../lib/api.js";
 import { useAction } from "../../lib/useAction.js";
 
@@ -29,7 +30,7 @@ export function Description({ node, reload }: { node: NodeView; reload: () => Pr
         node.body === "" ? (
           <p className="muted section-text">No description yet.</p>
         ) : (
-          <p className="prose section-text">{node.body}</p>
+          <Markdown source={node.body} />
         )
       ) : (
         <>
