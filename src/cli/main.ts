@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// `aop`, on the real process. The commands are in `cli.ts`.
+// `aop`, on the real process. `cli.ts` runs the command.
 
 import { fileURLToPath } from "node:url";
-import { serveFreshBuild } from "./selfBuild.js";
+import { serveFreshBuild } from "./commands/serve/selfBuild.js";
 
 const argv = process.argv.slice(2);
 // Before loading the commands, so a rebuild can replace them first.

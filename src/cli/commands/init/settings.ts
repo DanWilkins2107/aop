@@ -1,8 +1,8 @@
 import { existsSync, statSync } from "node:fs";
 import { createInterface } from "node:readline";
-import { isFromUserHome, resolveConfigPath } from "../server/paths.js";
-import { loadStagesFile } from "../server/stages.js";
-import { MCP_PORT } from "../shared/http/mcpPort.js";
+import { isFromUserHome, resolveConfigPath } from "../../../server/paths.js";
+import { loadStagesFile } from "../../../server/stages.js";
+import { MCP_PORT } from "../../../shared/http/mcpPort.js";
 
 /** `aop init` stopped, with a message for the user. */
 export class InitFailure extends Error {}

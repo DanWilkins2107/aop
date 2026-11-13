@@ -4,6 +4,8 @@ import { repoSources } from "./repo.js";
 
 // One entry per folder whose public files are settled.
 const SURFACES: Surfaces = {
+  // `main.ts` is the bin, and the prompts' tests read the commands' usage.
+  "src/cli": ["src/cli/main.ts", "src/cli/commands/registry.ts"],
   // The server starts the MCP server, and the prompts' tests read the tools' names.
   "src/mcp": ["src/mcp/server.ts", "src/mcp/tools/registry.ts"],
 };

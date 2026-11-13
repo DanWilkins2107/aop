@@ -2,7 +2,7 @@ import { mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { CONFIG_YAML } from "../../../test/server/helpers.js";
-import { HUMAN_COMMANDS } from "../../cli/cli.js";
+import { HUMAN_COMMANDS } from "../../cli/commands/registry.js";
 import { aopHome } from "../../server/paths.js";
 import { closeRun, runningRuns } from "../../server/runs.js";
 import type { ApplyResult, ImprovementView, ProposalView } from "../../shared/improvements/types.js";

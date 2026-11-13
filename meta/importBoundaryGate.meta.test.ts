@@ -5,6 +5,14 @@ import { repoSources } from "./repo.js";
 // One entry per folder whose boundary is settled. A file takes the first entry it's under, so a
 // subfolder comes before its parent.
 const BOUNDARIES: Boundaries = {
+  // `init` writes the config the server reads, and `serve` runs the server, so only they reach it.
+  "src/cli/commands/init": { folders: ["src/cli/shared", "src/shared", "src/server"] },
+  "src/cli/commands/serve": { folders: ["src/cli/shared", "src/shared", "src/server"] },
+  // Every other command is an HTTP call to the server, through `shared/api.ts`.
+  "src/cli/commands": { folders: ["src/cli/shared", "src/shared"] },
+  "src/cli/shared": { folders: ["src/shared"] },
+  // What's left is `main.ts` and `cli.ts`.
+  "src/cli": { folders: ["src/shared"] },
   // A tool reaches the board only through `ToolApi`, never the server's own code.
   "src/mcp/tools": { folders: ["src/mcp/shared", "src/shared"] },
   "src/mcp/shared": { folders: ["src/shared"] },

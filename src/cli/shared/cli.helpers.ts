@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { Writable } from "node:stream";
-import { runCli } from "../../src/cli/cli.js";
-import { nodeArgs } from "../server/agents.helpers.js";
+import { runCli } from "../cli.js";
+import { fakeCommand, nodeArgs, world, type World } from "../../../test/server/agents.helpers.js";
 
 export interface CliResult {
   code: number | null;
@@ -55,3 +55,13 @@ export function aopSpawned(args: string[], env: Record<string, string> = {}): Pr
   child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
   return new Promise((done) => child.once("close", (code) => done({ code, stdout, stderr })));
 }
+
+/** A fresh world for the commands' tests, whose out-of-sandbox session is a one-line script, so `steer` launches no agent tool. */
+export const cliWorld = () => world({ config: `out_of_sandbox_command: ${JSON.stringify(fakeCommand + " --out")}\n` });
+
+/** The CLI in-process against `w`'s server, with AOP_NODE_ID set if `node` is, which no command reads. `main.test.ts` runs the real entry point. */
+export const aopOn = (w: World, args: string[], options: { node?: string; env?: Record<string, string> } = {}) =>
+  aopInProcess(args, { AOP_URL: w.url, ...(options.node ? { AOP_NODE_ID: options.node } : {}), ...options.env });
+
+/** A node parked at a human stage, so no agent starts on it. */
+export const parked = (w: World, extra: Record<string, unknown> = {}) => w.create("", { type: "dev", stage: "pr_review", ...extra });
