@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../src/server/api.js";
@@ -11,7 +11,7 @@ import { IMPROVEMENTS_PROJECT_ID, nodeStartPath } from "../../src/server/project
 import type { EventView } from "../../src/shared/events/types.js";
 import type { ApiErrorBody } from "../../src/shared/http/types.js";
 import type { ApplyResult, ImprovementDetail, ImprovementsList, ImprovementView, ProposalView } from "../../src/shared/improvements/types.js";
-import type { MessageRow, NodeView } from "../../src/shared/nodes/types.js";
+import type { MessageRow } from "../../src/shared/nodes/types.js";
 import type { ProjectRow } from "../../src/shared/projects/types.js";
 import { CONFIG_YAML, harness, writeFiles, type Harness } from "./helpers.js";
 

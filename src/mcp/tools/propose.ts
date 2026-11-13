@@ -4,7 +4,6 @@ import { apiPaths } from "../../shared/http/apiPaths.js";
 import { absolutePath } from "../shared/absolutePath.js";
 import { ACTOR } from "../shared/actor.js";
 import { defineTool } from "../shared/defineTool.js";
-import { ApiFailure } from "../shared/toolApi.js";
 
 export const propose = defineTool({
   name: "propose",
