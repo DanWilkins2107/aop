@@ -10,7 +10,7 @@ export function testSharedProblems(sources: Record<string, string>): string[] {
     if (isTest(file)) continue;
     for (const { specifier } of importsOf(text)) {
       const target = importedFile(file, specifier);
-      if (target?.split("/").includes(TEST_SHARED)) problems.push(`${file}: imports ${specifier}, and only tests may use ${TEST_SHARED}`);
+      if (target !== null && target.split("/").includes(TEST_SHARED)) problems.push(`${file}: imports ${specifier}, and only tests may use ${TEST_SHARED}`);
     }
   }
   return problems;

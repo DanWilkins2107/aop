@@ -32,7 +32,7 @@ export function sharedUseProblems(sources: Record<string, string>, { shared, use
   const sharedCode = sharedFiles.map(([, text]) => withoutComments(text)).join("\n");
   for (const [file, text] of sharedFiles) {
     for (const { name } of exportsOf(text).exports) {
-      const by = [...(usersOf.get(`${file}#${name}`) ?? [])].sort();
+      const by = [...(usersOf.get(`${file}#${name}`) ?? [])].toSorted();
       const mentions = sharedCode.match(new RegExp(`\\b${name}\\b`, "g"))?.length ?? 0;
       if (by.length >= 2 || (by.length === 1 && mentions >= 2)) continue;
       problems.push(by.length === 0 ? `${file}: nothing outside ${shared} imports ${name}: stop exporting it` : `${file}: only ${by[0]} imports ${name}: move it there`);

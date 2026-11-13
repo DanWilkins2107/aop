@@ -1,7 +1,7 @@
 import path from "node:path";
 
 /** What the code in one folder may reach. Its tests, and the `.helpers.ts` files only tests import, aren't checked. */
-export interface Boundary {
+interface Boundary {
   /** The other folders it may import from, besides itself. */
   folders: string[];
   /** The packages it may import. Left out, any package will do. */
@@ -29,7 +29,7 @@ export function importBoundaryProblems(sources: Record<string, string>, boundari
       const problem = importProblem(file, specifier!, root, boundary);
       if (problem !== null) problems.push(`${file}: imports ${specifier}, ${problem}`);
     }
-    const used = boundary.browser ? NODE_GLOBAL.exec(text) : null;
+    const used = boundary.browser === true ? NODE_GLOBAL.exec(text) : null;
     if (used !== null) problems.push(`${file}: uses ${used[0]}, which needs Node, and the browser loads ${root}`);
   }
   return problems;
@@ -41,7 +41,7 @@ function importProblem(file: string, specifier: string, root: string, boundary: 
     const target = path.posix.join(path.posix.dirname(file), specifier);
     return [root, ...boundary.folders].some((folder) => within(target, folder)) ? null : `which is outside ${root}`;
   }
-  if (specifier.startsWith("node:")) return boundary.browser ? `which needs Node, and the browser loads ${root}` : null;
+  if (specifier.startsWith("node:")) return boundary.browser === true ? `which needs Node, and the browser loads ${root}` : null;
   const name = specifier.split("/", specifier.startsWith("@") ? 2 : 1).join("/");
   return boundary.packages === undefined || boundary.packages.includes(name) ? null : `a package ${root} may not use`;
 }

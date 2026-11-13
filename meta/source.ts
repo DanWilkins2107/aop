@@ -60,7 +60,7 @@ export function isTest(file: string): boolean {
 
 /** A file's code without its comments, for looking names up in. */
 export function withoutComments(text: string): string {
-  return text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  return text.replaceAll(/\/\*[\s\S]*?\*\//g, "").replaceAll(/^\s*\/\/.*$/gm, "");
 }
 
 export const within = (file: string, folder: string): boolean => file.startsWith(`${folder}/`);

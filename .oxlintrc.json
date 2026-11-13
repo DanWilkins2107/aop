@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "react", "unicorn", "import", "vitest"],
+  "categories": { "correctness": "error", "suspicious": "error", "pedantic": "error" },
+  "env": { "browser": true, "node": true, "es2024": true },
+  "ignorePatterns": ["dist", "src/cli", "src/mcp", "src/server", "web/src", "test"],
+  "rules": {
+    "react/react-in-jsx-scope": "off",
+    "typescript/prefer-readonly-parameter-types": "off",
+    "eslint/require-unicode-regexp": "off",
+    "eslint/max-lines-per-function": "off",
+    "eslint/max-lines": "off",
+    "eslint/max-depth": "off",
+    "eslint/max-nested-callbacks": "off"
+  }
+}

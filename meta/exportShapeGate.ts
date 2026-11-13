@@ -2,7 +2,7 @@ import { exportsOf, isTest, within } from "./source.js";
 
 const TYPES_FILE = "types.ts";
 const sameName = (file: string, name: string) => plain(file.replace(/\.ts$/, "")) === plain(name);
-const plain = (name: string) => name.replace(/_/g, "").toLowerCase();
+const plain = (name: string) => name.replaceAll("_", "").toLowerCase();
 
 /**
  * The files in `folders` that don't keep to one export each: a folder's types all go in its
