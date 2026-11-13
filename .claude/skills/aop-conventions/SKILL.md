@@ -9,6 +9,20 @@ The gates in `meta/` enforce these: `npx vitest run meta`. Each folder's rules a
 
 A test sits beside the file it tests, as `<name>.test.ts`. A helper only tests use is `<name>.helpers.ts`: nothing but tests and other helpers may import it, and the import rules below don't apply to either.
 
+A helper that tests in two or more folders use goes in a `test-shared/` folder, which only tests may import. Otherwise it stays beside its tests.
+
+`npm run typecheck` also runs oxlint and knip (unused files, exports and dependencies). They cover a folder once its layout is settled: take the folder out of `ignorePatterns` in `.oxlintrc.json` and `ignore` in `knip.json`, and fix what they find.
+
+## src/shared
+What two or more of `src/server`, `src/cli`, `src/mcp` and `web/src` use. Tests don't count.
+
+- One folder per concept: `nodes/`, `stages/`, `runs/`, `schedule/`... Nothing at the root. A concept can nest its own folders.
+- Each folder's types all go in its `types.ts`. Every other file exports one value, named as the file (`isBuiltIn.ts` exports `isBuiltIn`).
+- Import from it by name: no `import *` and no re-exports.
+- An export only one side uses moves to that side, unless other shared code is built from it. One no side uses is deleted.
+- Request types (`*Request`) are the API's contract and live here, hand-written. The server's zod schemas, in `src/server/requests.ts`, are checked against them with `bodyOf<T>()`.
+- It imports nothing outside itself, not even a package, so the browser can load all of it.
+
 ## src/mcp
 The agents' MCP server.
 
