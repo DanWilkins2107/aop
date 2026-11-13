@@ -3,13 +3,13 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { stringify } from "yaml";
-import { loadConfig } from "../server/config.js";
-import { ConfigError } from "../server/errors.js";
-import { aopHome, configPath, resolveConfigPath } from "../server/paths.js";
-import { loadStagesFile, promptFiles } from "../server/stages.js";
-import { parseYamlFile } from "../server/yamlFile.js";
-import { MCP_PORT } from "../shared/port.js";
-import { ABOUT, expandPath, gatherSettings, InitFailure, lineReader, type Settings, type Values } from "./initSettings.js";
+import { loadConfig } from "../../../server/config.js";
+import { ConfigError } from "../../../server/errors.js";
+import { aopHome, configPath, resolveConfigPath } from "../../../server/paths.js";
+import { loadStagesFile, promptFiles } from "../../../server/stages.js";
+import { parseYamlFile } from "../../../server/yamlFile.js";
+import { MCP_PORT } from "../../../shared/port.js";
+import { ABOUT, expandPath, gatherSettings, InitFailure, lineReader, type Settings, type Values } from "./settings.js";
 
 /** What `aop init --help` adds under the CLI's usage line. */
 const FLAG_HELP = `Sets up AOP_HOME, or ~/.aop. Asks for each setting, unless a flag gives it.
@@ -36,7 +36,7 @@ export interface InitIo {
   usage: string;
 }
 
-const PACKAGE_ROOT = fileURLToPath(new URL("../..", import.meta.url));
+const PACKAGE_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 
 const TOOLS = ["claude", "copilot"] as const;
 type Tool = (typeof TOOLS)[number];

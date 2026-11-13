@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { checkBuild, sourceCheckout } from "../../src/cli/selfBuild.js";
+import { checkBuild, sourceCheckout } from "./selfBuild.js";
 
 const OUTPUTS = ["dist/cli/main.js", "dist/server/main.js", "dist/web/index.html"];
 const LOCK = { packages: { "": { name: "aop" }, "node_modules/zod": { version: "4.0.0" } } };
