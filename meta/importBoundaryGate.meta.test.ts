@@ -10,6 +10,8 @@ const BOUNDARIES: Boundaries = {
   "src/mcp/shared": { folders: ["src/shared"] },
   // What's left is `server.ts`, the one file that builds the API app the tools call.
   "src/mcp": { folders: ["src/shared", "src/server"] },
+  // Every side imports it and the browser loads it, so it imports nothing, not even a package.
+  "src/shared": { folders: [], packages: [], browser: true },
 };
 
 it("no import leaves its folder's boundary", () => {
