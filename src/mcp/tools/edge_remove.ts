@@ -3,7 +3,7 @@ import type { ActorRequest, EdgeRow } from "../../shared/nodes/types.js";
 import { apiPaths } from "../../shared/http/apiPaths.js";
 import { ACTOR } from "../shared/actor.js";
 import { defineTool } from "../shared/defineTool.js";
-import { ApiFailure } from "../shared/toolApi.js";
+import { ApiFailure } from "../shared/ApiFailure.js";
 
 export const edgeRemove = defineTool({
   name: "edge_remove",

@@ -1,16 +1,10 @@
 // What every MCP tool is made with: its definition turned into a registered tool, and the API's
 // answers and errors turned into tool results.
 
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult, ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { ApiFailure, type ToolApi } from "./toolApi.js";
-
-/** One tool, ready to register. Made with `defineTool`. */
-export interface AopTool {
-  name: string;
-  register(server: McpServer, api: ToolApi): void;
-}
+import { ApiFailure } from "./ApiFailure.js";
+import type { AopTool, ToolApi } from "./types.js";
 
 interface ToolDefinition<Shape extends z.ZodRawShape> {
   /** snake_case, with no `aop` prefix: clients add the server's name themselves. */

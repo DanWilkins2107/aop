@@ -3,7 +3,8 @@ import { addProject } from "../../server/projects/projects.js";
 import type { EventView } from "../../shared/events/types.js";
 import type { NodeView } from "../../shared/nodes/types.js";
 import { makeRepo } from "../../../test-shared/harness.js";
-import { mcpHarness, resultText, type McpHarness } from "../test-shared/mcpHarness.helpers.js";
+import { mcpHarness, type McpHarness } from "../test-shared/mcpHarness.helpers.js";
+import { resultText } from "../test-shared/resultText.helpers.js";
 
 /** The node a tool's "Created <id> at <stage>" names. */
 async function created(m: McpHarness, text: string): Promise<NodeView> {

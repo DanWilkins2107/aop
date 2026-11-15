@@ -8,6 +8,7 @@ import { createApp } from "../../server/http/api.js";
 import { getNodeRow } from "../../server/nodes/nodes.js";
 import { beginRun } from "../../server/runs/runs.js";
 import { harness, type Harness } from "../../../test-shared/harness.js";
+import { resultText } from "./resultText.helpers.js";
 
 export interface McpHarness extends Harness {
   /** Calls a tool through a real MCP client, so its input schema is checked as an agent's call would be. */
@@ -22,10 +23,6 @@ export interface McpHarness extends Harness {
    */
   run(nodeId?: string): Promise<string>;
 }
-
-/** The text of a tool result, success or error. */
-export const resultText = (result: CallToolResult) =>
-  result.content.map((part) => (part.type === "text" ? part.text : `[${part.type}]`)).join("\n");
 
 /**
  * A `harness()`, plus an MCP client talking to the MCP app over the same database, in-process. Call it

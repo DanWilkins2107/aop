@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { EdgeRow } from "../../shared/nodes/types.js";
 import type { EventView } from "../../shared/events/types.js";
-import { mcpHarness, resultText, type McpHarness } from "../test-shared/mcpHarness.helpers.js";
+import { mcpHarness, type McpHarness } from "../test-shared/mcpHarness.helpers.js";
+import { resultText } from "../test-shared/resultText.helpers.js";
 
 const activeEdges = async (m: McpHarness, nodeId: string) => (await m.call<EdgeRow[]>("GET", `/api/nodes/${nodeId}/edges`)).body;
 

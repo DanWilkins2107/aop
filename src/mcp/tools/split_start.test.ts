@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { mcpHarness, resultText } from "../test-shared/mcpHarness.helpers.js";
+import { mcpHarness } from "../test-shared/mcpHarness.helpers.js";
+import { resultText } from "../test-shared/resultText.helpers.js";
 
 describe("the split_start tool", () => {
   it("fails from a human stage", async () => {

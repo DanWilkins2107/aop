@@ -40,4 +40,8 @@ describe("exportShapeProblems", () => {
       "src/area/a/again.ts: exports 0 values (): one per file",
     ]);
   });
+
+  it("skips an exempt file", () => {
+    expect(exportShapeProblems({ "src/area/entry.ts": "export const a = 1;\nexport const b = 2;" }, FOLDERS, ["src/area/entry.ts"])).toEqual([]);
+  });
 });

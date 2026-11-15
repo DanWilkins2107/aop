@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { EventView } from "../../shared/events/types.js";
 import type { LinkRow } from "../../shared/nodes/types.js";
-import { mcpHarness, resultText } from "../test-shared/mcpHarness.helpers.js";
+import { mcpHarness } from "../test-shared/mcpHarness.helpers.js";
+import { resultText } from "../test-shared/resultText.helpers.js";
 
 describe("the link tool", () => {
   it("attaches the link to the node, as the agent", async () => {

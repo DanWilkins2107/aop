@@ -4,7 +4,8 @@ import type { ProjectRow } from "../../shared/projects/types.js";
 import { apiPaths } from "../../shared/http/apiPaths.js";
 import { ACTOR } from "../shared/actor.js";
 import { defineTool } from "../shared/defineTool.js";
-import { ApiFailure, type ToolApi } from "../shared/toolApi.js";
+import { ApiFailure } from "../shared/ApiFailure.js";
+import type { ToolApi } from "../shared/types.js";
 
 /** A project named by ID or name. */
 async function resolveProject(api: ToolApi, reference: string): Promise<string> {

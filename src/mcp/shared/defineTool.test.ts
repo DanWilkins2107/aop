@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { TOOLS } from "../tools/registry.js";
+import { REGISTRY } from "../tools/registry.js";
 import { deleteProject } from "../../server/projects/projects.js";
 import { closeRun, getRun } from "../../server/runs/runs.js";
 import type { MessageRow } from "../../shared/nodes/types.js";
 import type { SteerSession } from "../../shared/runs/types.js";
-import { mcpHarness, resultText, type McpHarness } from "../test-shared/mcpHarness.helpers.js";
+import { mcpHarness, type McpHarness } from "../test-shared/mcpHarness.helpers.js";
+import { resultText } from "../test-shared/resultText.helpers.js";
 
 const READS = ["context", "proposals", "search"];
 
@@ -21,7 +22,7 @@ describe("run_id on the MCP tools", () => {
   it("is required by every write tool, and taken by no read", async () => {
     const m = await mcpHarness();
     const listed = await m.tools();
-    expect(listed.map((t) => t.name).sort()).toEqual(TOOLS.map((t) => t.name).sort());
+    expect(listed.map((t) => t.name).sort()).toEqual(REGISTRY.map((t) => t.name).sort());
     for (const tool of listed) {
       const required = tool.inputSchema.required ?? [];
       if (READS.includes(tool.name)) expect(Object.keys(tool.inputSchema.properties ?? {}), tool.name).not.toContain("run_id");

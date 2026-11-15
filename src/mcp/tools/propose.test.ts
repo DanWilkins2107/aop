@@ -5,7 +5,8 @@ import { aopHome } from "../../server/shared/paths.js";
 import type { EventView } from "../../shared/events/types.js";
 import type { ImprovementView, ProposalView } from "../../shared/improvements/types.js";
 import { CONFIG_YAML } from "../../../test-shared/harness.js";
-import { mcpHarness, resultText, type McpHarness } from "../test-shared/mcpHarness.helpers.js";
+import { mcpHarness, type McpHarness } from "../test-shared/mcpHarness.helpers.js";
+import { resultText } from "../test-shared/resultText.helpers.js";
 
 const ROOT = resolve(import.meta.dirname, "../../..");
 

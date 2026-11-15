@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { nodeContext } from "../../server/runs/context.js";
-import { mcpHarness, resultText } from "../test-shared/mcpHarness.helpers.js";
+import { mcpHarness } from "../test-shared/mcpHarness.helpers.js";
+import { resultText } from "../test-shared/resultText.helpers.js";
 
 describe("the context tool", () => {
   it("returns a node's context, as the context route gives it", async () => {

@@ -11,7 +11,7 @@ import { type AppOptions, createApp } from "../server/http/api.js";
 import type { Db } from "../server/db/db.js";
 import { HOSTNAME, type RunningServer } from "../server/http/server.js";
 import { toolApi } from "./shared/toolApi.js";
-import { TOOLS } from "./tools/registry.js";
+import { REGISTRY } from "./tools/registry.js";
 
 export const MCP_PATH = "/mcp";
 
@@ -37,7 +37,7 @@ export function createMcpApp(api: Hono): Hono {
     // A server and transport per request is the SDK's stateless pattern: no request can see another's
     // replies, however many agents share the port. Registering the tools is cheap.
     const server = new McpServer({ name: "aop", version: "1.0.0" });
-    for (const tool of TOOLS) tool.register(server, calls);
+    for (const tool of REGISTRY) tool.register(server, calls);
     const transport = new StreamableHTTPTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     await server.connect(transport);
     return transport.handleRequest(c);

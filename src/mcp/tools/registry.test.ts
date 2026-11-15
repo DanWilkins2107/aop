@@ -6,8 +6,9 @@ import { HUMAN_COMMANDS } from "../../cli/commands/registry.js";
 import { aopHome } from "../../server/shared/paths.js";
 import { closeRun, runningRuns } from "../../server/runs/runs.js";
 import type { ApplyResult, ImprovementView, ProposalView } from "../../shared/improvements/types.js";
-import { mcpHarness, resultText, type McpHarness } from "../test-shared/mcpHarness.helpers.js";
-import { TOOLS } from "./registry.js";
+import { mcpHarness, type McpHarness } from "../test-shared/mcpHarness.helpers.js";
+import { resultText } from "../test-shared/resultText.helpers.js";
+import { REGISTRY } from "./registry.js";
 
 const ROOT = resolve(import.meta.dirname, "../../..");
 const MCP = join(ROOT, "src", "mcp");
@@ -40,7 +41,7 @@ const AGENT_TOOLS = [
 
 describe("the MCP tools", () => {
   it("have unique snake_case names", () => {
-    const names = TOOLS.map((t) => t.name);
+    const names = REGISTRY.map((t) => t.name);
     expect(new Set(names).size).toBe(names.length);
     for (const name of names) expect(name).toMatch(/^[a-z]+(_[a-z]+)*$/);
   });
@@ -49,11 +50,11 @@ describe("the MCP tools", () => {
     const entries = sourceFiles()
       .filter((file) => file.startsWith("tools/") && file !== "tools/registry.ts")
       .map((file) => file.split("/")[1]!.replace(/\.ts$/, ""));
-    expect([...new Set(entries)].sort()).toEqual(TOOLS.map((t) => t.name).sort());
+    expect([...new Set(entries)].sort()).toEqual(REGISTRY.map((t) => t.name).sort());
   });
 
   it("are each one of the agent tools", () => {
-    for (const { name } of TOOLS) expect(AGENT_TOOLS, `${name} isn't an agent tool`).toContain(name);
+    for (const { name } of REGISTRY) expect(AGENT_TOOLS, `${name} isn't an agent tool`).toContain(name);
   });
 
   it("never share a name with a human command", () => {
@@ -116,8 +117,8 @@ const realFiles = () => [readFileSync(skill(), "utf8"), readdirSync(skills()).so
 describe("saving an improvement, as seen from the MCP tools", () => {
   it("offers no tool that writes proposals to real files", async () => {
     const m = await mcpHarness(IMPROVEMENTS);
-    expect((await m.tools()).map((t) => t.name).sort()).toEqual(TOOLS.map((t) => t.name).sort());
-    expect(TOOLS.map((t) => t.name)).not.toContain("apply");
+    expect((await m.tools()).map((t) => t.name).sort()).toEqual(REGISTRY.map((t) => t.name).sort());
+    expect(REGISTRY.map((t) => t.name)).not.toContain("apply");
     const { id, run_id } = await inReview(m);
     expect(await attempt(m, "apply", { node_id: id, run_id })).toBe(true);
     expect(readFileSync(skill(), "utf8")).toBe("Old skill.\n");

@@ -6,11 +6,12 @@ const plain = (name: string) => name.replaceAll("_", "").toLowerCase();
 
 /**
  * The files in `folders` that don't keep to one export each: a folder's types all go in its
- * `types.ts`, and every other file exports one value, named as the file is. Tests aren't checked.
+ * `types.ts`, and every other file exports one value, named as the file is. Tests, and the files in
+ * `exempt`, aren't checked.
  */
-export function exportShapeProblems(sources: Record<string, string>, folders: string[]): string[] {
+export function exportShapeProblems(sources: Record<string, string>, folders: string[], exempt: string[] = []): string[] {
   return Object.entries(sources)
-    .filter(([file]) => !isTest(file) && folders.some((folder) => within(file, folder)))
+    .filter(([file]) => !isTest(file) && !exempt.includes(file) && folders.some((folder) => within(file, folder)))
     .flatMap(([file, text]) => fileProblems(file, text));
 }
 

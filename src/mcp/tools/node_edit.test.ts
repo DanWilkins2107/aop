@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { EventView } from "../../shared/events/types.js";
 import type { NodeView } from "../../shared/nodes/types.js";
-import { mcpHarness, resultText } from "../test-shared/mcpHarness.helpers.js";
+import { mcpHarness } from "../test-shared/mcpHarness.helpers.js";
+import { resultText } from "../test-shared/resultText.helpers.js";
 
 describe("the node_edit tool", () => {
   it("edits the title only, as the agent", async () => {

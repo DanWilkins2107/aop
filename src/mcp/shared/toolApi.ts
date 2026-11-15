@@ -6,22 +6,8 @@ import type { Hono } from "hono";
 import { RUN_ID_HEADER } from "../../shared/runs/runIdHeader.js";
 import type { ApiErrorBody } from "../../shared/http/types.js";
 import { API_PREFIX } from "../../shared/http/apiPrefix.js";
-
-/** The API, as a tool sees it. A refusal or any other failure is thrown as an `ApiFailure`. */
-export interface ToolApi {
-  /** A JSON route's answer. */
-  json<T>(method: string, path: string, body?: unknown): Promise<T>;
-  /** A text/plain route's answer, such as a node's context. */
-  text(path: string): Promise<string>;
-  /**
-   * The same API, with every call sent as from this run, in `RUN_ID_HEADER`. The server then refuses
-   * writes from a run that has ended, and stage changes from any run but the one on that node.
-   */
-  asRun(runId: string): ToolApi;
-}
-
-/** The API refused, or failed. Its message becomes the tool's error, which the agent reads. */
-export class ApiFailure extends Error {}
+import { ApiFailure } from "./ApiFailure.js";
+import type { ToolApi } from "./types.js";
 
 /** The API's own error message, with its details if it gave any. */
 function failureOf(status: number, text: string): ApiFailure {

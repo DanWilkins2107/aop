@@ -1,7 +1,7 @@
 // Every tool the MCP server offers: reads, and writes that take the caller's run ID. Adding one is a
-// new file here, plus its import and its entry in `TOOLS`.
+// new file here, plus its import and its entry in `REGISTRY`.
 
-import type { AopTool } from "../shared/defineTool.js";
+import type { AopTool } from "../shared/types.js";
 import { ask } from "./ask.js";
 import { context } from "./context.js";
 import { edgeAdd } from "./edge_add.js";
@@ -19,7 +19,7 @@ import { splitFinish } from "./split_finish.js";
 import { splitStart } from "./split_start.js";
 import { withdrawProposal } from "./withdraw_proposal.js";
 
-export const TOOLS: readonly AopTool[] = [
+export const REGISTRY: readonly AopTool[] = [
   ask,
   context,
   edgeAdd,

@@ -40,7 +40,7 @@ The `aop` command, for humans.
 The agents' MCP server.
 
 - `server.ts`: the only file at the root, with its test. The only file that imports `src/server`.
-- `tools/`: one file per tool, named as the tool, plus `registry.ts`, the `TOOLS` list. A tool stays one file until it alone needs a second, then becomes `tools/<name>/`.
+- `tools/`: one file per tool, named as the tool, plus `registry.ts`, the `REGISTRY` list. A tool stays one file until it alone needs a second, then becomes `tools/<name>/`.
 - `shared/`: what two or more files of `src/mcp` use, such as `defineTool`. Code two tools share goes here, never in one tool's file. Each export needs two importing files; tests don't count. Unlike `src/shared`, it may use Node.
 - `test-shared/`: the helpers tests in two or more of its folders use, such as `mcpHarness`.
 - A tool imports `shared/` and `src/shared` only. It reaches the board through `ToolApi`, never the server's code.
