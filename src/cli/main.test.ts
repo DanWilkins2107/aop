@@ -39,8 +39,8 @@ describe("the aop entry point", () => {
 
 describe("the bin entry", () => {
   it("points at a built file", () => {
-    const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { bin: Record<string, string> };
-    expect(pkg.bin).toEqual({ aop: "dist/cli/main.js" });
+    const pkg: unknown = JSON.parse(readFileSync("package.json", "utf8"));
+    expect(pkg).toHaveProperty("bin", { aop: "dist/cli/main.js" });
     expect(readFileSync("src/cli/main.ts", "utf8").startsWith("#!/usr/bin/env node")).toBe(true);
   });
 });

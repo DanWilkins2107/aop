@@ -1,5 +1,4 @@
 import { createServer, type Server } from "node:http";
-import type { AddressInfo } from "node:net";
 import { beforeEach, describe, expect, it } from "vitest";
 import { MCP_PORT } from "../shared/http/mcpPort.js";
 import type { World } from "../../test/server/agents.helpers.js";
@@ -14,6 +13,23 @@ beforeEach(async () => {
 });
 
 const aop = (args: string[], options: { node?: string; env?: Record<string, string> } = {}) => aopOn(w, args, options);
+
+/** Stands in for something else on the port, such as the UI's dev server, which answers every path with a page. */
+const stub = (status: number, type: string, body: string) =>
+  new Promise<Server>((done) => {
+    const server = createServer((_req, res) => {
+      res.writeHead(status, { "content-type": type }).end(body);
+    });
+    server.listen(0, "127.0.0.1", () => {
+      done(server);
+    });
+  });
+
+function urlOf(server: Server): string {
+  const address = server.address();
+  if (typeof address !== "object" || address === null) throw new Error("The stub isn't listening on a port.");
+  return `http://127.0.0.1:${address.port}`;
+}
 
 describe("the commands", () => {
   it("bad usage is a clear message and exit code 2, with no stack trace", async () => {
@@ -53,13 +69,6 @@ describe("the commands", () => {
   });
 
   it("says when what answers isn't the API, and when an error isn't the API's", async () => {
-    // Stands in for something else on the port, such as the UI's dev server, which answers every path with a page.
-    const stub = (status: number, type: string, body: string) =>
-      new Promise<Server>((done) => {
-        const server = createServer((_req, res) => res.writeHead(status, { "content-type": type }).end(body));
-        server.listen(0, "127.0.0.1", () => done(server));
-      });
-    const urlOf = (server: Server) => `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     const page = await stub(200, "text/html", "<!doctype html><title>Not AOP</title>");
     const badJson = await stub(200, "application/json", "{not json");
     const oddError = await stub(500, "application/json", JSON.stringify({ error: "a string, not the API's shape" }));

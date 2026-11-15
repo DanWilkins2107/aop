@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { homedir } from "node:os";
 import { isAbsolute, join, relative, sep } from "node:path";
 import { Readable, Writable } from "node:stream";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, assert, beforeAll, describe, expect, it } from "vitest";
 import { findOnPath, runInit, type InitIo } from "./runInit.js";
 import { loadConfig } from "../../../server/config.js";
 import { aopHome } from "../../../server/paths.js";
@@ -11,11 +11,14 @@ import { nodeArgs, ROOT } from "../../../../test/server/agents.helpers.js";
 
 const REAL_AOP = join(homedir(), ".aop");
 
+/** What `aop init` writes. A server running on the real ~/.aop changes the rest as it goes. */
+const INIT_WRITES = new Set(["config.yaml", "stages.yaml", "improvement_stages.yaml", "prompts", "skills"]);
+
 /** What's at the real ~/.aop, to check nothing here touches it. */
 function realAopSnapshot(): string {
   if (!existsSync(REAL_AOP)) return "absent";
   return readdirSync(REAL_AOP)
-    .map((name) => `${name}:${statSync(join(REAL_AOP, name)).mtimeMs}`)
+    .map((name) => (INIT_WRITES.has(name) ? `${name}:${statSync(join(REAL_AOP, name)).mtimeMs}` : name))
     .join("|");
 }
 
@@ -24,7 +27,7 @@ beforeAll(() => {
   before = realAopSnapshot();
 });
 afterAll(() => {
-  expect(realAopSnapshot()).toBe(before);
+  assert.strictEqual(realAopSnapshot(), before, "The tests changed the real ~/.aop.");
 });
 
 interface Sandbox {
@@ -98,10 +101,10 @@ describe("aop init with flags", () => {
     expect(config.agent_timeout_minutes).toBe(30);
     expect(config.stagesPath).toBe(join(box.home, "stages.yaml"));
     expect([...config.graph.types.keys()]).toEqual(["triage", "dev", "decisions"]);
-    expect(readdirSync(join(box.home, "prompts")).sort()).toEqual(readdirSync(join(ROOT, "defaults", "prompts")).sort());
+    expect(readdirSync(join(box.home, "prompts")).toSorted()).toEqual(readdirSync(join(ROOT, "defaults", "prompts")).toSorted());
 
     const text = readFileSync(join(box.home, "config.yaml"), "utf8");
-    expect(text.replace(/\r?\n# /g, " ")).toContain(
+    expect(text.replaceAll(/\r?\n# /g, " ")).toContain(
       "Required. AOP appends `-p` and sends the prompt on stdin. This is the session your agents are starting in. It must have AOP's MCP server (http://127.0.0.1:4319/mcp) configured. Strongly consider having this command start sessions inside a sandbox. The sandbox must allow 127.0.0.1:4319.",
     );
     expect(result.out).toContain("The config is valid.");

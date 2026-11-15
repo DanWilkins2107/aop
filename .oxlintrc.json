@@ -3,9 +3,10 @@
   "plugins": ["typescript", "react", "unicorn", "import", "vitest"],
   "categories": { "correctness": "error", "suspicious": "error", "pedantic": "error" },
   "env": { "browser": true, "node": true, "es2024": true },
-  "ignorePatterns": ["dist", "src/cli", "src/mcp", "src/server", "web/src", "test"],
+  "ignorePatterns": ["dist", "src/mcp", "src/server", "web/src", "test"],
   "rules": {
     "react/react-in-jsx-scope": "off",
+    "vitest/valid-expect": ["error", { "maxArgs": 2 }],
     "typescript/prefer-readonly-parameter-types": "off",
     "eslint/require-unicode-regexp": "off",
     "eslint/max-lines-per-function": "off",
