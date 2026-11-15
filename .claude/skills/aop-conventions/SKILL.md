@@ -13,6 +13,8 @@ A helper that tests in two or more folders use goes in a `test-shared/` folder, 
 
 `npm run typecheck` also runs oxlint and knip (unused files, exports and dependencies). They cover a folder once its layout is settled: take the folder out of `ignorePatterns` in `.oxlintrc.json` and `ignore` in `knip.json`, and fix what they find.
 
+The same lint caps size and complexity: 300 lines a file, 60 a function, complexity 10, depth 3, 4 parameters. `.tsx` functions get 100 lines; tests get 500 a file and no function cap. A folder that needs other numbers gets an `overrides` entry in `.oxlintrc.json`. Split code that breaks a limit rather than loosening it.
+
 ## src/shared
 What two or more of `src/server`, `src/cli`, `src/mcp` and `web/src` use. Tests don't count.
 
