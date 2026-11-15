@@ -7,7 +7,7 @@ import { IMPROVEMENTS_PROJECT_ID } from "../../shared/improvements/improvementsP
 import { ConfigError } from "../shared/errors.js";
 import { aopHome, configPath, isWithin, repoAround, resolveConfigPath } from "../shared/paths.js";
 import { loadStagesFile, promptFiles, type StageGraph } from "../stages/stages.js";
-import { parseYamlFile } from "../shared/yamlFile.js";
+import { parseYaml, parseYamlFile } from "../shared/yamlFile.js";
 
 const command = z.string().trim().min(1);
 
@@ -203,6 +203,23 @@ function loadOnce(home: string): Loaded {
   return loaded;
 }
 
+function settingsProblems(file: string, error: z.ZodError): string[] {
+  return error.issues.map((issue) => `${file}: ${issue.path.join(".") || "(root)"}: ${issue.message}`);
+}
+
+/**
+ * Every problem in `source` as the contents of `config.yaml` at `file`, on its own. The files it
+ * links to are checked when the config is next loaded, so they can be fixed in either order.
+ */
+export function configSourceProblems(source: string, file: string): string[] {
+  const parsed = parseYaml(source, file);
+  if (!parsed.ok) return parsed.problems;
+  const mapping = mappingSchema.safeParse(parsed.value);
+  if (!mapping.success) return [`${file}: must be a mapping of settings`];
+  const settings = settingsSchema.safeParse(mapping.data);
+  return settings.success ? [] : settingsProblems(file, settings.error);
+}
+
 /** Reads both files from disk, calling `watch` on each file the result depends on before reading it. */
 function readConfig(home: string, watch: (path: string) => void): AopConfig {
   const file = configPath(home);
@@ -221,11 +238,7 @@ function readConfig(home: string, watch: (path: string) => void): AopConfig {
 
   const problems: string[] = [];
   const settings = settingsSchema.safeParse(raw);
-  if (!settings.success) {
-    for (const issue of settings.error.issues) {
-      problems.push(`${file}: ${issue.path.join(".") || "(root)"}: ${issue.message}`);
-    }
-  }
+  if (!settings.success) problems.push(...settingsProblems(file, settings.error));
 
   // Still check stages.yaml when another setting is bad, so one run reports everything.
   const stagesSetting = raw["stages"];
@@ -275,7 +288,7 @@ function watchedRepoAround(path: string, watch: (path: string) => void): string 
   return repoAround(path);
 }
 
-/** What the read-only settings page shows. An invalid config is a normal answer here, not a failure. */
+/** What the settings page shows. An invalid config is a normal answer here, not a failure. */
 export function describeConfig(home: string = aopHome()): ConfigView {
   const config_path = configPath(home);
   try {

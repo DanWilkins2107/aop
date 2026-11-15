@@ -3,6 +3,7 @@
  * `src/shared`, and each schema here is checked against its type, so the two can't drift apart.
  */
 import { z } from "zod";
+import type { SaveConfigFileRequest } from "../../shared/config/types.js";
 import type { ApplyRequest, ImprovementRequest, ProposalRequest, WithdrawRequest } from "../../shared/improvements/types.js";
 import type { ActorRequest, CreateNodeRequest, EdgeRequest, EditNodeRequest, LinkRequest, MessageRequest } from "../../shared/nodes/types.js";
 import type { AddProjectRequest, UpdateProjectRequest } from "../../shared/projects/types.js";
@@ -88,6 +89,13 @@ export const proposalBody = bodyOf<ProposalRequest>()(
   }),
 );
 export const withdrawBody = bodyOf<WithdrawRequest>()(z.strictObject({ path: nonBlank, actor: actor.default("human") }));
+export const configFileBody = bodyOf<SaveConfigFileRequest>()(
+  z.strictObject({
+    path: nonBlank,
+    content: z.string().max(1_000_000, "must be at most 1,000,000 characters"),
+    base: z.string().nullable(),
+  }),
+);
 export const applyBody = bodyOf<ApplyRequest>()(
   z.strictObject({
     reviewed: z.array(z.strictObject({ path: nonBlank, revision: nonBlank })).max(10_000),

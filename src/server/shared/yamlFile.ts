@@ -11,9 +11,14 @@ export function parseYamlFile(path: string): YamlResult {
     const reason = (error as NodeJS.ErrnoException).code === "ENOENT" ? "file not found" : String(error);
     return { ok: false, problems: [`${path}: ${reason}`] };
   }
+  return parseYaml(source, path);
+}
+
+/** Parses YAML text. `label` names it in problems. */
+export function parseYaml(source: string, label: string): YamlResult {
   const doc = parseDocument(source);
   if (doc.errors.length > 0) {
-    return { ok: false, problems: doc.errors.map((e) => `${path}: ${e.message}`) };
+    return { ok: false, problems: doc.errors.map((e) => `${label}: ${e.message}`) };
   }
   return { ok: true, value: doc.toJS() as unknown };
 }

@@ -29,3 +29,21 @@ interface ProjectStagesSetting {
   stages: string;
   stages_path: string;
 }
+
+/** `config.yaml`, a process file it names, or one of their agent stages' prompts. */
+export type ConfigFileKind = "config" | "stages" | "prompt";
+
+/** A file the settings and process pages can edit. */
+export interface ConfigFileView {
+  path: string;
+  kind: ConfigFileKind;
+  /** Null when there's no file yet. */
+  content: string | null;
+}
+
+export interface SaveConfigFileRequest {
+  path: string;
+  content: string;
+  /** What the file held when it was shown, or null if there was none. The save is refused if it has changed since. */
+  base: string | null;
+}

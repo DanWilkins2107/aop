@@ -22,6 +22,8 @@ export const apiPaths = {
   reap: "/agents/reap",
   stages: "/stages",
   config: "/config",
+  /** The files the settings and process pages edit. */
+  configFiles: "/config/files",
   process: "/process",
   improvementStages: "/improvement-stages",
   improvements: "/improvements",

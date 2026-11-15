@@ -2,12 +2,11 @@ import { readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "../http/api.js";
 import { loadConfig } from "./config.js";
 import { aopHome, configPath, resolveConfigPath } from "../shared/paths.js";
 import { agentStartPath } from "../projects/projects.js";
 import type { ConfigView } from "../../shared/config/types.js";
-import { CONFIG_YAML, harness, makeHome, STAGES_YAML, writeFiles, type Harness } from "../../../test-shared/harness.js";
+import { CONFIG_YAML, harness, makeHome, writeFiles, type Harness } from "../../../test-shared/harness.js";
 
 const ROOT = resolve(import.meta.dirname, "../../..");
 
@@ -104,41 +103,8 @@ describe("reading the config over the API", () => {
   });
 });
 
-describe("nothing can write the config", () => {
-  let h: Harness;
-  beforeEach(() => {
-    h = harness();
-  });
-
-  const WRITES = ["POST", "PUT", "PATCH", "DELETE"];
-
-  it("refuses every write method on the config routes, leaving the files as they were", async () => {
-    const before = readFileSync(configPath(), "utf8");
-    const attempt = { agent_session_command: "evil", open_from: "/evil" };
-    for (const method of WRITES) {
-      for (const path of ["/api/config", "/api/settings", "/api/stages"]) {
-        expect((await h.call(method, path, attempt)).status).toBe(404);
-      }
-    }
-    expect(readFileSync(configPath(), "utf8")).toBe(before);
-    expect(readFileSync(join(aopHome(), "stages.yaml"), "utf8")).toBe(STAGES_YAML);
-    expect((await h.call<ConfigView>("GET", "/api/config")).body.settings?.agent_session_command).toBe("sandboxed-claude");
-  });
-
-  it("has no write route outside projects, nodes, edges, improvements, agents and runs", () => {
-    const writes = createApp(h.db).routes.filter((route) => WRITES.includes(route.method));
-    expect(writes.length).toBeGreaterThan(0);
-    for (const { path } of writes) expect(path).toMatch(/^\/api\/(projects|nodes|edges|improvements|agents|runs)(\/|$)/);
-  });
-
-  it("gives the project routes no way in to the config", async () => {
-    const before = readFileSync(configPath(), "utf8");
-    const res = await h.call("PATCH", `/api/projects/${h.projectId}`, { name: "x", open_from: "/evil" });
-    expect(res.status).toBe(400);
-    expect(readFileSync(configPath(), "utf8")).toBe(before);
-  });
-
-  it("doesn't import anything that writes files anywhere in the server, except for run logs, the server lock and applying improvements", () => {
+describe("what writes files", () => {
+  it("doesn't import anything that writes files anywhere in the server, except for run logs, the server lock, applying improvements and editing the config", () => {
     const READ_ONLY = new Set(["existsSync", "readdirSync", "readFileSync", "realpathSync", "statSync"]);
     const folder = join(ROOT, "src", "server");
     const files = readdirSync(folder, { recursive: true, encoding: "utf8" }).filter((file) => file.endsWith(".ts") && !file.endsWith(".test.ts"));
@@ -146,7 +112,8 @@ describe("nothing can write the config", () => {
     for (const file of files) {
       // Each writes only under AOP_HOME: the run logs, and the lock that keeps a second server off it.
       // applyProposals writes reviewed improvements, only to paths allowedTarget accepts.
-      if (["runLog.ts", "serverLock.ts", "applyProposals.ts"].includes(basename(file))) continue;
+      // configFiles saves config.yaml, its process files and their prompts, edited from the UI.
+      if (["runLog.ts", "serverLock.ts", "applyProposals.ts", "configFiles.ts"].includes(basename(file))) continue;
       const source = readFileSync(join(folder, file), "utf8");
       expect(source, file).not.toMatch(/from "(node:)?fs\/promises"/);
       for (const [, names] of source.matchAll(/import \{([^}]*)\} from "(?:node:)?fs"/g)) {

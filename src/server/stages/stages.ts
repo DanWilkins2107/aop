@@ -8,7 +8,7 @@ import type { Turn } from "../../shared/nodes/types.js";
 import type { StagesView } from "../../shared/stages/types.js";
 import { FINISHED_STAGES } from "../../shared/stages/finishedStages.js";
 import { isBuiltIn } from "../../shared/stages/isBuiltIn.js";
-import { parseYamlFile } from "../shared/yamlFile.js";
+import { parseYaml, parseYamlFile } from "../shared/yamlFile.js";
 
 
 interface StageDef {
@@ -202,6 +202,12 @@ export function loadStagesFile(path: string, fileLabel?: string): { graph: Stage
     return { graph: { start: "", stages: new Map(), types: new Map() }, problems: parsed.problems };
   }
   return validateStages(parsed.value, dirname(path), fileLabel);
+}
+
+/** Every problem in `source` as the contents of the process file at `path`, which needn't exist yet. */
+export function stagesSourceProblems(source: string, path: string, fileLabel?: string): string[] {
+  const parsed = parseYaml(source, path);
+  return parsed.ok ? validateStages(parsed.value, dirname(path), fileLabel).problems : parsed.problems;
 }
 
 /** A process with nothing in it, for improvements while they're turned off. */
