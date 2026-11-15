@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { Writable } from "node:stream";
 import { runCli } from "../cli.js";
-import { fakeCommand, nodeArgs, world, type World } from "../../../test/server/agents.helpers.js";
+import { fakeCommand, nodeArgs, world, type World } from "../../../test-shared/agents.js";
 
 export interface CliResult {
   code: number | null;

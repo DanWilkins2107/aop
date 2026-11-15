@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { addProject } from "../../server/projects.js";
+import { addProject } from "../../server/projects/projects.js";
 import type { EventView } from "../../shared/events/types.js";
 import type { NodeView } from "../../shared/nodes/types.js";
-import { makeRepo } from "../../../test/server/helpers.js";
+import { makeRepo } from "../../../test-shared/harness.js";
 import { mcpHarness, resultText, type McpHarness } from "../shared/mcpHarness.helpers.js";
 
 /** The node a tool's "Created <id> at <stage>" names. */

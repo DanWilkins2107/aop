@@ -7,9 +7,9 @@ import { serve } from "@hono/node-server";
 import { StreamableHTTPTransport } from "@hono/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Hono } from "hono";
-import { type AppOptions, createApp } from "../server/api.js";
-import type { Db } from "../server/db.js";
-import { HOSTNAME, type RunningServer } from "../server/server.js";
+import { type AppOptions, createApp } from "../server/http/api.js";
+import type { Db } from "../server/db/db.js";
+import { HOSTNAME, type RunningServer } from "../server/http/server.js";
 import { toolApi } from "./shared/toolApi.js";
 import { TOOLS } from "./tools/registry.js";
 

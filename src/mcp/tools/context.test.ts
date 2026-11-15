@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nodeContext } from "../../server/context.js";
+import { nodeContext } from "../../server/runs/context.js";
 import { mcpHarness, resultText } from "../shared/mcpHarness.helpers.js";
 
 describe("the context tool", () => {

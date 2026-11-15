@@ -23,7 +23,7 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p web && npm run lint",
     "lint": "oxlint --type-aware --deny-warnings && knip",
     "test": "vitest run",
-    "test:server": "vitest run test/server",
+    "test:server": "vitest run src/server",
     "test:web": "vitest run test/web",
     "test:cli": "vitest run src/cli test/defaults",
     "test:fast": "vitest run --project unit",

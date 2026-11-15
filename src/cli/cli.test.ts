@@ -2,7 +2,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { beforeEach, describe, expect, it } from "vitest";
 import { MCP_PORT } from "../shared/http/mcpPort.js";
-import type { World } from "../../test/server/agents.helpers.js";
+import type { World } from "../../test-shared/agents.js";
 import { aopOn, cliWorld } from "./shared/cli.helpers.js";
 
 // How every command finds its server, reads its arguments and fails. Each command's own behaviour

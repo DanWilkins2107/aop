@@ -4,7 +4,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { world } from "../../test/server/agents.helpers.js";
+import { world } from "../../test-shared/agents.js";
 import { aopSpawned as aop } from "./shared/cli.helpers.js";
 
 describe("the aop entry point", () => {

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { beforeEach, expect, it } from "vitest";
-import { directives, until, type World } from "../../../test/server/agents.helpers.js";
+import { directives, until, type World } from "../../../test-shared/agents.js";
 import { aopOn, cliWorld, parked } from "../shared/cli.helpers.js";
 
 let w: World;

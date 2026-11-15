@@ -5,9 +5,9 @@ import { isAbsolute, join, relative, sep } from "node:path";
 import { Readable, Writable } from "node:stream";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { findOnPath, runInit, type InitIo } from "./runInit.js";
-import { loadConfig } from "../../../server/config.js";
-import { aopHome } from "../../../server/paths.js";
-import { nodeArgs, ROOT } from "../../../../test/server/agents.helpers.js";
+import { loadConfig } from "../../../server/config/config.js";
+import { aopHome } from "../../../server/shared/paths.js";
+import { nodeArgs, ROOT } from "../../../../test-shared/agents.js";
 
 const REAL_AOP = join(homedir(), ".aop");
 

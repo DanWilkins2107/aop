@@ -1,8 +1,8 @@
 import { request } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 import { MCP_PATH, startMcpServer } from "./server.js";
-import type { RunningServer } from "../server/server.js";
-import { harness } from "../../test/server/helpers.js";
+import type { RunningServer } from "../server/http/server.js";
+import { harness } from "../../test-shared/harness.js";
 
 let server: RunningServer | undefined;
 afterEach(async () => {

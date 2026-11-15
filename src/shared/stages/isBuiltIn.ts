@@ -1,6 +1,6 @@
 import type { BuiltInStage } from "./types.js";
 
-// What each built-in does is in `src/server/stageMachine.ts`, and `scheduled` in `src/server/scheduler.ts`.
+// What each built-in does is in `src/server/nodes/stageMachine.ts`, and `scheduled` in `src/server/schedule/scheduler.ts`.
 const BUILT_IN_STAGES: Record<BuiltInStage, true> = {
   done: true,
   broken_down: true,

@@ -1,10 +1,10 @@
 import { mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CONFIG_YAML } from "../../../test/server/helpers.js";
+import { CONFIG_YAML } from "../../../test-shared/harness.js";
 import { HUMAN_COMMANDS } from "../../cli/commands/registry.js";
-import { aopHome } from "../../server/paths.js";
-import { closeRun, runningRuns } from "../../server/runs.js";
+import { aopHome } from "../../server/shared/paths.js";
+import { closeRun, runningRuns } from "../../server/runs/runs.js";
 import type { ApplyResult, ImprovementView, ProposalView } from "../../shared/improvements/types.js";
 import { mcpHarness, resultText, type McpHarness } from "../shared/mcpHarness.helpers.js";
 import { TOOLS } from "./registry.js";
@@ -62,7 +62,7 @@ describe("the MCP tools", () => {
   });
 });
 
-/** Improvements switched on, as in `test/server/improvements.test.ts`. */
+/** Improvements switched on, as in `src/server/improvements/improvements.test.ts`. */
 const IMPROVEMENTS = {
   "config.yaml": `${CONFIG_YAML}improvement_stages: ./improvement_stages.yaml\nimprovements_path: ./skills\n`,
   "improvement_stages.yaml": readFileSync(join(ROOT, "defaults", "improvement_stages.yaml"), "utf8"),

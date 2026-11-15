@@ -3,11 +3,11 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { stringify } from "yaml";
-import { loadConfig } from "../../../server/config.js";
-import { ConfigError } from "../../../server/errors.js";
-import { aopHome, configPath, resolveConfigPath } from "../../../server/paths.js";
-import { loadStagesFile, promptFiles } from "../../../server/stages.js";
-import { parseYamlFile } from "../../../server/yamlFile.js";
+import { loadConfig } from "../../../server/config/config.js";
+import { ConfigError } from "../../../server/shared/errors.js";
+import { aopHome, configPath, resolveConfigPath } from "../../../server/shared/paths.js";
+import { loadStagesFile, promptFiles } from "../../../server/stages/stages.js";
+import { parseYamlFile } from "../../../server/shared/yamlFile.js";
 import { MCP_PORT } from "../../../shared/http/mcpPort.js";
 import { ABOUT, expandPath, gatherSettings, InitFailure, lineReader, type Settings, type Values } from "./settings.js";
 

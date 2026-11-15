@@ -2,19 +2,19 @@
 // API, the agents' MCP server, the orchestrator and the scheduler in that order. Also owns clean shutdown.
 
 import { parseArgs } from "node:util";
-import { ChangeFeed } from "./changes.js";
-import { loadConfig } from "./config.js";
-import { openDb, type Db } from "./db.js";
-import { ConfigError } from "./errors.js";
-import { Orchestrator } from "./orchestrator.js";
-import { configPath, dbPath } from "./paths.js";
-import { Scheduler } from "./scheduler.js";
-import { HOSTNAME, startServer, type RunningServer } from "./server.js";
+import { ChangeFeed } from "./db/changes.js";
+import { loadConfig } from "./config/config.js";
+import { openDb, type Db } from "./db/db.js";
+import { ConfigError } from "./shared/errors.js";
+import { Orchestrator } from "./runs/orchestrator.js";
+import { configPath, dbPath } from "./shared/paths.js";
+import { Scheduler } from "./schedule/scheduler.js";
+import { HOSTNAME, startServer, type RunningServer } from "./http/server.js";
 import { MCP_PATH, startMcpServer } from "../mcp/server.js";
 import { TEST_MCP_PORT_ENV } from "./testMcpPortEnv.js";
 import { DEFAULT_PORT } from "../shared/http/defaultPort.js";
 import { MCP_PORT } from "../shared/http/mcpPort.js";
-import { acquireServerLock, ServerAlreadyRunning, type ServerLock } from "./serverLock.js";
+import { acquireServerLock, ServerAlreadyRunning, type ServerLock } from "./os/serverLock.js";
 
 /** The MCP server's fixed port is taken, most likely by another AOP with a different AOP_HOME. */
 class McpPortInUse extends Error {

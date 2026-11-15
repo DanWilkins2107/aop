@@ -1,5 +1,5 @@
 import { beforeEach, expect, it } from "vitest";
-import { directives, settle, type World } from "../../../test/server/agents.helpers.js";
+import { directives, settle, type World } from "../../../test-shared/agents.js";
 import { aopOn, cliWorld } from "../shared/cli.helpers.js";
 
 let w: World;
