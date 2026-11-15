@@ -4,19 +4,23 @@ import { exportsOf, importedFile, importsOf, isTest, withoutComments, within } f
 export interface SharedUse {
   shared: string;
   users: string[];
+  /** Count each importing file as a user, not each folder: for a folder's own `shared/`. */
+  byFile?: boolean;
 }
 
 /**
  * The exports of the shared folder that aren't shared. An export belongs there when two or more of
- * the user folders import it, or when one does and other shared code is built from it. Tests don't
- * count as users. Also the imports the gate can't count, because they don't name what they take.
+ * the user folders (or files, `byFile`) import it, or when one does and other shared code is built
+ * from it. Tests, and the shared folder itself, don't count as users. Also the imports the gate
+ * can't count, because they don't name what they take.
  */
-export function sharedUseProblems(sources: Record<string, string>, { shared, users }: SharedUse): string[] {
+export function sharedUseProblems(sources: Record<string, string>, use: SharedUse): string[] {
+  const { shared } = use;
   const problems: string[] = [];
   const usersOf = new Map<string, Set<string>>();
   for (const [file, text] of Object.entries(sources)) {
-    const user = users.find((folder) => within(file, folder));
-    if (user === undefined || isTest(file)) continue;
+    const user = userOf(file, use);
+    if (user === null) continue;
     for (const { specifier, names, target } of sharedImports(file, text, shared)) {
       if (names === null) problems.push(`${file}: imports ${specifier} without naming what it takes: import from ${shared} by name`);
       for (const name of names ?? []) {
@@ -28,6 +32,13 @@ export function sharedUseProblems(sources: Record<string, string>, { shared, use
   return [...problems, ...unsharedExports(sources, shared, usersOf)];
 }
 
+/** Who `file` counts as when it imports shared code: its folder, or itself with `byFile`. Null if it doesn't count. */
+function userOf(file: string, { shared, users, byFile = false }: SharedUse): string | null {
+  const folder = users.find((user) => within(file, user));
+  if (folder === undefined || isTest(file) || within(file, shared)) return null;
+  return byFile ? file : folder;
+}
+
 /** The imports in `file` that reach the shared folder, with the file each one reaches. */
 function sharedImports(file: string, text: string, shared: string) {
   return importsOf(text)
@@ -35,7 +46,7 @@ function sharedImports(file: string, text: string, shared: string) {
     .filter(({ target }) => target !== null && within(target, shared));
 }
 
-/** The shared exports that fewer than two user folders import, unless other shared code uses them too. */
+/** The shared exports that fewer than two users import, unless other shared code uses them too. */
 function unsharedExports(sources: Record<string, string>, shared: string, usersOf: Map<string, Set<string>>): string[] {
   const problems: string[] = [];
   const sharedFiles = Object.entries(sources).filter(([file]) => within(file, shared) && !isTest(file));

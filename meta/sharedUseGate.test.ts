@@ -34,4 +34,18 @@ describe("sharedUseProblems", () => {
       "src/shared/a/types.ts: nothing outside src/shared imports None: stop exporting it",
     ]);
   });
+
+  it("counts each file as a user with byFile, but not the shared folder's own files", () => {
+    expect(
+      sharedUseProblems(
+        {
+          "src/mcp/shared/a.ts": "export const two = 1;",
+          "src/mcp/shared/b.ts": 'import { two } from "./a.js";\nexport const one = two;',
+          "src/mcp/tools/x.ts": 'import { two } from "../shared/a.js";\nimport { one } from "../shared/b.js";',
+          "src/mcp/tools/y.ts": 'import { two } from "../shared/a.js";',
+          "src/mcp/tools/y.test.ts": 'import { one } from "../shared/b.js";',        },
+        { shared: "src/mcp/shared", users: ["src/mcp"], byFile: true },
+      ),
+    ).toEqual(["src/mcp/shared/b.ts: only src/mcp/tools/x.ts imports one: move it there"]);
+  });
 });

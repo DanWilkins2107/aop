@@ -12,7 +12,7 @@ export interface AopTool {
   register(server: McpServer, api: ToolApi): void;
 }
 
-export interface ToolDefinition<Shape extends z.ZodRawShape> {
+interface ToolDefinition<Shape extends z.ZodRawShape> {
   /** snake_case, with no `aop` prefix: clients add the server's name themselves. */
   name: string;
   /** What the agent reads to decide when and how to use the tool. */
@@ -30,7 +30,7 @@ export interface ToolDefinition<Shape extends z.ZodRawShape> {
 }
 
 /** The argument every write tool takes. */
-export const RUN_ID_ARG = {
+const RUN_ID_ARG = {
   run_id: z
     .string()
     .trim()
