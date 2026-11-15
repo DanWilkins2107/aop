@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EventView } from "../../shared/events/types.js";
-import { mcpHarness, resultText } from "../shared/mcpHarness.helpers.js";
+import { mcpHarness, resultText } from "../test-shared/mcpHarness.helpers.js";
 
 describe("the fail tool", () => {
   it("marks the node failed and posts the reason, as the agent", async () => {

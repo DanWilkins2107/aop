@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { directives, fakeCommand, settle, toolCall, type World } from "../../../test/server/agents.helpers.js";
-import { aopOn, cliWorld, parked } from "../shared/cli.helpers.js";
+import { aopOn, cliWorld, parked } from "../test-shared/cli.helpers.js";
 
 let w: World;
 beforeEach(async () => {

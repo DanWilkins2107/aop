@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EventView } from "../../shared/events/types.js";
-import { mcpHarness, resultText } from "../shared/mcpHarness.helpers.js";
+import { mcpHarness, resultText } from "../test-shared/mcpHarness.helpers.js";
 
 describe("the ask tool", () => {
   it("moves the node to wait on a human and posts the question, as the agent", async () => {

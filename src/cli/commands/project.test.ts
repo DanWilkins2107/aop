@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { beforeEach, expect, it } from "vitest";
 import type { World } from "../../../test/server/agents.helpers.js";
-import { aopOn, cliWorld } from "../shared/cli.helpers.js";
+import { aopOn, cliWorld } from "../test-shared/cli.helpers.js";
 
 let w: World;
 beforeEach(async () => {

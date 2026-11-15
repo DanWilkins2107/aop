@@ -1,6 +1,6 @@
 import { beforeEach, expect, it } from "vitest";
 import { directives, type World } from "../../../test/server/agents.helpers.js";
-import { aopOn, cliWorld, parked } from "../shared/cli.helpers.js";
+import { aopOn, cliWorld, parked } from "../test-shared/cli.helpers.js";
 
 let w: World;
 beforeEach(async () => {

@@ -5,7 +5,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { world } from "../../test/server/agents.helpers.js";
-import { aopSpawned as aop } from "./shared/cli.helpers.js";
+import { aopSpawned as aop } from "./test-shared/cli.helpers.js";
 
 describe("the aop entry point", () => {
   it("prints the help, and a usage error is exit code 2 with no stack trace", async () => {

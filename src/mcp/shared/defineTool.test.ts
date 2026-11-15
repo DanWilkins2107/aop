@@ -4,7 +4,7 @@ import { deleteProject } from "../../server/projects.js";
 import { closeRun, getRun } from "../../server/runs.js";
 import type { MessageRow } from "../../shared/nodes/types.js";
 import type { SteerSession } from "../../shared/runs/types.js";
-import { mcpHarness, resultText, type McpHarness } from "./mcpHarness.helpers.js";
+import { mcpHarness, resultText, type McpHarness } from "../test-shared/mcpHarness.helpers.js";
 
 const READS = ["context", "proposals", "search"];
 

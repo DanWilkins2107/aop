@@ -6,7 +6,7 @@ import { HUMAN_COMMANDS } from "../../cli/commands/registry.js";
 import { aopHome } from "../../server/paths.js";
 import { closeRun, runningRuns } from "../../server/runs.js";
 import type { ApplyResult, ImprovementView, ProposalView } from "../../shared/improvements/types.js";
-import { mcpHarness, resultText, type McpHarness } from "../shared/mcpHarness.helpers.js";
+import { mcpHarness, resultText, type McpHarness } from "../test-shared/mcpHarness.helpers.js";
 import { TOOLS } from "./registry.js";
 
 const ROOT = resolve(import.meta.dirname, "../../..");

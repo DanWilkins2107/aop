@@ -8,12 +8,12 @@ const LAYOUT: Layout = {
   // A folder per concept, nested if a concept needs its own shared part. Nothing at the root.
   "src/shared": /^(\w+\/)+\w+(\.test)?\.ts$/,
   // `server.ts` alone at the root, a file per tool (or a folder, once it needs a second file), and
-  // what two or more files of mcp use.
+  // what two or more files of mcp use, and the helpers tests in two or more of its folders use.
   // `main.ts` (the bin) and `cli.ts` (which finds and runs a command) alone at the root, a file per
   // command (or a folder, once it needs a second file) with `registry.ts` listing them, and what two
-  // or more files of cli use.
-  "src/cli": /^((main|cli)(\.test)?\.ts|commands\/(\w+\/)?\w+(\.test)?\.ts|shared\/\w+(\.test|\.helpers)?\.ts)$/,
-  "src/mcp": /^(server(\.test)?\.ts|tools\/(\w+\/)?\w+(\.test)?\.ts|shared\/\w+(\.test|\.helpers)?\.ts)$/,
+  // or more files of cli use, and the helpers tests in two or more of its folders use.
+  "src/cli": /^((main|cli)(\.test)?\.ts|commands\/(\w+\/)?\w+(\.test)?\.ts|shared\/\w+(\.test|\.helpers)?\.ts|test-shared\/\w+\.helpers\.ts)$/,
+  "src/mcp": /^(server(\.test)?\.ts|tools\/(\w+\/)?\w+(\.test)?\.ts|shared\/\w+(\.test|\.helpers)?\.ts|test-shared\/\w+\.helpers\.ts)$/,
 };
 
 it("every file sits where its folder's layout allows", () => {

@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { beforeEach, describe, expect, it } from "vitest";
 import { MCP_PORT } from "../shared/http/mcpPort.js";
 import type { World } from "../../test/server/agents.helpers.js";
-import { aopOn, cliWorld } from "./shared/cli.helpers.js";
+import { aopOn, cliWorld } from "./test-shared/cli.helpers.js";
 
 // How every command finds its server, reads its arguments and fails. Each command's own behaviour
 // is tested beside it in `commands/`.
