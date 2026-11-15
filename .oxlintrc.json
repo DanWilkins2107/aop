@@ -27,6 +27,10 @@
         "eslint/max-lines-per-function": "off",
         "eslint/max-lines": ["error", { "max": 500, "skipBlankLines": true, "skipComments": true }]
       }
+    },
+    {
+      "files": ["src/server/**/migrations.ts"],
+      "rules": { "eslint/max-lines": "off" }
     }
   ]
 }
