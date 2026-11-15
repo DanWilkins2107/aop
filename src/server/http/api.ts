@@ -1,5 +1,6 @@
-// Every HTTP route. Validates bodies, calls the module that owns the data, and renders errors.
-// After any successful write it notifies the change feed, which is what wakes pages and the orchestrator.
+// The HTTP app: guards every request, renders errors, and hands each concept's routes the context they
+// share. After any successful write it notifies the change feed, which is what wakes pages and the
+// orchestrator. The routes are in the `*Routes.ts` files beside this one.
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -10,96 +11,30 @@ import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { streamSSE } from "hono/streaming";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import type { z } from "zod";
-import type { ApiErrorBody, ApiErrorCode } from "../../shared/http/types.js";
-import { RUN_ID_HEADER } from "../../shared/runs/runIdHeader.js";
-import type { LogTail } from "../../shared/runs/types.js";
-import {
-  actorBody,
-  addProjectBody,
-  answerBody,
-  applyBody,
-  askBody,
-  blockBody,
-  claimBody,
-  createNodeBody,
-  edgeBody,
-  editNodeBody,
-  failBody,
-  improvementBody,
-  invalidateBody,
-  linkBody,
-  messageBody,
-  moveBody,
-  nextBody,
-  proposalBody,
-  scheduleBody,
-  steerBody,
-  unblockBody,
-  updateProjectBody,
-  withdrawBody,
-} from "./requests.js";
-import { routes } from "./routes.js";
 import { apiPaths } from "../../shared/http/apiPaths.js";
 import { API_PREFIX } from "../../shared/http/apiPrefix.js";
-import { readableLines } from "../runs/agentOutput.js";
+import type { ApiErrorBody, ApiErrorCode } from "../../shared/http/types.js";
+import { withConfigSnapshot } from "../config/config.js";
 import { ChangeFeed, EVERYTHING, nodesNotice, type ChangeNotice } from "../db/changes.js";
-import { openSteerSessionNode } from "../nodes/claims.js";
 import type { Db } from "../db/db.js";
-import { nodeContext } from "../runs/context.js";
-import { ApiError, badRequest, ConfigError, notFound, refused } from "../shared/errors.js";
-import * as nodes from "../nodes/nodes.js";
-import { describeConfig, loadConfig, withConfigSnapshot } from "../config/config.js";
+import { openSteerSessionNode } from "../nodes/claims.js";
 import type { Orchestrator } from "../runs/orchestrator.js";
-import { describeProcess } from "../config/processView.js";
-import { addProject, deleteProject, getProject, listProjects, updateProject } from "../projects/projects.js";
-import { deleteLogs, readLogEnd, readRunLog } from "../runs/runLog.js";
-import { getRun, listRuns, projectLogPaths } from "../runs/runs.js";
-import { search } from "../nodes/search.js";
-import { setSchedule } from "../schedule/schedule.js";
-import { describeStages, EMPTY_GRAPH } from "../stages/stages.js";
-import { applyProposals } from "../improvements/applyProposals.js";
-import { createImprovement, getImprovement, listImprovements, listProposals, propose, withdraw } from "../improvements/improvements.js";
-import { prepareSteer } from "../runs/steer.js";
+import { getRun } from "../runs/runs.js";
+import { ApiError, ConfigError, refused } from "../shared/errors.js";
+import { improvementRoutes } from "./improvementRoutes.js";
+import { nodeRoutes } from "./nodeRoutes.js";
+import { projectRoutes } from "./projectRoutes.js";
+import { type RouteContext, runIdOf } from "./routeContext.js";
+import { at, routes } from "./routes.js";
+import { runRoutes } from "./runRoutes.js";
+import { stageRoutes } from "./stageRoutes.js";
 
 const BUILT_WEB_DIR = fileURLToPath(new URL("../../../dist/web", import.meta.url));
 const STREAM_KEEP_ALIVE_MS = 25_000;
-/** How much of a run's log the node page shows. */
-const TAIL_LINES = 20;
-const MAX_TAIL_LINES = 200;
 /** Far above any real body (long descriptions and messages included), but caps what one request can hold in memory. */
 export const MAX_BODY_BYTES = 16 * 1024 * 1024;
 
 const LOCAL_HOST = /^(localhost|127\.0\.0\.1)(:\d+)?$/i;
-
-/** The route for a path with no parameters. */
-const at = <P extends string>(path: P) => `${API_PREFIX}${path}` as const;
-
-async function readBody<S extends z.ZodType>(c: Context, schema: S, emptyAllowed = false): Promise<z.output<S>> {
-  const text = await c.req.text();
-  let json: unknown = {};
-  if (text.trim() !== "" || !emptyAllowed) {
-    try {
-      json = JSON.parse(text);
-    } catch {
-      throw badRequest("The request body must be JSON");
-    }
-  }
-  const parsed = schema.safeParse(json);
-  if (!parsed.success) {
-    throw badRequest(
-      "Invalid request body",
-      parsed.error.issues.map((issue) => ({ path: issue.path.join("."), message: issue.message })),
-    );
-  }
-  return parsed.data;
-}
-
-/** The agent run, or steered session, a request says it comes from. See `RUN_ID_HEADER`. */
-function runIdOf(c: Context): string | undefined {
-  const value = c.req.header(RUN_ID_HEADER)?.trim();
-  return value === undefined || value === "" ? undefined : value;
-}
 
 function errorResponse(c: Context, status: ContentfulStatusCode, code: ApiErrorCode, message: string, details?: unknown) {
   const body: ApiErrorBody = { error: { code, message, ...(details !== undefined ? { details } : {}) } };
@@ -244,219 +179,20 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
     }),
   );
 
-  // Projects
-  app.get(at(apiPaths.projects), (c) => c.json(listProjects(db)));
-  app.post(at(apiPaths.projects), async (c) => {
-    const project = addProject(db, await readBody(c, addProjectBody));
-    touched.set(c.req.raw, touchedProject(project.id));
-    return c.json(project, 201);
-  });
-  app.patch(routes.project, async (c) => {
-    const project = updateProject(db, c.req.param("id"), await readBody(c, updateProjectBody));
-    touched.set(c.req.raw, touchedProject(project.id));
-    return c.json(project);
-  });
-  app.delete(routes.project, async (c) => {
-    const { id } = getProject(db, c.req.param("id"));
-    // Agents stop first, and none can start on the project until it has gone.
-    const reopen = await options.orchestrator?.stopProjectAgents(id);
-    let deleted: ReturnType<typeof deleteProject>;
-    let logs: string[];
-    try {
-      logs = projectLogPaths(db, id);
-      deleted = deleteProject(db, id);
-    } finally {
-      reopen?.();
-    }
-    // Only once the project has gone, and its agents have stopped and closed their logs.
-    deleteLogs(logs);
-    touched.set(c.req.raw, touchedProject(id, null));
-    return c.json(deleted);
-  });
-
-  // The shared process, or with `?project=` the one that project follows. Read from disk whenever it has changed.
-  app.get(at(apiPaths.stages), (c) => {
-    const project = c.req.query("project");
-    const config = loadConfig();
-    if (project === undefined) return c.json(describeStages(config.graph));
-    const projectId = getProject(db, project).id;
-    return c.json(describeStages(nodes.graphFor(nodes.graphsOf(config), { kind: "work", project_id: projectId })));
-  });
-  // For the process page, which still answers when the config is invalid, listing the problems.
-  app.get(at(apiPaths.process), (c) => c.json(describeProcess()));
-
-  app.get(at(apiPaths.improvementStages), (c) => c.json(describeStages(loadConfig().improvementGraph ?? EMPTY_GRAPH)));
-
-  // Improvements. Proposals are stored here; only apply writes files, only for a human, and only where
-  // allowedTarget says. It has no MCP tool.
-  // Each write says what it touched: the improvement, and on capture the work node it came from.
-  app.get(at(apiPaths.improvements), (c) => c.json(listImprovements(db)));
-  app.post(at(apiPaths.improvements), async (c) => {
-    const improvement = createImprovement(db, await readBody(c, improvementBody));
-    const source = improvement.source?.node_id;
-    touched.set(c.req.raw, touchedNodes(improvement.node.id, ...(source == null ? [] : [source])));
-    return c.json(improvement, 201);
-  });
-  app.get(routes.improvement, (c) => c.json(getImprovement(db, c.req.param("id"))));
-  app.get(routes.improvementAction("proposals"), (c) => c.json(listProposals(db, c.req.param("id"))));
-  app.put(routes.improvementAction("proposals"), async (c) => {
-    const proposal = propose(db, c.req.param("id"), await readBody(c, proposalBody));
-    touched.set(c.req.raw, touchedNodes(c.req.param("id")));
-    return c.json(proposal);
-  });
-  app.delete(routes.improvementAction("proposals"), async (c) => {
-    const withdrawn = withdraw(db, c.req.param("id"), await readBody(c, withdrawBody));
-    touched.set(c.req.raw, touchedNodes(c.req.param("id")));
-    return c.json(withdrawn);
-  });
-  // Applying writes real files, which can include stage prompts, and so whether the config is valid:
-  // it records nothing narrower, so every page refetches.
-  app.post(routes.improvementAction("apply"), async (c) =>
-    c.json(applyProposals(db, c.req.param("id"), await readBody(c, applyBody))),
-  );
-
-  // Read-only on purpose. Agents can reach this API, so no route may change commands.
-  app.get(at(apiPaths.config), (c) => c.json(describeConfig()));
-
-  app.get(routes.projectAction("edges"), (c) => {
-    const project = getProject(db, c.req.param("id"));
-    return c.json(nodes.listProjectEdges(db, project.id));
-  });
-
-  // Nodes
-  app.get(routes.projectAction("nodes"), (c) => {
-    const project = getProject(db, c.req.param("id"));
-    return c.json(nodes.listNodes(db, project.id));
-  });
-  app.post(routes.projectAction("nodes"), async (c) => {
-    const project = getProject(db, c.req.param("id"));
-    const body = await readBody(c, createNodeBody);
-    const node = nodes.createNode(db, project.id, body);
-    // A parent gets an edge, and an event saying so.
-    touched.set(c.req.raw, touchedNodes(node.id, ...(body.parent_id === undefined ? [] : [body.parent_id])));
-    return c.json(node, 201);
-  });
-  app.get(routes.node, (c) => c.json(nodes.getNode(db, c.req.param("id"))));
-  app.patch(routes.node, async (c) =>
-    c.json(nodes.editNode(db, c.req.param("id"), await readBody(c, editNodeBody))),
-  );
-
-  app.get(routes.nodeAction("context"), (c) => c.text(nodeContext(db, c.req.param("id"))));
-  app.post(routes.nodeAction("steer"), async (c) =>
-    c.json(prepareSteer(db, c.req.param("id"), await readBody(c, steerBody, true))),
-  );
-
-  // Stage changes
-  app.post(routes.nodeAction("next"), async (c) =>
-    c.json(nodes.next(db, c.req.param("id"), { ...(await readBody(c, nextBody)), runId: runIdOf(c) })),
-  );
-  app.post(routes.nodeAction("move"), async (c) =>
-    c.json(nodes.move(db, c.req.param("id"), await readBody(c, moveBody))),
-  );
-  app.put(routes.nodeAction("schedule"), async (c) =>
-    c.json(setSchedule(db, c.req.param("id"), await readBody(c, scheduleBody))),
-  );
-  app.post(routes.nodeAction("ask"), async (c) =>
-    c.json(nodes.ask(db, c.req.param("id"), { ...(await readBody(c, askBody)), runId: runIdOf(c) })),
-  );
-  app.post(routes.nodeAction("answer"), async (c) =>
-    c.json(nodes.answer(db, c.req.param("id"), await readBody(c, answerBody))),
-  );
-  app.post(routes.nodeAction("fail"), async (c) =>
-    c.json(nodes.fail(db, c.req.param("id"), { ...(await readBody(c, failBody, true)), runId: runIdOf(c) })),
-  );
-  app.post(routes.nodeAction("retry"), (c) => c.json(nodes.retry(db, c.req.param("id"))));
-  app.post(routes.nodeAction("invalidate"), async (c) =>
-    c.json(nodes.invalidate(db, c.req.param("id"), await readBody(c, invalidateBody))),
-  );
-  app.post(routes.nodeAction("restore"), (c) => c.json(nodes.restore(db, c.req.param("id"))));
-
-  app.post(routes.nodeAction("block"), async (c) =>
-    c.json(nodes.block(db, c.req.param("id"), await readBody(c, blockBody))),
-  );
-  app.post(routes.nodeAction("unblock"), async (c) =>
-    c.json(nodes.unblock(db, c.req.param("id"), await readBody(c, unblockBody, true))),
-  );
-  app.post(routes.nodeAction("split/start"), (c) => c.json(nodes.splitStart(db, c.req.param("id"), { runId: runIdOf(c) })));
-  app.post(routes.nodeAction("split/finish"), (c) => c.json(nodes.splitFinish(db, c.req.param("id"), { runId: runIdOf(c) })));
-
-  // Claims
-  app.post(routes.nodeAction("claim"), async (c) =>
-    c.json(nodes.claim(db, c.req.param("id"), await readBody(c, claimBody, true))),
-  );
-  app.post(routes.nodeAction("release"), async (c) =>
-    c.json(nodes.releaseClaim(db, c.req.param("id"), await readBody(c, claimBody, true))),
-  );
-
-  // Messages
-  app.get(routes.nodeAction("messages"), (c) => c.json(nodes.listMessages(db, c.req.param("id"))));
-  app.post(routes.nodeAction("messages"), async (c) =>
-    c.json(nodes.addMessage(db, c.req.param("id"), await readBody(c, messageBody)), 201),
-  );
-
-  // Links
-  app.get(routes.nodeAction("links"), (c) => c.json(nodes.listLinks(db, c.req.param("id"))));
-  app.post(routes.nodeAction("links"), async (c) =>
-    c.json(nodes.addLink(db, c.req.param("id"), await readBody(c, linkBody)), 201),
-  );
-
-  // Edges
-  app.get(routes.nodeAction("edges"), (c) =>
-    c.json(nodes.listEdges(db, c.req.param("id"), c.req.query("include_removed") === "true")),
-  );
-  app.post(routes.nodeAction("edges"), async (c) => {
-    const edge = nodes.addEdge(db, c.req.param("id"), await readBody(c, edgeBody));
-    touched.set(c.req.raw, touchedNodes(edge.source_id, edge.target_id));
-    return c.json(edge, 201);
-  });
-  app.delete(routes.edge, async (c) => {
-    const edge = nodes.removeEdge(db, c.req.param("id"), (await readBody(c, actorBody, true)).actor);
-    touched.set(c.req.raw, touchedNodes(edge.source_id, edge.target_id));
-    return c.json(edge);
-  });
-
-  // Events
-  app.get(routes.nodeAction("events"), (c) => c.json(nodes.listEvents(db, c.req.param("id"))));
-
-  // Search
-  app.get(at(apiPaths.search), (c) => {
-    const query = c.req.query("q");
-    if (query === undefined || query.trim() === "") throw badRequest("Search needs a query, in q");
-    const project = c.req.query("project");
-    return c.json(search(db, query, project === undefined ? null : getProject(db, project).id));
-  });
-
-  // Agents
-  app.get(at(apiPaths.agents), async (c) => c.json(await orchestrator().listAgents()));
-  app.post(at(apiPaths.reap), async (c) => c.json(await orchestrator().reap()));
-  app.post(routes.run("stop"), async (c) => {
-    const node = await orchestrator().stopRun(c.req.param("id"));
-    touched.set(c.req.raw, touchedNodes(node.id));
-    return c.json(node);
-  });
-  app.get(routes.nodeAction("runs"), (c) => {
-    const node = nodes.getNodeRow(db, c.req.param("id"));
-    return c.json(listRuns(db, node.id));
-  });
-  app.get(routes.run("log"), (c) => {
-    const run = getRun(db, c.req.param("id"));
-    if (!run) throw notFound(`No run ${c.req.param("id")}`);
-    const log = readRunLog(run.log_path);
-    if (log === null) throw notFound(`The log for run ${run.id} is gone`);
-    return c.text(log);
-  });
-  app.get(routes.run("tail"), (c) => {
-    const run = getRun(db, c.req.param("id"));
-    if (!run) throw notFound(`No run ${c.req.param("id")}`);
-    const count = c.req.query("lines") === undefined ? TAIL_LINES : Number(c.req.query("lines"));
-    if (!Number.isInteger(count) || count < 1 || count > MAX_TAIL_LINES) {
-      throw badRequest(`lines must be a whole number from 1 to ${MAX_TAIL_LINES}`);
-    }
-    const raw = readLogEnd(run.log_path);
-    if (raw === null) throw notFound(`The log for run ${run.id} is gone`);
-    const tail: LogTail = { run_id: run.id, running: run.status === "running", lines: readableLines(raw, run.output_format).slice(-count) };
-    return c.json(tail);
-  });
+  const context: RouteContext = {
+    app,
+    db,
+    orchestrator,
+    maybeOrchestrator: options.orchestrator,
+    touch: (c, notice) => touched.set(c.req.raw, notice),
+    touchedNodes,
+    touchedProject,
+  };
+  projectRoutes(context);
+  stageRoutes(context);
+  improvementRoutes(context);
+  nodeRoutes(context);
+  runRoutes(context);
 
   if (existsSync(webDir)) serveWeb(app, webDir);
 

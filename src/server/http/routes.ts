@@ -15,3 +15,6 @@ export const routes = {
   improvement: `${API_PREFIX}/improvements/:id`,
   improvementAction: <A extends ImprovementAction>(action: A) => `${API_PREFIX}/improvements/:id/${action}` as const,
 } as const;
+
+/** The route for a path with no parameters. */
+export const at = <P extends string>(path: P) => `${API_PREFIX}${path}` as const;
