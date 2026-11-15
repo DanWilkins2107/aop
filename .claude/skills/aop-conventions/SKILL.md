@@ -22,7 +22,7 @@ What two or more of `src/server`, `src/cli`, `src/mcp` and `web/src` use. Tests 
 - Each folder's types all go in its `types.ts`. Every other file exports one value, named as the file (`isBuiltIn.ts` exports `isBuiltIn`).
 - Import from it by name: no `import *` and no re-exports.
 - An export only one side uses moves to that side, unless other shared code is built from it. One no side uses is deleted.
-- Request types (`*Request`) are the API's contract and live here, hand-written. The server's zod schemas, in `src/server/requests.ts`, are checked against them with `bodyOf<T>()`.
+- Request types (`*Request`) are the API's contract and live here, hand-written. The server's zod schemas, in `src/server/http/requests.ts`, are checked against them with `bodyOf<T>()`.
 - It imports nothing outside itself, not even a package, so the browser can load all of it.
 
 ## src/cli
@@ -43,3 +43,13 @@ The agents' MCP server.
 - `shared/`: what two or more files of `src/mcp` use, such as `defineTool`. Code two tools share goes here, never in one tool's file.
 - A tool imports `shared/` and `src/shared` only. It reaches the board through `ToolApi`, never the server's code.
 - Outside `src/mcp`, only `server.ts` and `tools/registry.ts` may be imported, by tests too.
+
+## src/server
+The board: the API, the database, and the loops that run agents.
+
+- `main.ts` (the entry) and `serve.ts` (which starts the API, the MCP server and the loops) at the root, with `testMcpPortEnv.ts` for the tests' port override. Nothing else.
+- A folder per concept: `nodes/`, `stages/`, `runs/`, `schedule/`, `improvements/`, `projects/`, `config/`. One level, no deeper.
+- Platform folders below them: `http/` (the app, and a routes file per concept), `db/` (connection, migrations, records), `os/` (processes and the server lock), and `shared/`, what two or more folders use.
+- Folders import only downward: `http`, then `runs`, `improvements` and `schedule`, then `nodes` and `projects`, then `config` and `stages`, then `db`, `os` and `shared`. A lower folder never imports a higher one: make the call from the higher folder.
+- `shared/` imports nothing else of the server's.
+- `db/migrations.ts` is append-only: move it whole, never split or edit a step.
