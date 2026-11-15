@@ -114,10 +114,16 @@
 .section-text {
   margin: 0;
 }
-/* A description's first and last blocks sit flush with the panel's own padding. */
-.panel > .markdown > :first-child {
+/* Markdown's first and last blocks sit flush with the box around it. */
+.panel > .markdown > :first-child,
+.message-body > .markdown > :first-child,
+.action-text > .markdown > :first-child,
+.meta-note > .markdown > :first-child {
   margin-top: 0;
 }
-.panel > .markdown > :last-child {
+.panel > .markdown > :last-child,
+.message-body > .markdown > :last-child,
+.action-text > .markdown > :last-child,
+.meta-note > .markdown > :last-child {
   margin-bottom: 0;
 }
