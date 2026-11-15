@@ -4,7 +4,8 @@ import { apiPaths } from "../../shared/http/apiPaths.js";
 import { send } from "../shared/api.js";
 import { args, JSON_OPTION, only } from "../shared/args.js";
 import type { Command } from "../shared/command.js";
-import { CliFailure, usageError } from "../shared/errors.js";
+import { CliFailure } from "../shared/cliFailure.js";
+import { usageError } from "../shared/errors.js";
 
 const usage = ["aop logs <node> [--lines N] [--json]"];
 
@@ -26,7 +27,10 @@ export const logs: Command = {
     const node = await send<NodeView>(c, "GET", apiPaths.node(id));
     if (node.last_run_id === null) throw new CliFailure(`${id} has had no runs yet`);
     const tail = await send<LogTail>(c, "GET", `${apiPaths.run(node.last_run_id, "tail")}?lines=${lines}`);
-    if (values.json === true) return c.json(tail);
+    if (values.json === true) {
+      c.json(tail);
+      return;
+    }
     if (tail.lines.length === 0) {
       c.log(`The log for ${node.last_run_id} is empty so far.`);
       return;

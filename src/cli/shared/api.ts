@@ -1,23 +1,26 @@
-import type { ApiErrorBody } from "../../shared/http/types.js";
 import { API_PREFIX } from "../../shared/http/apiPrefix.js";
 import { DEFAULT_PORT } from "../../shared/http/defaultPort.js";
 import type { Ctx } from "./command.js";
-import { CliFailure } from "./errors.js";
+import { CliFailure } from "./cliFailure.js";
 
 export const serverUrl = (c: Ctx) => c.env["AOP_URL"] ?? `http://127.0.0.1:${c.env["AOP_PORT"] ?? DEFAULT_PORT}`;
 
 /** Something answered on the API's address, but not as the API does, such as the web UI's dev server. */
 const notTheApi = (c: Ctx) => new CliFailure(`What answered at ${serverUrl(c)} isn't the AOP server's API. Check AOP_URL and AOP_PORT.`);
 
+const isObject = (value: unknown): value is object => typeof value === "object" && value !== null;
+
 /** The API's own error, if that's what the body is. */
 function apiError(text: string): { message: string; details?: unknown } | undefined {
+  let body: unknown;
   try {
-    const { error } = JSON.parse(text) as { error?: Partial<ApiErrorBody["error"]> };
-    if (typeof error?.message === "string") return { message: error.message, details: error.details };
+    body = JSON.parse(text);
   } catch {
-    // Not JSON, or JSON null.
+    return undefined;
   }
-  return undefined;
+  const error = isObject(body) && "error" in body ? body.error : undefined;
+  if (!isObject(error) || !("message" in error) || typeof error.message !== "string") return undefined;
+  return { message: error.message, details: "details" in error ? error.details : undefined };
 }
 
 /** Calls the API. A failure becomes the API's own message, or else its status. */
@@ -50,6 +53,8 @@ export async function send<T>(c: Ctx, method: string, path: string, body?: unkno
   const { type, text } = await call(c, method, path, body);
   if (!type.includes("json")) throw notTheApi(c);
   try {
+    // The server's answer is typed by the contract in src/shared, so it isn't checked again here.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
     return JSON.parse(text) as T;
   } catch {
     throw notTheApi(c);

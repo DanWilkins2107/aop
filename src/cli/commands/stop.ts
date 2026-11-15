@@ -3,7 +3,7 @@ import { apiPaths } from "../../shared/http/apiPaths.js";
 import { send } from "../shared/api.js";
 import { args, JSON_OPTION, only } from "../shared/args.js";
 import type { Command } from "../shared/command.js";
-import { CliFailure } from "../shared/errors.js";
+import { CliFailure } from "../shared/cliFailure.js";
 
 const usage = ["aop stop <node> [--json]"];
 
@@ -17,7 +17,10 @@ export const stop: Command = {
     const node = await send<NodeView>(c, "GET", apiPaths.node(id));
     if (node.run_id === null) throw new CliFailure(`No agent is running on ${id}`);
     const stopped = await send<NodeView>(c, "POST", apiPaths.run(node.run_id, "stop"));
-    if (values.json === true) return c.json(stopped);
+    if (values.json === true) {
+      c.json(stopped);
+      return;
+    }
     c.log(`Stopped ${node.run_id}. ${id} stays at ${stopped.stage}, claimed by you. Run \`aop release ${id}\` to start the stage again.`);
   },
 };

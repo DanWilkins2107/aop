@@ -2,5 +2,5 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": ["src/cli/main.ts", "src/server/main.ts", "web/index.html", "test-shared/fixtures/**"],
   "project": ["src/**/*.ts", "web/src/**/*.{ts,tsx}", "meta/**/*.ts", "test/**/*.{ts,mjs}", "test-shared/**/*.{ts,mjs}"],
-  "ignore": ["src/cli/**", "src/mcp/**", "web/src/**", "test/**"]
+  "ignore": ["src/mcp/**", "web/src/**", "test/**"]
 }
