@@ -20,7 +20,7 @@ export const HEADLESS_AGENT_FLAGS: Record<AgentTool, string> = {
   other: "-p",
 };
 
-export const OUTPUT_FORMATS: Record<AgentTool, OutputFormat> = {
+const OUTPUT_FORMATS: Record<AgentTool, OutputFormat> = {
   claude: "stream-json",
   other: "text",
 };

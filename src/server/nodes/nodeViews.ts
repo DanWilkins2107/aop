@@ -8,7 +8,7 @@ import { NON_BLOCKING_STAGES } from "../../shared/stages/nonBlockingStages.js";
 import { availableOutcomes, currentGraphs, getNodeRow, graphFor, stageIsLive, turnOf, type Graphs } from "./nodeCore.js";
 
 /** Invalidated ancestors of a node. Derived at read time; being invalidated by a parent is never stored. */
-export function invalidatedAncestors(db: Db, nodeId: string): string[] {
+function invalidatedAncestors(db: Db, nodeId: string): string[] {
   const rows = db
     .prepare(
       `WITH RECURSIVE ancestors(id) AS (

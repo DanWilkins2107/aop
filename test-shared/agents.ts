@@ -15,9 +15,9 @@ import type { NodeView } from "../src/shared/nodes/types.js";
 import { makeHome, makeRepo } from "./harness.js";
 
 export const ROOT = resolve(import.meta.dirname, "..");
-export const FAKE_AGENT = join(ROOT, "test-shared", "fixtures", "fake-agent.mjs");
+const FAKE_AGENT = join(ROOT, "test-shared", "fixtures", "fake-agent.mjs");
 /** The same fake, under a name AOP reads as Claude Code, so it gets the stream-json flags and writes events. */
-export const FAKE_CLAUDE = join(ROOT, "test-shared", "fixtures", "fake-claude.mjs");
+const FAKE_CLAUDE = join(ROOT, "test-shared", "fixtures", "fake-claude.mjs");
 const TSX_LOADER = pathToFileURL(join(ROOT, "node_modules", "tsx", "dist", "loader.mjs")).href;
 
 /** Runs the real source through tsx, on any platform, as the `aop` command does after `npm link`. */
@@ -26,7 +26,7 @@ export function nodeArgs(script: string): string[] {
 }
 
 export const fakeCommand = `"${process.execPath}" "${FAKE_AGENT}"`;
-export const fakeClaudeCommand = `"${process.execPath}" "${FAKE_CLAUDE}"`;
+const fakeClaudeCommand = `"${process.execPath}" "${FAKE_CLAUDE}"`;
 
 export function fakeConfig(extra = "", command = fakeCommand): string {
   return `agent_session_command: ${JSON.stringify(command)}\nagent_timeout_minutes: 5\nstages: ./stages.yaml\n${extra}`;

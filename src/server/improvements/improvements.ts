@@ -41,7 +41,7 @@ interface ProposalRow {
 }
 
 /** The first line, cut to fit a title. */
-export function titleFrom(text: string): string {
+function titleFrom(text: string): string {
   const first = text.trim().split(/\r?\n/)[0]?.trim() ?? "";
   const chars = [...first];
   return chars.length <= TITLE_LENGTH ? first : `${chars.slice(0, TITLE_LENGTH - 1).join("").trimEnd()}…`;
@@ -177,10 +177,10 @@ export function canonicalPath(path: string): string {
   }
 }
 
-export const notAllowed = (message: string) => new ApiError(400, "path_not_allowed", message);
+const notAllowed = (message: string) => new ApiError(400, "path_not_allowed", message);
 
 /** Refuses AOP's own config, process files, database and logs, wherever they are. `target` must be canonical. */
-export function assertNotAopState(config: AopConfig, target: string): void {
+function assertNotAopState(config: AopConfig, target: string): void {
   const home = aopHome();
   const processFiles = [config.stagesPath, ...[...config.projectStages.values()].map((own) => own.path), config.improvementStagesPath];
   const forbidden = [configPath(home), ...processFiles, dbPath(), `${dbPath()}-wal`, `${dbPath()}-shm`]
@@ -226,7 +226,7 @@ function readCurrent(path: string): string | null {
  * What a file holds now, to compare a proposal's base with: `sha256:<hex>` of its bytes, or
  * `absent` when there's no file. A proposal saved before bases were recorded has `unknown`.
  */
-export function baseOf(path: string): string {
+function baseOf(path: string): string {
   let bytes: Buffer;
   try {
     bytes = readFileSync(path);

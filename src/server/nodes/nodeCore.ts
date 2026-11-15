@@ -27,7 +27,7 @@ export interface Graphs {
 }
 
 /** The stage an improvement's outcome must not lead to unless Raise PR is possible. */
-export const RAISE_PR_STAGE = "raise_pr";
+const RAISE_PR_STAGE = "raise_pr";
 
 export function graphsOf(config: AopConfig): Graphs {
   return {

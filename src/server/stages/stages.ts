@@ -10,16 +10,15 @@ import { FINISHED_STAGES } from "../../shared/stages/finishedStages.js";
 import { isBuiltIn } from "../../shared/stages/isBuiltIn.js";
 import { parseYamlFile } from "../shared/yamlFile.js";
 
-export type { Turn };
 
-export interface StageDef {
+interface StageDef {
   turn: Turn;
   color?: string;
   /** Absolute path. Present on agent stages. */
   prompt?: string;
 }
 
-export interface TypeDef {
+interface TypeDef {
   start: string;
   /** Stage name to its outcomes (outcome name to target). */
   stages: Map<string, Map<string, string>>;
@@ -69,7 +68,7 @@ function zodProblems(prefix: string, error: z.ZodError): string[] {
  * Validates a parsed `stages.yaml`. Each stage and type is checked on its own so that one
  * malformed entry doesn't hide problems elsewhere: the result has every problem found.
  */
-export function validateStages(
+function validateStages(
   raw: unknown,
   baseDir: string,
   /** How problems name the file, such as `improvement_stages.yaml`. */

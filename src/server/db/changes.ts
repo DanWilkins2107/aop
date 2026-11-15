@@ -7,10 +7,10 @@ export type { ChangeNotice };
 export const EVERYTHING: ChangeNotice = { project_ids: null, node_ids: null };
 
 /** How long a burst of writes is gathered into one notice for the burst listeners. */
-export const BURST_MS = 40;
+const BURST_MS = 40;
 
 /** What two notices touched between them. */
-export function mergeNotices(a: ChangeNotice, b: ChangeNotice): ChangeNotice {
+function mergeNotices(a: ChangeNotice, b: ChangeNotice): ChangeNotice {
   const union = (x: string[] | null, y: string[] | null) => (x === null || y === null ? null : [...new Set([...x, ...y])]);
   return { project_ids: union(a.project_ids, b.project_ids), node_ids: union(a.node_ids, b.node_ids) };
 }

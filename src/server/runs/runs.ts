@@ -89,7 +89,7 @@ export type RunEnding =
   | { kind: "lost" };
 
 /** What a run's end does to its node, besides closing the run. */
-export type RunEndAction =
+type RunEndAction =
   | { kind: "none" }
   | { kind: "release_claim"; via: NonNullable<EventDataByKind["claim_released"]["via"]> }
   | { kind: "hand_to_human" }

@@ -5,13 +5,13 @@
 
 import type { Db } from "../db/db.js";
 import type { EventView } from "../../shared/events/types.js";
-import type { EdgeRow, LinkRow, MessageRow, NodeRow, NodeView } from "../../shared/nodes/types.js";
+import type { MessageRow, NodeRow, NodeView } from "../../shared/nodes/types.js";
 import { getNodeRow } from "./nodeCore.js";
 
-export type { EdgeRow, EventView, LinkRow, MessageRow, NodeRow, NodeView };
+export type { EventView, MessageRow, NodeRow, NodeView };
 
-export { getNodeRow, graphFor, graphsOf, RAISE_PR_STAGE, turnOf, type Graphs } from "./nodeCore.js";
-export { getNode, holdersOf, invalidatedAncestors, listNodes, startableNodes, viewsOf, type Holder } from "./nodeViews.js";
+export { getNodeRow, graphFor, graphsOf, turnOf, type Graphs } from "./nodeCore.js";
+export { getNode, holdersOf, listNodes, startableNodes, viewsOf } from "./nodeViews.js";
 export {
   answer,
   ask,

@@ -42,7 +42,7 @@ export function deleteLogs(paths: string[]): void {
 }
 
 /** Whether a recorded path is a `.log` file directly in AOP_HOME/logs, the only files AOP reads or deletes as logs. */
-export function isRunLog(path: string): boolean {
+function isRunLog(path: string): boolean {
   const file = resolve(path);
   return dirname(file) === resolve(logsFolder()) && file.endsWith(".log");
 }
