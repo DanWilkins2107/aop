@@ -5,6 +5,7 @@ import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import type { WriteStream } from "node:fs";
 import { setTimeout as delay } from "node:timers/promises";
 import type { AgentProcessView, ReapResult } from "../../shared/runs/types.js";
+import { noCwdLookupEnv } from "../../shared/os/noCwdLookupEnv.js";
 import { headlessCommand, StreamJsonUsage, type OutputFormat } from "./agentOutput.js";
 import { type ChangeFeed, nodesNotice } from "../db/changes.js";
 import { type AopConfig, loadConfig, withConfigSnapshot } from "../config/config.js";
@@ -243,7 +244,7 @@ export class Orchestrator {
         // even before anything below has been recorded, leaves its whole tree findable.
         // `AOP_MCP_URL` is read only by the fake agent in tests, where the MCP port is any free one.
         // Real agents reach MCP at the fixed port their own config names.
-        env: { ...process.env, AOP_MCP_URL: this.mcpUrl, [RUN_MARKER]: id },
+        env: { ...process.env, ...noCwdLookupEnv, AOP_MCP_URL: this.mcpUrl, [RUN_MARKER]: id },
         stdio: "pipe",
         windowsHide: true,
         // Its own process group, so that it can be killed along with its children. On Windows the
