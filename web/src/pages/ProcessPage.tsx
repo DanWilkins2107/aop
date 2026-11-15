@@ -1,7 +1,9 @@
 import { Link } from "react-router-dom";
+import type { ConfigFileView } from "../../../src/shared/config/types.js";
 import type { StagesView } from "../../../src/shared/stages/types.js";
 import { GLOBAL_STAGES } from "../lib/globalStages.js";
 import { ProblemBanner } from "../components/ErrorNotice.js";
+import { FileEditor } from "../components/FileEditor.js";
 import { PipelineGraph } from "../components/PipelineGraph.js";
 import { SubPage } from "../components/SubPage.js";
 import { api } from "../lib/api.js";
@@ -27,20 +29,35 @@ function TypeList({ process }: { process: StagesView }) {
   );
 }
 
-/** View-only by design: the process files are the one place a process is edited. */
+/** A process file and its agent stages' prompts, each with an editor. */
+function ProcessFiles({ files, stagesPath, reload }: { files: ConfigFileView[]; stagesPath: string | null; reload: () => Promise<void> }) {
+  const stages = files.find((file) => file.kind === "stages" && file.path === stagesPath);
+  if (!stages) return null;
+  const prompts = files.filter((file) => file.kind === "prompt" && file.stages_path === stagesPath);
+  return (
+    <div className="process-files">
+      <FileEditor file={stages} title="Process file" reload={reload} />
+      {prompts.map((prompt) => (
+        <FileEditor key={prompt.path} file={prompt} title="Prompt" reload={reload} />
+      ))}
+    </div>
+  );
+}
+
 export function ProcessPage() {
-  const { data, error } = useLiveData(async () => {
-    const [view, projects] = await Promise.all([api.process(), api.projects()]);
-    return { ...view, projects };
+  const { data, error, reload } = useLiveData(async () => {
+    const [view, projects, files] = await Promise.all([api.process(), api.projects(), api.configFiles()]);
+    return { ...view, projects, files };
   }, "process");
   const types = data?.process?.types ?? [];
   return (
     <SubPage title="Process" error={error}>
       {data ? (
-        <p className="settings-note">
-          View-only. To change the process, edit{" "}
-          {data.stages_path ? <code>{data.stages_path}</code> : <>the file named by "stages" in config.yaml</>}.
-        </p>
+        data.stages_path ? (
+          <ProcessFiles files={data.files} stagesPath={data.stages_path} reload={reload} />
+        ) : (
+          <p className="settings-note">Name the process file with "stages" in config.yaml, from AOP settings.</p>
+        )
       ) : null}
       {data && data.problems.length > 0 ? (
         <ProblemBanner title="The process is invalid, so no new agents start until it's fixed" problems={data.problems} />
@@ -64,9 +81,8 @@ export function ProcessPage() {
             <h2 className="settings-title">
               {project ? <Link to={`/p/${project.id}`}>{project.name}</Link> : <>Project {own.project_id} (not found)</>}
             </h2>
-            <p className="settings-note">
-              This project follows its own process. Edit <code>{own.stages_path}</code> to change it.
-            </p>
+            <p className="settings-note">This project follows its own process.</p>
+            <ProcessFiles files={data.files} stagesPath={own.stages_path} reload={reload} />
             <TypeList process={own.process} />
           </section>
         );
@@ -74,9 +90,8 @@ export function ProcessPage() {
       {data?.improvement_process ? (
         <section className="process-improvements" aria-label="Improvement pipeline">
           <h2 className="settings-title">Improvement pipeline</h2>
-          <p className="settings-note">
-            How improvements to your skills and stage prompts move. Edit <code>{data.improvement_stages_path}</code> to change it.
-          </p>
+          <p className="settings-note">How improvements to your skills and stage prompts move.</p>
+          <ProcessFiles files={data.files} stagesPath={data.improvement_stages_path} reload={reload} />
           {data.improvement_notes.map((note) => (
             <p key={note} className="banner banner-danger" role="note">
               {note}

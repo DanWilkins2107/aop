@@ -37,6 +37,8 @@ export type ConfigFileKind = "config" | "stages" | "prompt";
 export interface ConfigFileView {
   path: string;
   kind: ConfigFileKind;
+  /** For a prompt, the process file naming it. */
+  stages_path: string | null;
   /** Null when there's no file yet. */
   content: string | null;
 }

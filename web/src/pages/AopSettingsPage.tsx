@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { ProblemBanner } from "../components/ErrorNotice.js";
+import { FileEditor } from "../components/FileEditor.js";
 import { SubPage } from "../components/SubPage.js";
 import { api } from "../lib/api.js";
 import { useLiveData } from "../lib/live.js";
@@ -21,17 +22,15 @@ function Setting({ name, about, value, resolved }: { name: string; about: ReactN
 
 const NOT_SET = <span className="muted">Not set</span>;
 
-/** Read-only by design: agents can reach the API, so nothing here can change commands. */
 export function AopSettingsPage() {
-  const { data, error } = useLiveData(() => api.config(), "config");
+  const { data, error, reload } = useLiveData(async () => {
+    const [config, files] = await Promise.all([api.config(), api.configFiles()]);
+    return { ...config, file: files.find((file) => file.kind === "config") };
+  }, "config");
   const settings = data?.settings;
   return (
     <SubPage title="AOP settings" error={error}>
-      {data ? (
-        <p className="settings-note">
-          Read-only. To change these, edit <code>{data.config_path}</code>.
-        </p>
-      ) : null}
+      {data?.file ? <FileEditor file={data.file} title="Settings file" reload={reload} /> : null}
       {data && data.problems.length > 0 ? (
         <ProblemBanner title="The AOP config is invalid" problems={data.problems} />
       ) : null}

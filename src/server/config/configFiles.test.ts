@@ -31,6 +31,7 @@ describe("GET /api/config/files", () => {
       ]),
     ]);
     expect(listed[0]?.content).toBe(CONFIG_YAML);
+    expect(listed.filter((f) => f.kind === "prompt").every((f) => f.stages_path === join(home(), "stages.yaml"))).toBe(true);
   });
 
   it("still lists config.yaml when it isn't YAML, so it can be fixed", async () => {

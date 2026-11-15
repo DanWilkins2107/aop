@@ -1,6 +1,6 @@
 // The browser's client for the HTTP API: one function per route the UI uses.
 
-import type { ConfigView } from "../../../src/shared/config/types.js";
+import type { ConfigFileView, ConfigView, SaveConfigFileRequest } from "../../../src/shared/config/types.js";
 import type { EventView } from "../../../src/shared/events/types.js";
 import type { ApiErrorBody, ApiErrorCode } from "../../../src/shared/http/types.js";
 import type {
@@ -88,6 +88,10 @@ export const api = {
   stages: (projectId: string) => send<StagesView>("GET", `${apiPaths.stages}?project=${encodeURIComponent(projectId)}`),
   config: () => send<ConfigView>("GET", apiPaths.config),
   process: () => send<ProcessView>("GET", apiPaths.process),
+  configFiles: () => send<ConfigFileView[]>("GET", apiPaths.configFiles),
+  /** Refused if the file no longer holds `base`, or if `content` has problems. */
+  saveConfigFile: (path: string, content: string, base: string | null) =>
+    send<ConfigFileView>("PUT", apiPaths.configFiles, { path, content, base } satisfies SaveConfigFileRequest),
   createNode: (projectId: string, body: CreateNodeRequest) =>
     send<NodeView>("POST", apiPaths.projectAction(projectId, "nodes"), body),
 

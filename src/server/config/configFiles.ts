@@ -17,6 +17,8 @@ import { configSourceProblems } from "./config.js";
 interface EditableFile {
   path: string;
   kind: ConfigFileKind;
+  /** For a prompt, the process file naming it. */
+  stagesPath?: string;
   /** How problems name a process file. */
   label?: string;
 }
@@ -45,7 +47,7 @@ function promptsOf(stagesPath: string): EditableFile[] {
   if (!existsSync(stagesPath)) return [];
   return promptFiles(loadStagesFile(stagesPath).graph)
     .filter((prompt) => isWithin(prompt, dirname(stagesPath)))
-    .map((path) => ({ path, kind: "prompt" as const }));
+    .map((path) => ({ path, kind: "prompt" as const, stagesPath }));
 }
 
 function editableFiles(home: string): EditableFile[] {
@@ -66,7 +68,11 @@ function read(path: string): string | null {
 
 /** Every file the settings and process pages can edit, with what each holds now. */
 export function listConfigFiles(home: string = aopHome()): ConfigFileView[] {
-  return editableFiles(home).map(({ path, kind }) => ({ path, kind, content: read(path) }));
+  return editableFiles(home).map((file) => view(file, read(file.path)));
+}
+
+function view(file: EditableFile, content: string | null): ConfigFileView {
+  return { path: file.path, kind: file.kind, stages_path: file.stagesPath ?? null, content };
 }
 
 function problemsIn(file: EditableFile, content: string): string[] {
@@ -100,5 +106,5 @@ export function saveConfigFile(db: Db, input: SaveConfigFileRequest, home: strin
     rmSync(temp, { force: true });
     throw refused(`Couldn't write ${path}: ${error instanceof Error ? error.message : String(error)}`);
   }
-  return { path, kind: file.kind, content: input.content };
+  return view(file, input.content);
 }
