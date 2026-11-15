@@ -11,6 +11,9 @@ export function args<T extends NonNullable<ParseArgsConfig["options"]>>(argv: st
   }
 }
 
+/** `--json`: print what the server answered, as JSON, instead of a summary. */
+export const JSON_OPTION = { json: { type: "boolean" } } as const;
+
 /** The one value there must be, or else a usage error. */
 export function only<T>(values: T[], usage: Usage): T {
   const [value] = values;
@@ -18,7 +21,9 @@ export function only<T>(values: T[], usage: Usage): T {
   return value;
 }
 
-/** For commands that take no arguments at all. */
-export function none(argv: string[], usage: Usage): void {
-  if (args(argv, usage, {}).positionals.length > 0) throw usageError(usage);
+/** For commands that take no arguments but `--json`. Gives whether it was given. */
+export function onlyJson(argv: string[], usage: Usage): boolean {
+  const { values, positionals } = args(argv, usage, JSON_OPTION);
+  if (positionals.length > 0) throw usageError(usage);
+  return values.json === true;
 }
