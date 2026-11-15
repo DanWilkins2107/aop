@@ -11,11 +11,16 @@ import { nodeArgs, ROOT } from "../../../../test/server/agents.helpers.js";
 
 const REAL_AOP = join(homedir(), ".aop");
 
-/** What's at the real ~/.aop, to check nothing here touches it. */
+/** What `init` writes at the top of a home. A running server writes the rest, such as its database and logs, so they're left out. */
+const INIT_FILES = ["config.yaml", "stages.yaml", "improvement_stages.yaml", "prompts", "skills"];
+
+/** The files `init` writes at the real ~/.aop, to check nothing here touches them. */
 function realAopSnapshot(): string {
-  if (!existsSync(REAL_AOP)) return "absent";
-  return readdirSync(REAL_AOP)
-    .map((name) => `${name}:${statSync(join(REAL_AOP, name)).mtimeMs}`)
+  const prompts = join(REAL_AOP, "prompts");
+  const names = [...INIT_FILES, ...(existsSync(prompts) ? readdirSync(prompts).map((name) => join("prompts", name)) : [])];
+  return names
+    .map((name) => join(REAL_AOP, name))
+    .map((path) => `${path}:${existsSync(path) ? statSync(path).mtimeMs : "absent"}`)
     .join("|");
 }
 
