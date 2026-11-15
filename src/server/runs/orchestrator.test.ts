@@ -208,6 +208,23 @@ describe("how a run ends", () => {
     await expect.poll(() => logOf(run!.id), POLL).toContain("aop-no-such-command-anywhere");
   });
 
+  it.runIf(process.platform === "win32")("never runs a program planted in the start folder", TIMEOUT, async () => {
+    // As if this process hadn't set it: the run must get it either way.
+    const inherited = process.env["NoDefaultCurrentDirectoryInExePath"];
+    delete process.env["NoDefaultCurrentDirectoryInExePath"];
+    try {
+      w = await world();
+      const marker = w.file("planted-ran");
+      writeFileSync(join(w.repo, "aop-planted-agent.cmd"), `@echo ran> "${marker}"\r\n`);
+      writeFileSync(join(w.home, "config.yaml"), "agent_session_command: aop-planted-agent\nstages: ./stages.yaml\n");
+      const node = await w.create("");
+      await w.atStage(node.id, "failed");
+      expect(existsSync(marker)).toBe(false);
+    } finally {
+      if (inherited !== undefined) process.env["NoDefaultCurrentDirectoryInExePath"] = inherited;
+    }
+  });
+
   it("a missing start folder fails the run clearly", TIMEOUT, async () => {
     w = await world({ config: "open_from: ./no-such-folder\n" });
     const project = await w.call<{ id: string }>("POST", "/projects", { name: "Pathless" });

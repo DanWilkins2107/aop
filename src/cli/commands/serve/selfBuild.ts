@@ -4,6 +4,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { noCwdLookupEnv } from "../../../shared/os/noCwdLookupEnv.js";
 
 /** Set in the re-run process, so it serves instead of checking again. */
 const SELF_BUILT_ENV = "AOP_SELF_BUILT";
@@ -112,7 +113,12 @@ export function checkBuild(root: string): BuildCheck {
 
 function npm(root: string, args: string[]): boolean {
   // npm is `npm.cmd` on Windows, which only runs through a shell.
-  const result = spawnSync("npm", args, { cwd: root, stdio: "inherit", shell: process.platform === "win32" });
+  const result = spawnSync("npm", args, {
+    cwd: root,
+    stdio: "inherit",
+    shell: process.platform === "win32",
+    env: { ...process.env, ...noCwdLookupEnv },
+  });
   return result.status === 0;
 }
 

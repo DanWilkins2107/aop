@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import type { SteerRequest, SteerSession } from "../../shared/runs/types.js";
+import { noCwdLookupEnv } from "../../shared/os/noCwdLookupEnv.js";
 import { apiPaths } from "../../shared/http/apiPaths.js";
 import { send, serverUrl } from "../shared/api.js";
 import { args, only } from "../shared/args.js";
@@ -28,7 +29,7 @@ export const steer: Command = {
       shell: true,
       cwd: session.cwd,
       stdio: "inherit",
-      env: { ...c.env, AOP_URL: serverUrl(c), AOP_RUN_ID: session.steer_id },
+      env: { ...c.env, ...noCwdLookupEnv, AOP_URL: serverUrl(c), AOP_RUN_ID: session.steer_id },
     });
     // Ctrl+C and Ctrl+Break reach the session from the terminal, which decides what they do. This
     // process only waits for it, so it doesn't exit and leave the session holding the terminal.
