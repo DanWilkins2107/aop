@@ -5,6 +5,7 @@ import type { NodeView } from "../../../../src/shared/nodes/types.js";
 import type { StagesView } from "../../../../src/shared/stages/types.js";
 import { FINISHED_STAGES } from "../../../../src/shared/stages/finishedStages.js";
 import { FormError } from "../../components/FormError.js";
+import { Markdown } from "../../components/Markdown.js";
 import { api, urls } from "../../lib/api.js";
 import { humanize, toTarget } from "../../lib/format.js";
 import { focusIsLost, stageChangeNotice, stillHoldsFocus } from "../../lib/panelFocus.js";
@@ -27,11 +28,13 @@ function entryReason(events: EventView[], via: string): string | null {
 /** One line saying what's going on, and the one button that deals with it. */
 function SingleAction({
   text,
+  reason = null,
   label,
   action,
   reload,
 }: {
   text: string | null;
+  reason?: string | null;
   label: string;
   action: () => Promise<unknown>;
   reload: Reload;
@@ -39,7 +42,17 @@ function SingleAction({
   const { busy, error, run } = useAction(reload);
   return (
     <div>
-      {text ? <p className="action-text">{text}</p> : null}
+      {text ? (
+        <div className="action-text">
+          {text}
+          {reason ? (
+            <>
+              {" "}
+              <Markdown inline source={reason} />
+            </>
+          ) : null}
+        </div>
+      ) : null}
       <div className="action-row">
         <button type="button" disabled={busy} onClick={() => void run(action)}>
           {label}
@@ -120,7 +133,8 @@ function Content({
       return (
         <>
           <SingleAction
-            text={["The agent stopped without finishing.", entryReason(events, "fail")].filter(Boolean).join(" ")}
+            text="The agent stopped without finishing."
+            reason={entryReason(events, "fail")}
             label={toTarget("Retry", node.return_stage)}
             action={() => api.retry(node.id)}
             reload={reload}
@@ -137,7 +151,8 @@ function Content({
     case "externally_blocked":
       return (
         <SingleAction
-          text={["Waiting on something outside AOP.", entryReason(events, "block")].filter(Boolean).join(" ")}
+          text="Waiting on something outside AOP."
+          reason={entryReason(events, "block")}
           label={toTarget("Unblock", node.return_stage)}
           action={() => api.unblock(node.id)}
           reload={reload}
