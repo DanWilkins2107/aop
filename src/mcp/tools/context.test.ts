@@ -28,9 +28,9 @@ describe("the context tool", () => {
 
   it("is listed, with node_id required", async () => {
     const m = await mcpHarness();
-    const tool = (await m.tools()).find((t) => t.name === "context");
-    expect(tool?.description).toMatch(/Moving on/);
-    expect(tool?.inputSchema.required).toEqual(["node_id"]);
-    expect(tool?.annotations?.readOnlyHint).toBe(true);
+    const tool = await m.listed("context");
+    expect(tool.description).toMatch(/Moving on/);
+    expect(tool.required).toEqual(["node_id"]);
+    expect(tool.annotations?.readOnlyHint).toBe(true);
   });
 });

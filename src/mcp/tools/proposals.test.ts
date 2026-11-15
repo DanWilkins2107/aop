@@ -64,10 +64,10 @@ describe("the proposals tool", () => {
 
   it("is listed as a read, with node_id required", async () => {
     const { m } = await improvement();
-    const tool = (await m.tools()).find((t) => t.name === "proposals");
-    expect(tool?.description).toMatch(/proposed contents/);
-    expect([...(tool?.inputSchema.required ?? [])].sort()).toEqual(["node_id"]);
-    expect(Object.keys(tool?.inputSchema.properties ?? {}).sort()).toEqual(["node_id", "show"]);
-    expect(tool?.annotations?.readOnlyHint).toBe(true);
+    const tool = await m.listed("proposals");
+    expect(tool.description).toMatch(/proposed contents/);
+    expect(tool.required).toEqual(["node_id"]);
+    expect(tool.arguments).toEqual(["node_id", "show"]);
+    expect(tool.annotations?.readOnlyHint).toBe(true);
   });
 });

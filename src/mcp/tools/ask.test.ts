@@ -35,9 +35,9 @@ describe("the ask tool", () => {
 
   it("is listed, with node_id, run_id and question required", async () => {
     const m = await mcpHarness();
-    const tool = (await m.tools()).find((t) => t.name === "ask");
-    expect(tool?.description).toMatch(/human/);
-    expect(tool?.description).toMatch(/ends your turn/);
-    expect([...(tool?.inputSchema.required ?? [])].sort()).toEqual(["node_id", "question", "run_id"]);
+    const tool = await m.listed("ask");
+    expect(tool.description).toMatch(/human/);
+    expect(tool.description).toMatch(/ends your turn/);
+    expect(tool.required).toEqual(["node_id", "question", "run_id"]);
   });
 });

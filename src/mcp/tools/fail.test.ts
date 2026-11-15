@@ -35,10 +35,10 @@ describe("the fail tool", () => {
 
   it("is listed, with node_id, run_id and reason required", async () => {
     const m = await mcpHarness();
-    const tool = (await m.tools()).find((t) => t.name === "fail");
-    expect(tool?.description).toMatch(/failed/);
-    expect(tool?.description).toMatch(/asking a human won't help/);
-    expect(tool?.description).toMatch(/ends your turn/);
-    expect([...(tool?.inputSchema.required ?? [])].sort()).toEqual(["node_id", "reason", "run_id"]);
+    const tool = await m.listed("fail");
+    expect(tool.description).toMatch(/failed/);
+    expect(tool.description).toMatch(/asking a human won't help/);
+    expect(tool.description).toMatch(/ends your turn/);
+    expect(tool.required).toEqual(["node_id", "reason", "run_id"]);
   });
 });

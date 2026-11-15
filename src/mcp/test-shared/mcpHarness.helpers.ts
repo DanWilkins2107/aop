@@ -17,6 +17,8 @@ export interface McpHarness extends Harness {
   text(name: string, args?: Record<string, unknown>): Promise<string>;
   /** What `tools/list` offers. */
   tools(): Promise<Tool[]>;
+  /** A listed tool, with its arguments' names and the required ones, sorted. Fails the test if it isn't listed. */
+  listed(name: string): Promise<Tool & { required: string[]; arguments: string[] }>;
   /**
    * Opens a running agent run, as a launch does, and returns its ID for a write tool's `run_id`. On
    * this node, which the run then claims, or else on a new node of its own.
@@ -54,6 +56,12 @@ export async function mcpHarness(overrides: Record<string, string> = {}): Promis
     },
     async tools() {
       return (await client.listTools()).tools;
+    },
+    async listed(name) {
+      const found = (await client.listTools()).tools.find((t) => t.name === name);
+      if (found === undefined) throw new Error(`${name} isn't listed`);
+      const { required = [], properties = {} } = found.inputSchema;
+      return { ...found, required: required.toSorted(), arguments: Object.keys(properties).toSorted() };
     },
     async run(nodeId) {
       const id = nodeId ?? (await h.create("dev")).id;

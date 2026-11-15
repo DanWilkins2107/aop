@@ -3,7 +3,7 @@
   "plugins": ["typescript", "react", "unicorn", "import", "vitest"],
   "categories": { "correctness": "error", "suspicious": "error", "pedantic": "error" },
   "env": { "browser": true, "node": true, "es2024": true },
-  "ignorePatterns": ["dist", "src/mcp", "src/server", "web/src", "test", "test-shared"],
+  "ignorePatterns": ["dist", "src/server", "web/src", "test", "test-shared"],
   "rules": {
     "react/react-in-jsx-scope": "off",
     "vitest/valid-expect": ["error", { "maxArgs": 2 }],

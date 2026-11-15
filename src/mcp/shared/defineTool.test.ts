@@ -22,7 +22,7 @@ describe("run_id on the MCP tools", () => {
   it("is required by every write tool, and taken by no read", async () => {
     const m = await mcpHarness();
     const listed = await m.tools();
-    expect(listed.map((t) => t.name).sort()).toEqual(REGISTRY.map((t) => t.name).sort());
+    expect(listed.map((t) => t.name).toSorted()).toEqual(REGISTRY.map((t) => t.name).toSorted());
     for (const tool of listed) {
       const required = tool.inputSchema.required ?? [];
       if (READS.includes(tool.name)) expect(Object.keys(tool.inputSchema.properties ?? {}), tool.name).not.toContain("run_id");

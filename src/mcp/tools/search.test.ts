@@ -36,10 +36,10 @@ describe("the search tool", () => {
 
   it("is listed, with query and node_id required", async () => {
     const m = await mcpHarness();
-    const tool = (await m.tools()).find((t) => t.name === "search");
-    expect(tool?.description).toMatch(/every project/);
-    expect([...(tool?.inputSchema.required ?? [])].sort()).toEqual(["node_id", "query"]);
-    expect(Object.keys(tool?.inputSchema.properties ?? {}).sort()).toEqual(["all", "node_id", "query"]);
-    expect(tool?.annotations?.readOnlyHint).toBe(true);
+    const tool = await m.listed("search");
+    expect(tool.description).toMatch(/every project/);
+    expect(tool.required).toEqual(["node_id", "query"]);
+    expect(tool.arguments).toEqual(["all", "node_id", "query"]);
+    expect(tool.annotations?.readOnlyHint).toBe(true);
   });
 });

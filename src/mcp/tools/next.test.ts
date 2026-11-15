@@ -43,9 +43,9 @@ describe("the next tool", () => {
 
   it("is listed, with node_id, run_id and outcome required", async () => {
     const m = await mcpHarness();
-    const tool = (await m.tools()).find((t) => t.name === "next");
-    expect(tool?.description).toMatch(/Moving on/);
-    expect(tool?.description).toMatch(/ends your turn/);
-    expect([...(tool?.inputSchema.required ?? [])].sort()).toEqual(["node_id", "outcome", "run_id"]);
+    const tool = await m.listed("next");
+    expect(tool.description).toMatch(/Moving on/);
+    expect(tool.description).toMatch(/ends your turn/);
+    expect(tool.required).toEqual(["node_id", "outcome", "run_id"]);
   });
 });

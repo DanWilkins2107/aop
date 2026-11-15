@@ -52,8 +52,8 @@ describe("the link tool", () => {
 
   it("is listed, with node_id, run_id, kind and url required", async () => {
     const m = await mcpHarness();
-    const tool = (await m.tools()).find((t) => t.name === "link");
-    expect(tool?.description).toMatch(/PR or ticket link/);
-    expect([...(tool?.inputSchema.required ?? [])].sort()).toEqual(["kind", "node_id", "run_id", "url"]);
+    const tool = await m.listed("link");
+    expect(tool.description).toMatch(/PR or ticket link/);
+    expect(tool.required).toEqual(["kind", "node_id", "run_id", "url"]);
   });
 });

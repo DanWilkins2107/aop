@@ -31,10 +31,10 @@ describe("the edge_remove tool", () => {
 
   it("is listed, with run_id, from and to required", async () => {
     const m = await mcpHarness();
-    const tool = (await m.tools()).find((t) => t.name === "edge_remove");
-    expect(tool?.description).toMatch(/Remove a block/);
-    expect([...(tool?.inputSchema.required ?? [])].sort()).toEqual(["from", "run_id", "to"]);
-    expect(Object.keys(tool?.inputSchema.properties ?? {}).sort()).toEqual(["from", "run_id", "to"]);
+    const tool = await m.listed("edge_remove");
+    expect(tool.description).toMatch(/Remove a block/);
+    expect(tool.required).toEqual(["from", "run_id", "to"]);
+    expect(tool.arguments).toEqual(["from", "run_id", "to"]);
     expect(tool?.annotations).toBeUndefined();
   });
 });

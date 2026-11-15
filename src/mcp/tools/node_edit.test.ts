@@ -57,9 +57,9 @@ describe("the node_edit tool", () => {
 
   it("is listed, with only node_id and run_id required and title and body offered", async () => {
     const m = await mcpHarness();
-    const tool = (await m.tools()).find((t) => t.name === "node_edit");
-    expect(tool?.description).toMatch(/title or description/);
-    expect([...(tool?.inputSchema.required ?? [])].sort()).toEqual(["node_id", "run_id"]);
-    expect(Object.keys(tool?.inputSchema.properties ?? {}).sort()).toEqual(["body", "node_id", "run_id", "title"]);
+    const tool = await m.listed("node_edit");
+    expect(tool.description).toMatch(/title or description/);
+    expect(tool.required).toEqual(["node_id", "run_id"]);
+    expect(tool.arguments).toEqual(["body", "node_id", "run_id", "title"]);
   });
 });

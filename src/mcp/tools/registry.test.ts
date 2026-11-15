@@ -50,7 +50,7 @@ describe("the MCP tools", () => {
     const entries = sourceFiles()
       .filter((file) => file.startsWith("tools/") && file !== "tools/registry.ts")
       .map((file) => file.split("/")[1]!.replace(/\.ts$/, ""));
-    expect([...new Set(entries)].sort()).toEqual(REGISTRY.map((t) => t.name).sort());
+    expect([...new Set(entries)].toSorted()).toEqual(REGISTRY.map((t) => t.name).toSorted());
   });
 
   it("are each one of the agent tools", () => {
@@ -112,12 +112,12 @@ async function tryEverything(m: McpHarness, id: string, run_id: string): Promise
   await attempt(m, "next", { node_id: id, run_id, outcome: "save_locally" });
 }
 
-const realFiles = () => [readFileSync(skill(), "utf8"), readdirSync(skills()).sort()];
+const realFiles = () => [readFileSync(skill(), "utf8"), readdirSync(skills()).toSorted()];
 
 describe("saving an improvement, as seen from the MCP tools", () => {
   it("offers no tool that writes proposals to real files", async () => {
     const m = await mcpHarness(IMPROVEMENTS);
-    expect((await m.tools()).map((t) => t.name).sort()).toEqual(REGISTRY.map((t) => t.name).sort());
+    expect((await m.tools()).map((t) => t.name).toSorted()).toEqual(REGISTRY.map((t) => t.name).toSorted());
     expect(REGISTRY.map((t) => t.name)).not.toContain("apply");
     const { id, run_id } = await inReview(m);
     expect(await attempt(m, "apply", { node_id: id, run_id })).toBe(true);
@@ -174,7 +174,7 @@ describe("saving an improvement, as seen from the MCP tools", () => {
     const m = await mcpHarness(IMPROVEMENTS);
     mkdirSync(join(skills(), ".git"));
     const { node } = (await m.call<ImprovementView>("POST", "/api/improvements", { body: "x" })).body;
-    const files = () => [readFileSync(skill(), "utf8"), readdirSync(skills()).sort()];
+    const files = () => [readFileSync(skill(), "utf8"), readdirSync(skills()).toSorted()];
 
     // draft_change, the agent's own stage.
     await tryEverything(m, node.id, await freshRun(m, node.id));

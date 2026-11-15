@@ -49,10 +49,10 @@ describe("the split_finish tool", () => {
 
   it("is listed, with only node_id and run_id, and ends the turn", async () => {
     const m = await mcpHarness();
-    const tool = (await m.tools()).find((t) => t.name === "split_finish");
-    expect(tool?.description).toMatch(/broken_down/);
-    expect(tool?.description).toMatch(/ends your turn/);
-    expect(Object.keys(tool?.inputSchema.properties ?? {})).toEqual(["node_id", "run_id"]);
-    expect([...(tool?.inputSchema.required ?? [])].sort()).toEqual(["node_id", "run_id"]);
+    const tool = await m.listed("split_finish");
+    expect(tool.description).toMatch(/broken_down/);
+    expect(tool.description).toMatch(/ends your turn/);
+    expect(tool.arguments).toEqual(["node_id", "run_id"]);
+    expect(tool.required).toEqual(["node_id", "run_id"]);
   });
 });

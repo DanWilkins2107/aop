@@ -94,11 +94,11 @@ describe("the node_create tool", () => {
 
   it("is listed, with node_id, run_id and title required", async () => {
     const m = await mcpHarness();
-    const tool = (await m.tools()).find((t) => t.name === "node_create");
-    expect(tool?.description).toMatch(/first stage/);
-    expect(tool?.description).toMatch(/held until the split finishes/);
+    const tool = await m.listed("node_create");
+    expect(tool.description).toMatch(/first stage/);
+    expect(tool.description).toMatch(/held until the split finishes/);
     expect(tool?.annotations).toBeUndefined();
-    expect([...(tool?.inputSchema.required ?? [])].sort()).toEqual(["node_id", "run_id", "title"]);
-    expect(Object.keys(tool?.inputSchema.properties ?? {}).sort()).toEqual(["body", "node_id", "parent", "project", "run_id", "stage", "title", "type"]);
+    expect(tool.required).toEqual(["node_id", "run_id", "title"]);
+    expect(tool.arguments).toEqual(["body", "node_id", "parent", "project", "run_id", "stage", "title", "type"]);
   });
 });

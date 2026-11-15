@@ -119,14 +119,13 @@ describe("the withdraw_proposal tool", () => {
 describe("tools/list", () => {
   it("offers propose and withdraw_proposal with all their arguments required, run_id among them", async () => {
     const m = await mcpHarness(ON);
-    const tools = await m.tools();
-    const propose = tools.find((t) => t.name === "propose");
-    expect(propose?.description).toMatch(/real file is unchanged/);
-    expect([...(propose?.inputSchema.required ?? [])].sort()).toEqual(["content", "node_id", "path", "run_id"]);
-    expect(Object.keys(propose?.inputSchema.properties ?? {}).sort()).toEqual(["content", "node_id", "path", "run_id"]);
-    const withdraw = tools.find((t) => t.name === "withdraw_proposal");
-    expect(withdraw?.description).toMatch(/Drop/);
-    expect([...(withdraw?.inputSchema.required ?? [])].sort()).toEqual(["node_id", "path", "run_id"]);
-    expect(Object.keys(withdraw?.inputSchema.properties ?? {}).sort()).toEqual(["node_id", "path", "run_id"]);
+    const propose = await m.listed("propose");
+    expect(propose.description).toMatch(/real file is unchanged/);
+    expect(propose.required).toEqual(["content", "node_id", "path", "run_id"]);
+    expect(propose.arguments).toEqual(["content", "node_id", "path", "run_id"]);
+    const withdraw = await m.listed("withdraw_proposal");
+    expect(withdraw.description).toMatch(/Drop/);
+    expect(withdraw.required).toEqual(["node_id", "path", "run_id"]);
+    expect(withdraw.arguments).toEqual(["node_id", "path", "run_id"]);
   });
 });

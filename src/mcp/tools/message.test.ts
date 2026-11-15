@@ -33,9 +33,9 @@ describe("the message tool", () => {
 
   it("is listed, with node_id, run_id and body required", async () => {
     const m = await mcpHarness();
-    const tool = (await m.tools()).find((t) => t.name === "message");
-    expect(tool?.description).toMatch(/Post a message/);
+    const tool = await m.listed("message");
+    expect(tool.description).toMatch(/Post a message/);
     expect(tool?.annotations).toBeUndefined();
-    expect([...(tool?.inputSchema.required ?? [])].sort()).toEqual(["body", "node_id", "run_id"]);
+    expect(tool.required).toEqual(["body", "node_id", "run_id"]);
   });
 });
