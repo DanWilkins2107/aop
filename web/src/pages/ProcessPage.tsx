@@ -52,13 +52,6 @@ export function ProcessPage() {
   const types = data?.process?.types ?? [];
   return (
     <SubPage title="Process" error={error}>
-      {data ? (
-        data.stages_path ? (
-          <ProcessFiles files={data.files} stagesPath={data.stages_path} reload={reload} />
-        ) : (
-          <p className="settings-note">Name the process file with "stages" in config.yaml, from AOP settings.</p>
-        )
-      ) : null}
       {data && data.problems.length > 0 ? (
         <ProblemBanner title="The process is invalid, so no new agents start until it's fixed" problems={data.problems} />
       ) : null}
@@ -67,21 +60,34 @@ export function ProcessPage() {
           The global stages ({globalStageNames}) can be reached from any stage, so they live outside these graphs.
         </p>
       ) : null}
-      {data && types.length === 0 ? (
-        <p className="muted">Nothing to draw until stages.yaml can be read.</p>
+      {data ? (
+        <section className="process-improvements" aria-label="Global process">
+          <h2 className="settings-title">Global process</h2>
+          <p className="settings-note">
+            {data.project_processes.length > 0
+              ? "Every project follows this, except those under Per-project processes below."
+              : "Every project follows this."}
+          </p>
+          {data.stages_path ? (
+            <ProcessFiles files={data.files} stagesPath={data.stages_path} reload={reload} />
+          ) : (
+            <p className="settings-note">Name the process file with "stages" in config.yaml, from AOP settings.</p>
+          )}
+          {types.length === 0 ? <p className="muted">Nothing to draw until stages.yaml can be read.</p> : null}
+          {data.process && types.length > 0 ? <TypeList process={data.process} /> : null}
+        </section>
       ) : null}
-      {data?.process && types.length > 0 ? <TypeList process={data.process} /> : null}
       {data && data.project_processes.length > 0 ? (
-        <p className="settings-note">That process is shared by every project except those below, which follow their own.</p>
+        <h2 className="settings-title process-improvements">Per-project processes</h2>
       ) : null}
       {data?.project_processes.map((own) => {
         const project = data.projects.find((p) => p.id === own.project_id);
         return (
           <section key={own.project_id} className="process-improvements" aria-label={`Process for ${project?.name ?? own.project_id}`}>
-            <h2 className="settings-title">
+            <h3 className="settings-title">
               {project ? <Link to={`/p/${project.id}`}>{project.name}</Link> : <>Project {own.project_id} (not found)</>}
-            </h2>
-            <p className="settings-note">This project follows its own process.</p>
+            </h3>
+            <p className="settings-note">Only this project follows this process, instead of the global one.</p>
             <ProcessFiles files={data.files} stagesPath={own.stages_path} reload={reload} />
             <TypeList process={own.process} />
           </section>
