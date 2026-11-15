@@ -45,7 +45,9 @@ describe("the node_edit tool", () => {
     expect(result.isError).toBe(true);
     expect(resultText(result)).toMatch(/title.*body/);
     const events = (await m.call<EventView[]>("GET", `/api/nodes/${node.id}/events`)).body;
-    expect(events.some((e) => e.kind === "title_edited" || e.kind === "description_edited")).toBe(false);
+    const kinds = events.map((e) => e.kind);
+    expect(kinds).not.toContain("title_edited");
+    expect(kinds).not.toContain("description_edited");
   });
 
   it("fails for an unknown node", async () => {

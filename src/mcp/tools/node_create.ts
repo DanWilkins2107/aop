@@ -35,14 +35,14 @@ export const nodeCreate = defineTool({
   },
   run: async ({ node_id, title, body, parent, project, type, stage }, api) => {
     const projectId =
-      project !== undefined ? await resolveProject(api, project) : (await api.json<NodeView>("GET", apiPaths.node(parent ?? node_id))).project_id;
+      project === undefined ? (await api.json<NodeView>("GET", apiPaths.node(parent ?? node_id))).project_id : await resolveProject(api, project);
     const node = await api.json<NodeView>("POST", apiPaths.projectAction(projectId, "nodes"), {
       title,
       actor: ACTOR,
-      ...(body !== undefined ? { body } : {}),
-      ...(parent !== undefined ? { parent_id: parent } : {}),
-      ...(type !== undefined ? { type } : {}),
-      ...(stage !== undefined ? { stage } : {}),
+      ...(body === undefined ? {} : { body }),
+      ...(parent === undefined ? {} : { parent_id: parent }),
+      ...(type === undefined ? {} : { type }),
+      ...(stage === undefined ? {} : { stage }),
     } satisfies CreateNodeRequest);
     return `Created ${node.id} at ${node.stage}`;
   },

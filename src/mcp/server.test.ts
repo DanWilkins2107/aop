@@ -30,8 +30,12 @@ function post(port: number, host: string): Promise<{ status: number; body: strin
       },
       (res) => {
         let body = "";
-        res.on("data", (chunk: Buffer) => (body += chunk.toString()));
-        res.on("end", () => resolve({ status: res.statusCode ?? 0, body }));
+        res.on("data", (chunk: Buffer) => {
+          body += chunk.toString();
+        });
+        res.on("end", () => {
+          resolve({ status: res.statusCode ?? 0, body });
+        });
       },
     );
     req.once("error", reject);

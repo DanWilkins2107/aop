@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 import { CONFIG_YAML } from "../../../test-shared/harness.js";
 import { HUMAN_COMMANDS } from "../../cli/commands/registry.js";
 import { aopHome } from "../../server/shared/paths.js";
-import { closeRun, runningRuns } from "../../server/runs/runs.js";
 import type { ApplyResult, ImprovementView, ProposalView } from "../../shared/improvements/types.js";
 import { mcpHarness, type McpHarness } from "../test-shared/mcpHarness.helpers.js";
 import { resultText } from "../test-shared/resultText.helpers.js";
@@ -15,9 +14,10 @@ const MCP = join(ROOT, "src", "mcp");
 
 /** The source files below `src/mcp`, tests and their helpers aside, as paths from it with `/`. */
 const sourceFiles = () =>
-  (readdirSync(MCP, { recursive: true }) as string[])
+  readdirSync(MCP, { recursive: true, encoding: "utf8" })
     .map((file) => file.replaceAll("\\", "/"))
-    .filter((file) => /\.ts$/.test(file) && !/\.(test|helpers)\.ts$/.test(file));
+    .filter((file) => file.endsWith(".ts"))
+    .filter((file) => !/\.(test|helpers)\.ts$/.test(file));
 
 /** Every tool an agent is designed to use. The server offers these and nothing else, though not all exist yet. */
 const AGENT_TOOLS = [
@@ -48,7 +48,8 @@ describe("the MCP tools", () => {
 
   it("are each one file or folder in `tools/`, named as the tool, and nothing else is there", () => {
     const entries = sourceFiles()
-      .filter((file) => file.startsWith("tools/") && file !== "tools/registry.ts")
+      .filter((file) => file.startsWith("tools/"))
+      .filter((file) => file !== "tools/registry.ts")
       .map((file) => file.split("/")[1]!.replace(/\.ts$/, ""));
     expect([...new Set(entries)].toSorted()).toEqual(REGISTRY.map((t) => t.name).toSorted());
   });
@@ -78,17 +79,10 @@ const extra = () => join(skills(), "extra", "SKILL.md");
 
 const proposals = async (m: McpHarness, id: string) => (await m.call<ProposalView[]>("GET", `/api/improvements/${id}/proposals`)).body;
 
-/** A new run on the node, as if AOP had launched another agent there, once any earlier one has ended. */
-async function freshRun(m: McpHarness, id: string): Promise<string> {
-  for (const run of runningRuns(m.db).filter((r) => r.node_id === id)) closeRun(m.db, run, "reported", 0);
-  m.db.prepare("UPDATE nodes SET claimed_by = NULL WHERE id = ?").run(id);
-  return m.run(id);
-}
-
 /** An improvement an agent drafted through the tools, and handed to a human at review_change. */
 async function inReview(m: McpHarness): Promise<{ id: string; run_id: string }> {
   const { node } = (await m.call<ImprovementView>("POST", "/api/improvements", { body: "x" })).body;
-  const run_id = await freshRun(m, node.id);
+  const run_id = await m.rerun(node.id);
   await m.text("propose", { node_id: node.id, run_id, path: skill(), content: "Reviewed.\n" });
   await m.text("next", { node_id: node.id, run_id, outcome: "drafted" });
   expect((await m.node(node.id)).stage).toBe("review_change");
@@ -138,7 +132,7 @@ describe("saving an improvement, as seen from the MCP tools", () => {
     const { id } = await inReview(m);
     const before = await proposals(m, id);
     // The run that drafted it, and a new one, as a process left over or started since would be.
-    for (const run_id of [await freshRun(m, id), await m.run()]) {
+    for (const run_id of [await m.rerun(id), await m.run()]) {
       for (const [name, args] of [
         ["propose", { path: skill(), content: "Swapped in.\n" }],
         ["propose", { path: extra(), content: "Never reviewed.\n" }],
@@ -148,7 +142,7 @@ describe("saving an improvement, as seen from the MCP tools", () => {
         expect(result.isError, `${name} ${args.path}`).toBe(true);
       }
     }
-    const refusal = await m.tool("propose", { node_id: id, run_id: await freshRun(m, id), path: skill(), content: "Swapped in.\n" });
+    const refusal = await m.tool("propose", { node_id: id, run_id: await m.rerun(id), path: skill(), content: "Swapped in.\n" });
     expect(resultText(refusal)).toMatch(/human turn, so an agent can't change the proposals/);
     expect(await proposals(m, id)).toEqual(before);
   });
@@ -158,7 +152,7 @@ describe("saving an improvement, as seen from the MCP tools", () => {
     const { id, run_id } = await inReview(m);
     const shown = await proposals(m, id);
     await tryEverything(m, id, run_id);
-    await tryEverything(m, id, await freshRun(m, id));
+    await tryEverything(m, id, await m.rerun(id));
     expect(realFiles()).toEqual(["Old skill.\n", ["write-tests"]]);
 
     const saved = await m.call<ApplyResult>("POST", `/api/improvements/${id}/apply`, {
@@ -177,22 +171,22 @@ describe("saving an improvement, as seen from the MCP tools", () => {
     const files = () => [readFileSync(skill(), "utf8"), readdirSync(skills()).toSorted()];
 
     // draft_change, the agent's own stage.
-    await tryEverything(m, node.id, await freshRun(m, node.id));
+    await tryEverything(m, node.id, await m.rerun(node.id));
     expect(files()).toEqual(["Old skill.\n", [".git", "write-tests"]]);
 
-    const run_id = await freshRun(m, node.id);
+    const run_id = await m.rerun(node.id);
     await m.text("propose", { node_id: node.id, run_id, path: skill(), content: "Reviewed.\n" });
     await m.text("next", { node_id: node.id, run_id, outcome: "drafted" });
-    await tryEverything(m, node.id, await freshRun(m, node.id));
+    await tryEverything(m, node.id, await m.rerun(node.id));
     expect(files()).toEqual(["Old skill.\n", [".git", "write-tests"]]);
 
     expect((await m.post(node.id, "next", { outcome: "raise_pr", actor: "human" })).status).toBe(200);
-    await tryEverything(m, node.id, await freshRun(m, node.id));
+    await tryEverything(m, node.id, await m.rerun(node.id));
     expect(files()).toEqual(["Old skill.\n", [".git", "write-tests"]]);
 
     // Finished, by the agent's own `done`.
-    await m.tool("next", { node_id: node.id, run_id: await freshRun(m, node.id), outcome: "done" });
-    await tryEverything(m, node.id, await freshRun(m, node.id));
+    await m.tool("next", { node_id: node.id, run_id: await m.rerun(node.id), outcome: "done" });
+    await tryEverything(m, node.id, await m.rerun(node.id));
     expect(files()).toEqual(["Old skill.\n", [".git", "write-tests"]]);
   });
 });

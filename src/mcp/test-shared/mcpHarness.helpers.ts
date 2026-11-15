@@ -6,7 +6,7 @@ import { onTestFinished } from "vitest";
 import { createMcpApp, MCP_PATH } from "../server.js";
 import { createApp } from "../../server/http/api.js";
 import { getNodeRow } from "../../server/nodes/nodes.js";
-import { beginRun } from "../../server/runs/runs.js";
+import { beginRun, closeRun, runningRuns } from "../../server/runs/runs.js";
 import { harness, type Harness } from "../../../test-shared/harness.js";
 import { resultText } from "./resultText.helpers.js";
 
@@ -24,6 +24,8 @@ export interface McpHarness extends Harness {
    * this node, which the run then claims, or else on a new node of its own.
    */
   run(nodeId?: string): Promise<string>;
+  /** A new run on the node, as if AOP had launched another agent there, once any earlier one has ended. */
+  rerun(nodeId: string): Promise<string>;
 }
 
 /**
@@ -46,6 +48,10 @@ export async function mcpHarness(overrides: Record<string, string> = {}): Promis
   onTestFinished(() => client.close());
 
   const tool: McpHarness["tool"] = async (name, args = {}) => (await client.callTool({ name, arguments: args })) as CallToolResult;
+  const run: McpHarness["run"] = async (nodeId) => {
+    const id = nodeId ?? (await h.create("dev")).id;
+    return beginRun(h.db, getNodeRow(h.db, id), randomUUID(), "unused.log").id;
+  };
   return {
     ...h,
     tool,
@@ -63,9 +69,11 @@ export async function mcpHarness(overrides: Record<string, string> = {}): Promis
       const { required = [], properties = {} } = found.inputSchema;
       return { ...found, required: required.toSorted(), arguments: Object.keys(properties).toSorted() };
     },
-    async run(nodeId) {
-      const id = nodeId ?? (await h.create("dev")).id;
-      return beginRun(h.db, getNodeRow(h.db, id), randomUUID(), "unused.log").id;
+    run,
+    rerun(nodeId) {
+      for (const open of runningRuns(h.db).filter((r) => r.node_id === nodeId)) closeRun(h.db, open, "reported", 0);
+      h.db.prepare("UPDATE nodes SET claimed_by = NULL WHERE id = ?").run(nodeId);
+      return run(nodeId);
     },
   };
 }

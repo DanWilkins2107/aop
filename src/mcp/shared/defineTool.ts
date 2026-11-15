@@ -40,7 +40,7 @@ const textResult = (text: string, isError = false): CallToolResult => ({
 /** A write tool's input: its own, with `run_id` after `node_id`. */
 function withRunId(shape: z.ZodRawShape): z.ZodRawShape {
   const { node_id, ...rest } = shape;
-  return { ...(node_id !== undefined ? { node_id } : {}), ...RUN_ID_ARG, ...rest };
+  return { ...(node_id === undefined ? {} : { node_id }), ...RUN_ID_ARG, ...rest };
 }
 
 /** Makes a tool whose API failures become tool errors carrying the API's message. */
@@ -49,20 +49,21 @@ export function defineTool<Shape extends z.ZodRawShape>(tool: ToolDefinition<Sha
   return {
     name: tool.name,
     register(server, api) {
-      const input = z.object(shape);
+      const input = z.object(tool.input);
+      const runId = z.object(RUN_ID_ARG);
       server.registerTool(
         tool.name,
         { description: tool.description, inputSchema: shape, ...(tool.annotations ? { annotations: tool.annotations } : {}) },
-        (async (raw: unknown) => {
+        async (raw: unknown) => {
           try {
-            const args = input.parse(raw) as z.output<z.ZodObject<Shape>> & { run_id?: string };
-            const result = await tool.run(args, tool.writes === true ? api.asRun(args.run_id ?? "") : api);
+            const args = input.parse(raw);
+            const result = await tool.run(args, tool.writes === true ? api.asRun(runId.parse(raw).run_id) : api);
             return typeof result === "string" ? textResult(result) : result;
           } catch (error) {
             if (error instanceof ApiFailure) return textResult(error.message, true);
             throw error;
           }
-        }) as never,
+        },
       );
     },
   };

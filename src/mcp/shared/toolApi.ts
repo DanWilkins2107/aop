@@ -3,23 +3,27 @@
 // guard all stay on the API's path.
 
 import type { Hono } from "hono";
+import { z } from "zod";
 import { RUN_ID_HEADER } from "../../shared/runs/runIdHeader.js";
-import type { ApiErrorBody } from "../../shared/http/types.js";
 import { API_PREFIX } from "../../shared/http/apiPrefix.js";
 import { ApiFailure } from "./ApiFailure.js";
 import type { ToolApi } from "./types.js";
 
+/** The API's error body. */
+const ApiError = z.object({ error: z.object({ message: z.string(), details: z.unknown().optional() }) });
+
 /** The API's own error message, with its details if it gave any. */
 function failureOf(status: number, text: string): ApiFailure {
+  let body: unknown;
   try {
-    const { error } = JSON.parse(text) as { error?: Partial<ApiErrorBody["error"]> };
-    if (typeof error?.message === "string") {
-      return new ApiFailure(error.details === undefined ? error.message : `${error.message}\n${JSON.stringify(error.details)}`);
-    }
+    body = JSON.parse(text);
   } catch {
-    // Not JSON.
+    body = undefined;
   }
-  return new ApiFailure(`The AOP server answered ${status}`);
+  const parsed = ApiError.safeParse(body);
+  if (!parsed.success) return new ApiFailure(`The AOP server answered ${status}`);
+  const { message, details } = parsed.data.error;
+  return new ApiFailure(details === undefined ? message : `${message}\n${JSON.stringify(details)}`);
 }
 
 /** Calls the API app in-process. Paths are below `API_PREFIX`, as `apiPaths` gives them. No run ID is sent unless `asRun` gives one. */
@@ -42,6 +46,8 @@ export function toolApi(api: Hono, runId?: string): ToolApi {
     async json<T>(method: string, path: string, body?: unknown) {
       const { type, text } = await call(method, path, body);
       if (!type.includes("json")) throw new ApiFailure(`Expected JSON from ${path}, got ${type || "nothing"}`);
+      // The API's answer is typed by the contract in src/shared, so it isn't checked again here.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
       return JSON.parse(text) as T;
     },
     async text(path) {

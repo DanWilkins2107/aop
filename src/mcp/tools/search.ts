@@ -20,10 +20,10 @@ export const search = defineTool({
     const node = await api.json<NodeView>("GET", apiPaths.node(node_id));
     // An improvement belongs to no project, so it searches them all.
     if (all !== true && node.kind !== "improvement") params.set("project", node.project_id);
-    const results = await api.json<SearchResult[]>("GET", `${apiPaths.search}?${params}`);
+    const results = await api.json<SearchResult[]>("GET", `${apiPaths.search}?${params.toString()}`);
     if (results.length === 0) return "No matches.";
     return results
-      .map((result) => `${result.node_id}  [${result.stage}]  ${result.title}\n    ${result.snippet.replace(/\s+/g, " ")}`)
+      .map((result) => `${result.node_id}  [${result.stage}]  ${result.title}\n    ${result.snippet.replaceAll(/\s+/g, " ")}`)
       .join("\n");
   },
 });

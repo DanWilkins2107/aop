@@ -1,6 +1,8 @@
 // Every tool the MCP server offers: reads, and writes that take the caller's run ID. Adding one is a
 // new file here, plus its import and its entry in `REGISTRY`.
 
+// A registry imports every tool, however many there are.
+/* oxlint-disable import/max-dependencies */
 import type { AopTool } from "../shared/types.js";
 import { ask } from "./ask.js";
 import { context } from "./context.js";

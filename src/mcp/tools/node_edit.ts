@@ -19,8 +19,8 @@ export const nodeEdit = defineTool({
     }
     await api.json<NodeView>("PATCH", apiPaths.node(node_id), {
       actor: ACTOR,
-      ...(title !== undefined ? { title } : {}),
-      ...(body !== undefined ? { body } : {}),
+      ...(title === undefined ? {} : { title }),
+      ...(body === undefined ? {} : { body }),
     } satisfies EditNodeRequest);
     return `Edited ${node_id}`;
   },

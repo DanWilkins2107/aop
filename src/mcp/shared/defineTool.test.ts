@@ -23,11 +23,10 @@ describe("run_id on the MCP tools", () => {
     const m = await mcpHarness();
     const listed = await m.tools();
     expect(listed.map((t) => t.name).toSorted()).toEqual(REGISTRY.map((t) => t.name).toSorted());
-    for (const tool of listed) {
-      const required = tool.inputSchema.required ?? [];
-      if (READS.includes(tool.name)) expect(Object.keys(tool.inputSchema.properties ?? {}), tool.name).not.toContain("run_id");
-      else expect(required, tool.name).toContain("run_id");
-    }
+    const reads = listed.filter((t) => READS.includes(t.name));
+    const writes = listed.filter((t) => !READS.includes(t.name));
+    for (const tool of reads) expect(Object.keys({ ...tool.inputSchema.properties }), tool.name).not.toContain("run_id");
+    for (const tool of writes) expect(tool.inputSchema.required, tool.name).toContain("run_id");
     const next = listed.find((t) => t.name === "next");
     expect(JSON.stringify(next?.inputSchema.properties?.["run_id"])).toMatch(/Your run ID, from your prompt/);
   });

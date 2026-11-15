@@ -27,8 +27,11 @@ describe("the split_finish tool", () => {
     expect(await m.node(child.id)).toMatchObject({ held: false, held_by: [] });
 
     const events = (await m.call<EventView[]>("GET", `/api/nodes/${node.id}/events`)).body;
-    const vias = events.filter((e) => e.kind === "stage_changed").map((e) => [e.actor, (e.data as { via: string }).via]);
-    expect(vias.slice(-2)).toEqual([["agent", "split_start"], ["agent", "split_finish"]]);
+    const changes = events.filter((e) => e.kind === "stage_changed").slice(-2);
+    expect(changes).toMatchObject([
+      { actor: "agent", data: { via: "split_start" } },
+      { actor: "agent", data: { via: "split_finish" } },
+    ]);
   });
 
   it("fails for a split that wasn't started", async () => {

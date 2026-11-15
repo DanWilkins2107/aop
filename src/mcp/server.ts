@@ -18,19 +18,24 @@ export const MCP_PATH = "/mcp";
 const LOCAL_HOST = /^(localhost|127\.0\.0\.1)(:\d+)?$/i;
 const LOCAL_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i;
 
+/** Why a request is refused, if it is: it isn't addressed to localhost, or a website sent it. Non-browser clients send no Origin. */
+function refusalOf(host: string | undefined, origin: string | undefined): string | null {
+  if (host === undefined || !LOCAL_HOST.test(host)) return "Host must be localhost or 127.0.0.1";
+  if (origin !== undefined && !LOCAL_ORIGIN.test(origin)) return "Cross-origin requests are not allowed";
+  return null;
+}
+
 /** The MCP endpoint over an API app, which every tool calls in-process. */
 export function createMcpApp(api: Hono): Hono {
   const calls = toolApi(api);
   const app = new Hono();
 
-  // Keeps websites out, including through DNS rebinding. Non-browser clients send no Origin.
+  // Keeps websites out, including through DNS rebinding.
   app.use("*", async (c, proceed) => {
-    const host = c.req.header("host");
-    if (!host || !LOCAL_HOST.test(host)) return c.json({ error: "Host must be localhost or 127.0.0.1" }, 403);
-    const origin = c.req.header("origin");
-    if (origin !== undefined && !LOCAL_ORIGIN.test(origin)) return c.json({ error: "Cross-origin requests are not allowed" }, 403);
+    const refusal = refusalOf(c.req.header("host"), c.req.header("origin"));
+    if (refusal !== null) return c.json({ error: refusal }, 403);
     await proceed();
-    return;
+    return c.res;
   });
 
   app.all(MCP_PATH, async (c) => {
@@ -50,12 +55,17 @@ export function createMcpApp(api: Hono): Hono {
 export function startMcpServer(db: Db, port: number, options: AppOptions = {}): Promise<RunningServer> {
   const app = createMcpApp(createApp(db, options));
   return new Promise((resolve, reject) => {
+    // serve() makes an http.Server unless given another createServer.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
     const server = serve({ fetch: app.fetch, hostname: HOSTNAME, port }, (info) => {
       resolve({
         port: info.port,
         close: () =>
           new Promise((done, fail) => {
-            server.close((e) => (e ? fail(e) : done()));
+            server.close((e) => {
+              if (e === undefined) done();
+              else fail(e);
+            });
             server.closeAllConnections();
           }),
       });
