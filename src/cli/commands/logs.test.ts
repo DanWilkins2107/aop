@@ -16,7 +16,7 @@ it("logs prints the end of the latest run's log", async () => {
 
   const node = await w.create(directives(...Array.from({ length: 60 }, (_, i) => `say line ${i + 1}`), "hang"));
   await w.runStarted(node.id);
-  await until("the log is written", () => (readFileSync(w.runs(node.id)[0]!.log_path, "utf8").includes("line 60") ? true : null));
+  await until("the log is written", () => readFileSync(w.runs(node.id)[0]!.log_path, "utf8").includes("line 60"));
 
   const defaults = await aopOn(w, ["logs", node.id]);
   expect(defaults.code).toBe(0);

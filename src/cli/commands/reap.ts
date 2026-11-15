@@ -13,7 +13,10 @@ export const reap: Command = {
   async run(c, argv) {
     const json = onlyJson(argv, usage);
     const result = await send<ReapResult>(c, "POST", apiPaths.reap);
-    if (json) return c.json(result);
+    if (json) {
+      c.json(result);
+      return;
+    }
     if (result.killed.length === 0) c.log("Nothing to reap.");
     for (const { run_id, pid, reason } of result.killed) c.log(`Killed ${run_id} (pid ${pid}): ${reason}`);
     for (const { run_id, pid, reason } of result.skipped) c.log(`Left alone ${run_id} (pid ${pid}): ${reason}`);

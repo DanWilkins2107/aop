@@ -17,7 +17,10 @@ export const release: Command = {
     const { values, positionals } = args(argv, usage, JSON_OPTION);
     const id = only(positionals, usage);
     const node = await send<NodeView>(c, "POST", apiPaths.nodeAction(id, "release"), { actor: HUMAN } satisfies ActorRequest);
-    if (values.json === true) return c.json(node);
+    if (values.json === true) {
+      c.json(node);
+      return;
+    }
     c.log(`Released ${id}`);
   },
 };

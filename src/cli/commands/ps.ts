@@ -13,7 +13,10 @@ export const ps: Command = {
   async run(c, argv) {
     const json = onlyJson(argv, usage);
     const agents = await send<AgentProcessView[]>(c, "GET", apiPaths.agents);
-    if (json) return c.json(agents);
+    if (json) {
+      c.json(agents);
+      return;
+    }
     if (agents.length === 0) {
       c.log("No agents running.");
       return;

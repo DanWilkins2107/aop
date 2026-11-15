@@ -44,27 +44,33 @@ export type Values = {
   "agent-timeout-minutes"?: string;
   stages?: string;
   "improvements-path"?: string;
+  help?: boolean;
 };
 
-export type Ask = (question: string) => Promise<string>;
+type Ask = (question: string) => Promise<string>;
 
 /** Reads answers line by line. Buffers lines that arrive early, so piped answers work too. */
 export function lineReader(input: NodeJS.ReadableStream, output: NodeJS.WritableStream) {
   const rl = createInterface({ input, terminal: false });
   const lines = rl[Symbol.asyncIterator]();
   return {
-    async ask(question: string): Promise<string> {
+    ask: async (question: string): Promise<string> => {
       output.write(question);
       const next = await lines.next();
-      if (next.done) throw new InitFailure("\nInput ended before setup finished. Nothing was written.");
+      if (next.done === true) throw new InitFailure("\nInput ended before setup finished. Nothing was written.");
       return next.value.trim();
     },
-    close: () => rl.close(),
+    close: () => {
+      rl.close();
+    },
   };
 }
 
 /** `~` and `~/x` are the user's home; anything else relative is from where `aop init` runs. */
 export const expandPath = (path: string, cwd: string) => resolveConfigPath(cwd, path);
+
+/** Blank is no value. */
+const orUndefined = (text: string | undefined) => (text === "" ? undefined : text);
 
 function parseTimeout(text: string): number | undefined {
   const value = Number(text);
@@ -93,7 +99,7 @@ interface Sources {
 }
 
 /** Offered as the agent session command, unless only copilot is installed. */
-export const CLAUDE_AUTO_COMMAND = "claude --permission-mode auto";
+const CLAUDE_AUTO_COMMAND = "claude --permission-mode auto";
 
 async function sessionCommand({ values, ask, tool, say }: Sources): Promise<string> {
   const command = values["agent-session-command"]?.trim();
@@ -108,46 +114,50 @@ async function sessionCommand({ values, ask, tool, say }: Sources): Promise<stri
 
 async function outOfSandboxCommand({ values, ask, tool: suggested, say }: Sources): Promise<string | undefined> {
   const flag = values["out-of-sandbox-command"];
-  if (flag !== undefined || !ask) return flag?.trim() || undefined;
+  if (flag !== undefined || !ask) return orUndefined(flag?.trim());
   say(`\nOut of sandbox command (optional). ${ABOUT.out_of_sandbox_command}`);
   return (await ask(suggested ? `Command, or blank to skip (e.g. ${suggested}): ` : "Command, or blank to skip: ")) || undefined;
 }
 
 /** The open_from setting, and the folder to create for it, if it doesn't exist yet. */
-async function openFrom({ values, ask, cwd, say }: Sources): Promise<{ setting: string; create: string | undefined }> {
+async function openFrom(sources: Sources): Promise<{ setting: string; create: string | undefined }> {
+  const { values, ask, cwd } = sources;
   const flag = values["open-from"]?.trim();
   if (flag === "") throw new InitFailure("--open-from can't be empty.");
-  const createAllowed = values["create-open-from"] === true;
-  let typed: string;
-  let create: string | undefined;
-  if (flag !== undefined || !ask) {
-    typed = flag ?? "~/code";
-    const path = expandPath(typed, cwd);
-    const problem = openFromProblem(path);
-    if (problem === "doesn't exist" && createAllowed) create = path;
-    else if (problem !== undefined) {
-      const hint = problem === "doesn't exist" ? " Create it, pass --create-open-from, or pick another with --open-from." : "";
-      throw new InitFailure(`open_from ${path} ${problem}.${hint}`);
-    }
-  } else {
-    say(`\nOpen from. ${ABOUT.open_from}`);
-    for (;;) {
-      typed = (await ask("Folder [~/code]: ")) || "~/code";
-      const path = expandPath(typed, cwd);
-      const problem = openFromProblem(path);
-      if (problem === undefined) break;
-      if (problem !== "doesn't exist") {
-        say(`${path} ${problem}.`);
-        continue;
-      }
-      if (createAllowed || /^y(es)?$/i.test(await ask(`${path} doesn't exist. Create it? [y/N]: `))) {
-        create = path;
-        break;
-      }
-    }
-  }
+  const { typed, create } = flag !== undefined || !ask ? openFromFlag(flag ?? "~/code", sources) : await askOpenFrom(ask, sources);
   // Keep `~` forms as typed. Other paths are stored absolute, since config paths are relative to AOP_HOME.
   return { setting: isFromUserHome(typed) ? typed : expandPath(typed, cwd), create };
+}
+
+interface OpenFromChoice {
+  typed: string;
+  create: string | undefined;
+}
+
+/** open_from from its flag or default, which must exist unless --create-open-from allows creating it. */
+function openFromFlag(typed: string, { values, cwd }: Sources): OpenFromChoice {
+  const path = expandPath(typed, cwd);
+  const problem = openFromProblem(path);
+  if (problem === undefined) return { typed, create: undefined };
+  if (problem === "doesn't exist" && values["create-open-from"] === true) return { typed, create: path };
+  const hint = problem === "doesn't exist" ? " Create it, pass --create-open-from, or pick another with --open-from." : "";
+  throw new InitFailure(`open_from ${path} ${problem}.${hint}`);
+}
+
+/** Asks for open_from until it's a folder, or one the user agrees to create. */
+async function askOpenFrom(ask: Ask, { values, cwd, say }: Sources): Promise<OpenFromChoice> {
+  say(`
+Open from. ${ABOUT.open_from}`);
+  for (;;) {
+    const typed = (await ask("Folder [~/code]: ")) || "~/code";
+    const path = expandPath(typed, cwd);
+    const problem = openFromProblem(path);
+    if (problem === undefined) return { typed, create: undefined };
+    if (problem !== "doesn't exist") say(`${path} ${problem}.`);
+    else if (values["create-open-from"] === true || /^y(es)?$/i.test(await ask(`${path} doesn't exist. Create it? [y/N]: `))) {
+      return { typed, create: path };
+    }
+  }
 }
 
 async function timeoutMinutes({ values, ask, say }: Sources): Promise<number> {
@@ -169,17 +179,11 @@ async function timeoutMinutes({ values, ask, say }: Sources): Promise<number> {
 
 /** The default process, as `./stages.yaml`, or the absolute path of the user's own file. */
 async function stagesSetting({ values, ask, cwd, say }: Sources): Promise<string> {
-  let own = values.stages?.trim() || undefined;
+  let own = orUndefined(values.stages?.trim());
   if (values.stages === undefined && ask) {
     say(`\nProcess. The default: an agent triages each task and may split it, then an agent implements it and raises a PR for your review.`);
     const useDefault = !/^n(o)?$/i.test(await ask("Start with the default setup? [Y/n]: "));
-    while (!useDefault && own === undefined) {
-      const answer = await ask("Path to your stages.yaml: ");
-      if (answer === "") continue;
-      const problems = stagesProblems(expandPath(answer, cwd));
-      if (problems.length === 0) own = answer;
-      else for (const p of problems) say(`  ${p}`);
-    }
+    if (!useDefault) own = await askOwnStages(ask, cwd, say);
   }
   if (own === undefined) return "./stages.yaml";
   const path = expandPath(own, cwd);
@@ -188,7 +192,18 @@ async function stagesSetting({ values, ask, cwd, say }: Sources): Promise<string
   return path;
 }
 
-export const DEFAULT_IMPROVEMENTS_PATH = "./skills";
+/** Asks for a stages file until it has no problems. */
+async function askOwnStages(ask: Ask, cwd: string, say: (text: string) => void): Promise<string> {
+  for (;;) {
+    const answer = await ask("Path to your stages.yaml: ");
+    if (answer === "") continue;
+    const problems = stagesProblems(expandPath(answer, cwd));
+    if (problems.length === 0) return answer;
+    for (const p of problems) say(`  ${p}`);
+  }
+}
+
+const DEFAULT_IMPROVEMENTS_PATH = "./skills";
 
 /** Stored as typed when it starts with `~`, and absolute otherwise, like open_from. The default sits in AOP_HOME. */
 function improvementsSetting({ values, cwd }: Sources): string {

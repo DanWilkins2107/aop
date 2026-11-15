@@ -16,7 +16,10 @@ export const project: Command = {
     const [action, path, ...extra] = positionals;
     if (action !== "add" || path === undefined || extra.length > 0) throw usageError(usage);
     const added = await send<ProjectRow>(c, "POST", apiPaths.projects, { repo_path: path } satisfies AddProjectRequest);
-    if (values.json === true) return c.json(added);
+    if (values.json === true) {
+      c.json(added);
+      return;
+    }
     c.log(`Added project "${added.name}" (${added.id})`);
   },
 };
