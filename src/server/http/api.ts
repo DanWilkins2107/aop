@@ -56,6 +56,7 @@ import { addProject, deleteProject, getProject, listProjects, updateProject } fr
 import { deleteLogs, readLogEnd, readRunLog } from "../runs/runLog.js";
 import { getRun, listRuns, projectLogPaths } from "../runs/runs.js";
 import { search } from "../nodes/search.js";
+import { setSchedule } from "../schedule/schedule.js";
 import { describeStages, EMPTY_GRAPH } from "../stages/stages.js";
 import { applyProposals } from "../improvements/applyProposals.js";
 import { createImprovement, getImprovement, listImprovements, listProposals, propose, withdraw } from "../improvements/improvements.js";
@@ -353,7 +354,7 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
     c.json(nodes.move(db, c.req.param("id"), await readBody(c, moveBody))),
   );
   app.put(routes.nodeAction("schedule"), async (c) =>
-    c.json(nodes.setSchedule(db, c.req.param("id"), await readBody(c, scheduleBody))),
+    c.json(setSchedule(db, c.req.param("id"), await readBody(c, scheduleBody))),
   );
   app.post(routes.nodeAction("ask"), async (c) =>
     c.json(nodes.ask(db, c.req.param("id"), { ...(await readBody(c, askBody)), runId: runIdOf(c) })),
