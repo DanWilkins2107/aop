@@ -2,6 +2,9 @@
 // `aop`, on the real process. `cli.ts` runs the command.
 
 import { serveFreshBuild } from "./commands/serve/selfBuild.js";
+import { noCwdLookupEnv } from "../shared/os/noCwdLookupEnv.js";
+
+Object.assign(process.env, noCwdLookupEnv);
 
 const argv = process.argv.slice(2);
 // Before loading the commands, so a rebuild can replace them first.
