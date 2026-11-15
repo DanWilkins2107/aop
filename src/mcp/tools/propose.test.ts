@@ -1,15 +1,15 @@
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { aopHome } from "../../server/paths.js";
+import { aopHome } from "../../server/shared/paths.js";
 import type { EventView } from "../../shared/events/types.js";
 import type { ImprovementView, ProposalView } from "../../shared/improvements/types.js";
-import { CONFIG_YAML } from "../../../test/server/helpers.js";
+import { CONFIG_YAML } from "../../../test-shared/harness.js";
 import { mcpHarness, resultText, type McpHarness } from "../test-shared/mcpHarness.helpers.js";
 
 const ROOT = resolve(import.meta.dirname, "../../..");
 
-/** Improvements switched on, with one skill to change, as in `test/server/improvements.test.ts`. */
+/** Improvements switched on, with one skill to change, as in `src/server/improvements/improvements.test.ts`. */
 const ON = {
   "config.yaml": `${CONFIG_YAML}improvement_stages: ./improvement_stages.yaml\nimprovements_path: ./skills\n`,
   "improvement_stages.yaml": readFileSync(join(ROOT, "defaults", "improvement_stages.yaml"), "utf8"),

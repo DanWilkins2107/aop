@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { EventView } from "../../src/shared/events/types.js";
 import type { MessageRow } from "../../src/shared/nodes/types.js";
 import { messageVisits } from "../../web/src/lib/messageVisits.js";
-import { harness, type Harness } from "../server/helpers.js";
+import { harness, type Harness } from "../../test-shared/harness.js";
 
 const SAME_TIME = "2026-01-01T00:00:00.000Z";
 

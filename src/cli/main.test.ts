@@ -4,7 +4,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { world } from "../../test/server/agents.helpers.js";
+import { world } from "../../test-shared/agents.js";
 import { aopSpawned as aop } from "./test-shared/cli.helpers.js";
 
 describe("the aop entry point", () => {
@@ -39,8 +39,8 @@ describe("the aop entry point", () => {
 
 describe("the bin entry", () => {
   it("points at a built file", () => {
-    const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { bin: Record<string, string> };
-    expect(pkg.bin).toEqual({ aop: "dist/cli/main.js" });
+    const pkg: unknown = JSON.parse(readFileSync("package.json", "utf8"));
+    expect(pkg).toHaveProperty("bin", { aop: "dist/cli/main.js" });
     expect(readFileSync("src/cli/main.ts", "utf8").startsWith("#!/usr/bin/env node")).toBe(true);
   });
 });

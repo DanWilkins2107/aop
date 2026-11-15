@@ -7,7 +7,8 @@ import { DEFAULT_PORT } from "../shared/http/defaultPort.js";
 import { MCP_PORT } from "../shared/http/mcpPort.js";
 import { COMMANDS, HUMAN_COMMANDS } from "./commands/registry.js";
 import type { CliIo, Command, Ctx } from "./shared/command.js";
-import { CliFailure, UsageError, usageError } from "./shared/errors.js";
+import { CliFailure } from "./shared/cliFailure.js";
+import { UsageError, usageError } from "./shared/errors.js";
 
 const USAGE = `aop: agent orchestration platform
 
@@ -23,14 +24,18 @@ Agents use AOP's MCP server at http://127.0.0.1:${MCP_PORT}/mcp.
 Finds the server through AOP_URL, or AOP_PORT on localhost, or else port ${DEFAULT_PORT}.`;
 
 /** The package's version. `cli.ts` is two folders down from `package.json`, in `src/` and in `dist/` alike. */
-const version = () => (JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as { version: string }).version;
+function version(): string {
+  const pkg: unknown = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8"));
+  if (typeof pkg !== "object" || pkg === null || !("version" in pkg) || typeof pkg.version !== "string") throw new Error("package.json has no version");
+  return pkg.version;
+}
 
 const isHelp = (arg: string) => arg === "--help" || arg === "-h";
 
 /** Whether `argv` asks for help, before any `--` that ends the options. */
 const asksHelp = (argv: string[]) => {
   const end = argv.indexOf("--");
-  return (end === -1 ? argv : argv.slice(0, end)).some(isHelp);
+  return (end === -1 ? argv : argv.slice(0, end)).some((arg) => isHelp(arg));
 };
 
 function find(name: string): Command {
@@ -62,7 +67,8 @@ async function run(c: Ctx, argv: string[]): Promise<number | void> {
     c.log(commandHelp(command));
     return;
   }
-  return command.run(c, rest);
+  const code = await command.run(c, rest);
+  return code;
 }
 
 /** Runs one `aop` command. A usage or command failure is printed and becomes the exit code; anything else is thrown. */
@@ -70,7 +76,10 @@ export async function runCli(io: CliIo): Promise<void> {
   const log = (text: string) => {
     io.stdout.write(`${text}\n`);
   };
-  const c: Ctx = { env: io.env, io, log, json: (value) => log(JSON.stringify(value, null, 2)) };
+  const c: Ctx = { env: io.env, io, log, json: (value) => {
+      log(JSON.stringify(value, null, 2));
+    },
+  };
   let code: number;
   try {
     code = (await run(c, io.argv)) ?? 0;

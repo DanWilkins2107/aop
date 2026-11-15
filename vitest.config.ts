@@ -2,11 +2,11 @@ import { defineConfig } from "vitest/config";
 
 /** The files that start real processes (the server, fake agents, the CLI's entry point), and so are slow. */
 const INTEGRATION = [
-  "test/server/orchestrator.test.ts",
-  "test/server/recovery.test.ts",
-  "test/server/startup.test.ts",
-  "test/server/runs.test.ts",
-  "test/server/consistency.test.ts",
+  "src/server/runs/orchestrator.test.ts",
+  "src/server/runs/orchestrator.recovery.test.ts",
+  "src/server/serve.test.ts",
+  "src/server/runs/runs.test.ts",
+  "src/server/runs/orchestrator.consistency.test.ts",
   "src/cli/cli.test.ts",
   "src/cli/main.test.ts",
   "src/cli/commands/init/runInit.test.ts",
@@ -23,7 +23,7 @@ const INTEGRATION = [
 export default defineConfig({
   test: {
     // Points AOP_HOME at a temp dir before any test code runs.
-    setupFiles: ["test/server/setup.ts"],
+    setupFiles: ["test-shared/setup.ts"],
     projects: [
       {
         extends: true,

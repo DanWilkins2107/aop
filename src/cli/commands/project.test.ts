@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { beforeEach, expect, it } from "vitest";
-import type { World } from "../../../test/server/agents.helpers.js";
+import type { World } from "../../../test-shared/agents.js";
 import { aopOn, cliWorld } from "../test-shared/cli.helpers.js";
 
 let w: World;

@@ -4,7 +4,7 @@ const one = (collection: string, id: string) => `/${collection}/${encodeURICompo
 
 /**
  * The API's paths below `API_PREFIX`, with IDs encoded, for the clients to call, so that none spells
- * them by hand. The server's route patterns for them are in `src/server/routes.ts`.
+ * them by hand. The server's route patterns for them are in `src/server/http/routes.ts`.
  */
 export const apiPaths = {
   projects: "/projects",

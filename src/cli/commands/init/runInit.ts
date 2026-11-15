@@ -1,15 +1,13 @@
-import { accessSync, constants, copyFileSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { accessSync, constants, existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { stringify } from "yaml";
-import { loadConfig } from "../../../server/config.js";
-import { ConfigError } from "../../../server/errors.js";
-import { aopHome, configPath, resolveConfigPath } from "../../../server/paths.js";
-import { loadStagesFile, promptFiles } from "../../../server/stages.js";
-import { parseYamlFile } from "../../../server/yamlFile.js";
+import { loadConfig } from "../../../server/config/config.js";
+import { ConfigError } from "../../../server/shared/errors.js";
+import { aopHome, configPath } from "../../../server/shared/paths.js";
 import { MCP_PORT } from "../../../shared/http/mcpPort.js";
-import { ABOUT, expandPath, gatherSettings, InitFailure, lineReader, type Settings, type Values } from "./settings.js";
+import { configText } from "./configText.js";
+import { configSetting, copyDefaults, usesHomeFile } from "./defaultFiles.js";
+import { expandPath, gatherSettings, InitFailure, lineReader, type Values } from "./settings.js";
 
 /** What `aop init` reads and writes, so tests can run it with a fake terminal, PATH and home. */
 export interface InitIo {
@@ -26,7 +24,7 @@ export interface InitIo {
   usage: string;
 }
 
-const PACKAGE_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
+const PACKAGE_ROOT = resolve(import.meta.dirname, "../../../..");
 
 const TOOLS = ["claude", "copilot"] as const;
 type Tool = (typeof TOOLS)[number];
@@ -45,18 +43,18 @@ export function findOnPath(name: string, env: NodeJS.ProcessEnv, platform: NodeJ
     platform === "win32"
       ? (envValue(env, "PATHEXT") ?? ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean).map((ext) => name + ext.toLowerCase())
       : [name];
-  for (const dir of dirs) {
-    for (const candidate of names.map((n) => join(dir, n))) {
-      try {
-        if (!statSync(candidate).isFile()) continue;
-        if (platform !== "win32") accessSync(candidate, constants.X_OK);
-        return candidate;
-      } catch {
-        // Not here.
-      }
-    }
+  return dirs.flatMap((dir) => names.map((n) => join(dir, n))).find((candidate) => isCommand(candidate, platform));
+}
+
+/** Whether `path` is a file that can be run. */
+function isCommand(path: string, platform: NodeJS.Platform): boolean {
+  try {
+    if (!statSync(path).isFile()) return false;
+    if (platform !== "win32") accessSync(path, constants.X_OK);
+    return true;
+  } catch {
+    return false;
   }
-  return undefined;
 }
 
 /** The git repo holding `path`, if any. AOP's state must stay out of repos. */
@@ -65,55 +63,6 @@ function repoAround(path: string): string | undefined {
     if (existsSync(join(dir, ".git"))) return dir;
     if (dirname(dir) === dir) return undefined;
   }
-}
-
-const yamlScalar = (value: string | number) => stringify(value, { lineWidth: 0 }).trimEnd();
-
-/** Wraps lines for config comments. */
-function comment(text: string): string {
-  const lines: string[] = [];
-  let line = "#";
-  for (const word of text.split(" ")) {
-    if (line.length + word.length + 1 > 90 && line !== "#") {
-      lines.push(line);
-      line = "#";
-    }
-    line += ` ${word}`;
-  }
-  return [...lines, line].join("\n");
-}
-
-export function configText(settings: Settings): string {
-  const outOfSandbox =
-    settings.out_of_sandbox_command === undefined
-      ? "# out_of_sandbox_command: claude"
-      : `out_of_sandbox_command: ${yamlScalar(settings.out_of_sandbox_command)}`;
-  return `# AOP machine config, shared by all projects. Written by \`aop init\`.
-# Relative paths start from this file's folder. \`~\` is your home folder.
-
-# Required. AOP appends \`-p\` and sends the prompt on stdin.
-${comment(ABOUT.agent_session_command)}
-agent_session_command: ${yamlScalar(settings.agent_session_command)}
-
-# Optional.
-${comment(ABOUT.out_of_sandbox_command)}
-${outOfSandbox}
-
-${comment(ABOUT.open_from)}
-open_from: ${yamlScalar(settings.open_from)}
-
-${comment(ABOUT.agent_timeout_minutes)}
-agent_timeout_minutes: ${settings.agent_timeout_minutes}
-
-${comment(ABOUT.stages)} It can live anywhere.
-stages: ${yamlScalar(settings.stages)}
-
-${comment(ABOUT.improvement_stages)} Leave it out to turn improvements off.
-improvement_stages: ./improvement_stages.yaml
-
-${comment(ABOUT.improvements_path)} Never config.yaml or a stages file.
-improvements_path: ${yamlScalar(settings.improvements_path)}
-`;
 }
 
 /** Creates the improvements folder, unless that would write into a git repo, which is the user's to do. */
@@ -130,51 +79,9 @@ function ensureImprovementsFolder(path: string, say: (text: string) => void): vo
   say(`Created ${path}`);
 }
 
-/** The default improvement pipeline's files, relative to `defaults/`. */
-function improvementDefaults(defaults: string): string[] {
-  const { graph } = loadStagesFile(join(defaults, "improvement_stages.yaml"));
-  return ["improvement_stages.yaml", ...promptFiles(graph).map((prompt) => join("prompts", basename(prompt)))];
-}
-
-/**
- * Copies a default process into `home`, skipping any file already there: the work process, the
- * improvement pipeline, or both.
- */
-function copyDefaults(io: InitIo, home: string, say: (text: string) => void, which: { work: boolean; improvements: boolean }): void {
-  const defaults = join(io.packageRoot, "defaults");
-  const improvementFiles = improvementDefaults(defaults);
-  const workFiles = ["stages.yaml", ...readdirSync(join(defaults, "prompts")).map((name) => join("prompts", name))].filter(
-    (file) => !improvementFiles.includes(file),
-  );
-  const files = [...(which.work ? workFiles : []), ...(which.improvements ? improvementFiles : [])];
-  mkdirSync(join(home, "prompts"), { recursive: true });
-  for (const file of files) {
-    const target = join(home, file);
-    if (existsSync(target)) {
-      say(`Kept ${target}`);
-      continue;
-    }
-    copyFileSync(join(defaults, file), target);
-    say(`Wrote ${target}`);
-  }
-}
-
-/** Whether the config at `home` links `key` to `home/<file>`, so the default belongs there. */
-function usesHomeFile(home: string, key: string, file: string): boolean {
-  const value = configSetting(home, key);
-  return typeof value === "string" && resolveConfigPath(home, value) === join(home, file);
-}
-
-function configSetting(home: string, key: string): unknown {
-  const parsed = parseYamlFile(configPath(home));
-  if (!parsed.ok || typeof parsed.value !== "object" || parsed.value === null) return undefined;
-  return (parsed.value as Record<string, unknown>)[key];
-}
-
-async function init(argv: string[], io: InitIo): Promise<void> {
-  let values: Values;
+function parseInitArgs(argv: string[], usage: string): Values {
   try {
-    values = parseArgs({
+    return parseArgs({
       args: argv,
       allowPositionals: false,
       strict: true,
@@ -192,76 +99,89 @@ async function init(argv: string[], io: InitIo): Promise<void> {
       },
     }).values;
   } catch (error) {
-    throw new UsageFailure(`${(error as Error).message}\n${io.usage}`);
+    throw new UsageFailure(`${error instanceof Error ? error.message : String(error)}\n${usage}`);
   }
+}
 
-  const say = (text: string) => io.output.write(`${text}\n`);
-  const home = aopHome(io.env, io.cwd);
+/** Whether to go on with an existing config: only with --fill-missing. --if-new stops quietly. */
+function keepGoing(home: string, values: Values, say: (text: string) => void): boolean {
   const repo = repoAround(home);
   if (repo !== undefined) {
     throw new InitFailure(`${home} is inside the git repo ${repo}. AOP keeps its own files out of git repos. Set AOP_HOME to a folder outside it.`);
   }
   const configFile = configPath(home);
-  const configExists = existsSync(configFile);
-  if (configExists && values["if-new"] === true) {
+  if (!existsSync(configFile)) return true;
+  if (values["if-new"] === true) {
     say(`AOP is already set up in ${home}. Edit ${configFile} to change it.`);
-    return;
+    return false;
   }
-  if (configExists && values["fill-missing"] !== true) {
+  if (values["fill-missing"] !== true) {
     throw new InitFailure(
       `${configFile} already exists, so nothing was changed. Edit it by hand, or run \`aop init --fill-missing\` to add only missing files.`,
     );
   }
+  return true;
+}
 
+/** The agent tools on PATH, saying which were found. */
+function findTools(io: InitIo, say: (text: string) => void): Map<Tool, string> {
   const found = new Map<Tool, string>();
   for (const tool of TOOLS) {
     const path = findOnPath(tool, io.env, io.platform);
     if (path !== undefined) found.set(tool, path);
   }
+  for (const [tool, path] of found) say(`Found ${tool}: ${path}`);
+  if (found.size === 0) say("Didn't find claude or copilot on PATH.");
+  return found;
+}
 
-  say(`Setting up AOP in ${home}`);
-  if (found.size > 0) for (const [tool, path] of found) say(`Found ${tool}: ${path}`);
-  else say("Didn't find claude or copilot on PATH.");
-
-  if (configExists) {
-    say(`Keeping ${configFile}. Only adding missing files.`);
-    const noImprovements = configSetting(home, "improvement_stages") === undefined;
-    copyDefaults(io, home, say, {
-      work: usesHomeFile(home, "stages", "stages.yaml"),
-      improvements: noImprovements || usesHomeFile(home, "improvement_stages", "improvement_stages.yaml"),
-    });
-    if (configSetting(home, "improvements_path") === undefined) ensureImprovementsFolder(join(home, "skills"), say);
-    if (noImprovements) {
-      say(`Improvements are off. To turn them on, add this line to ${configFile}:\n  improvement_stages: ./improvement_stages.yaml`);
-    }
-  } else {
-    const reader = values.yes === true ? undefined : lineReader(io.input, io.output);
-    let gathered: Awaited<ReturnType<typeof gatherSettings>>;
-    try {
-      gathered = await gatherSettings({ values, ask: reader?.ask, tool: [...found.keys()][0], cwd: io.cwd, say });
-    } finally {
-      reader?.close();
-    }
-    const { settings, createOpenFrom } = gathered;
-    say("");
-    // First, because it's the one step here that can refuse, and nothing has been written yet.
-    ensureImprovementsFolder(expandPath(settings.improvements_path, home), say);
-    if (createOpenFrom !== undefined) {
-      mkdirSync(createOpenFrom, { recursive: true });
-      say(`Created ${createOpenFrom}`);
-    }
-    mkdirSync(home, { recursive: true });
-    copyDefaults(io, home, say, { work: settings.stages === "./stages.yaml", improvements: true });
-    writeFileSync(configFile, configText(settings), { flag: "wx" });
-    say(`Wrote ${configFile}`);
+/** Adds the default files missing next to an existing config. */
+function fillMissing(io: InitIo, home: string, say: (text: string) => void): void {
+  const configFile = configPath(home);
+  say(`Keeping ${configFile}. Only adding missing files.`);
+  const noImprovements = configSetting(home, "improvement_stages") === undefined;
+  copyDefaults(io.packageRoot, home, say, {
+    work: usesHomeFile(home, "stages", "stages.yaml"),
+    improvements: noImprovements || usesHomeFile(home, "improvement_stages", "improvement_stages.yaml"),
+  });
+  if (configSetting(home, "improvements_path") === undefined) ensureImprovementsFolder(join(home, "skills"), say);
+  if (noImprovements) {
+    say(`Improvements are off. To turn them on, add this line to ${configFile}:\n  improvement_stages: ./improvement_stages.yaml`);
   }
+}
 
+/** Asks for the settings, then writes the config and the default files. */
+async function setUp(io: InitIo, home: string, { values, tool }: { values: Values; tool: Tool | undefined }, say: (text: string) => void): Promise<void> {
+  const reader = values.yes === true ? undefined : lineReader(io.input, io.output);
+  let gathered: Awaited<ReturnType<typeof gatherSettings>>;
+  try {
+    gathered = await gatherSettings({ values, ask: reader?.ask, tool, cwd: io.cwd, say });
+  } finally {
+    reader?.close();
+  }
+  const { settings, createOpenFrom } = gathered;
+  say("");
+  // First, because it's the one step here that can refuse, and nothing has been written yet.
+  ensureImprovementsFolder(expandPath(settings.improvements_path, home), say);
+  if (createOpenFrom !== undefined) {
+    mkdirSync(createOpenFrom, { recursive: true });
+    say(`Created ${createOpenFrom}`);
+  }
+  mkdirSync(home, { recursive: true });
+  copyDefaults(io.packageRoot, home, say, { work: settings.stages === "./stages.yaml", improvements: true });
+  const configFile = configPath(home);
+  writeFileSync(configFile, configText(settings), { flag: "wx" });
+  say(`Wrote ${configFile}`);
+}
+
+/** Loads the config that was written, and says what's left to do. */
+function checkConfig(home: string, say: (text: string) => void): void {
   let config;
   try {
     config = loadConfig(home);
   } catch (error) {
     if (!(error instanceof ConfigError)) throw error;
-    throw new InitFailure(`\nThe config has problems. Fix them in ${configFile}:\n${error.problems.map((p) => `  ${p}`).join("\n")}`);
+    throw new InitFailure(`\nThe config has problems. Fix them in ${configPath(home)}:\n${error.problems.map((p) => `  ${p}`).join("\n")}`);
   }
   say("\nThe config is valid.");
   if (!existsSync(config.openFromPath)) say(`Note: open_from ${config.openFromPath} doesn't exist yet.`);
@@ -272,6 +192,21 @@ async function init(argv: string[], io: InitIo): Promise<void> {
     );
   }
   say(`\nAgents need AOP's MCP server. For Claude Code: claude mcp add --scope user --transport http aop http://127.0.0.1:${MCP_PORT}/mcp`);
+}
+
+async function init(argv: string[], io: InitIo): Promise<void> {
+  const values = parseInitArgs(argv, io.usage);
+  const say = (text: string) => {
+    io.output.write(`${text}\n`);
+  };
+  const home = aopHome(io.env, io.cwd);
+  if (!keepGoing(home, values, say)) return;
+  const configExists = existsSync(configPath(home));
+  say(`Setting up AOP in ${home}`);
+  const found = findTools(io, say);
+  if (configExists) fillMissing(io, home, say);
+  else await setUp(io, home, { values, tool: [...found.keys()][0] }, say);
+  checkConfig(home, say);
 }
 
 /** Runs `aop init`. Returns the exit code: 0 done, 1 stopped, 2 bad usage. */

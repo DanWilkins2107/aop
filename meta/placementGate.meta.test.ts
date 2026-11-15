@@ -14,6 +14,10 @@ const LAYOUT: Layout = {
   // or more files of cli use, and the helpers tests in two or more of its folders use.
   "src/cli": /^((main|cli)(\.test)?\.ts|commands\/(\w+\/)?\w+(\.test)?\.ts|shared\/\w+(\.test|\.helpers)?\.ts|test-shared\/\w+\.helpers\.ts)$/,
   "src/mcp": /^(server(\.test)?\.ts|tools\/(\w+\/)?\w+(\.test)?\.ts|shared\/\w+(\.test|\.helpers)?\.ts|test-shared\/\w+\.helpers\.ts)$/,
+  // `main.ts` (the entry), `serve.ts` (which starts everything) and the port override tests use alone at
+  // the root; a folder per concept, and the platform folders below them. No deeper.
+  "src/server":
+    /^((main|serve|testMcpPortEnv)((\.\w+)?\.test)?\.ts|(nodes|stages|runs|schedule|improvements|projects|config|http|db|os|shared)\/\w+((\.\w+)?\.test)?\.ts)$/,
 };
 
 it("every file sits where its folder's layout allows", () => {

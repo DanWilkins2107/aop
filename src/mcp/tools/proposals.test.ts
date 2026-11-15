@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { aopHome } from "../../server/paths.js";
+import { aopHome } from "../../server/shared/paths.js";
 import type { ImprovementView, ProposalView } from "../../shared/improvements/types.js";
-import { CONFIG_YAML } from "../../../test/server/helpers.js";
+import { CONFIG_YAML } from "../../../test-shared/harness.js";
 import { mcpHarness, resultText, type McpHarness } from "../test-shared/mcpHarness.helpers.js";
 
 const ROOT = resolve(import.meta.dirname, "../../..");

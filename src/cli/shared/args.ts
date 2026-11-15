@@ -7,7 +7,7 @@ export function args<T extends NonNullable<ParseArgsConfig["options"]>>(argv: st
   try {
     return parseArgs({ args: argv, options, allowPositionals: true, strict: true });
   } catch (error) {
-    throw usageError(usage, (error as Error).message);
+    throw usageError(usage, error instanceof Error ? error.message : String(error));
   }
 }
 

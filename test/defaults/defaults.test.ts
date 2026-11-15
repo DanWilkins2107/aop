@@ -3,9 +3,9 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { HUMAN_COMMANDS } from "../../src/cli/commands/registry.js";
 import { TOOLS } from "../../src/mcp/tools/registry.js";
-import { loadConfig } from "../../src/server/config.js";
-import { aopHome } from "../../src/server/paths.js";
-import { ROOT } from "../server/agents.helpers.js";
+import { loadConfig } from "../../src/server/config/config.js";
+import { aopHome } from "../../src/server/shared/paths.js";
+import { ROOT } from "../../test-shared/agents.js";
 
 const DEFAULTS = join(ROOT, "defaults");
 const PLUGIN = join(ROOT, "plugin");

@@ -13,7 +13,7 @@ A helper that tests in two or more folders use goes in a `test-shared/` folder, 
 
 `npm run typecheck` also runs oxlint and knip (unused files, exports and dependencies). They cover a folder once its layout is settled: take the folder out of `ignorePatterns` in `.oxlintrc.json` and `ignore` in `knip.json`, and fix what they find.
 
-The same lint caps size and complexity: 300 lines a file, 60 a function, complexity 10, depth 3, 4 parameters. `.tsx` functions get 100 lines; tests get 500 a file and no function cap. A folder that needs other numbers gets an `overrides` entry in `.oxlintrc.json`. Split code that breaks a limit rather than loosening it.
+The same lint caps size and complexity: 300 lines a file, 60 a function, complexity 10, depth 3, 4 parameters. `.tsx` functions get 100 lines; tests get 500 a file and no function cap. A folder that needs other numbers gets an `overrides` entry in `.oxlintrc.json`. `migrations.ts` has no file cap: it's append-only, so it only grows. Split code that breaks a limit rather than loosening it.
 
 ## src/shared
 What two or more of `src/server`, `src/cli`, `src/mcp` and `web/src` use. Tests don't count.
@@ -22,7 +22,7 @@ What two or more of `src/server`, `src/cli`, `src/mcp` and `web/src` use. Tests 
 - Each folder's types all go in its `types.ts`. Every other file exports one value, named as the file (`isBuiltIn.ts` exports `isBuiltIn`).
 - Import from it by name: no `import *` and no re-exports.
 - An export only one side uses moves to that side, unless other shared code is built from it. One no side uses is deleted.
-- Request types (`*Request`) are the API's contract and live here, hand-written. The server's zod schemas, in `src/server/requests.ts`, are checked against them with `bodyOf<T>()`.
+- Request types (`*Request`) are the API's contract and live here, hand-written. The server's zod schemas, in `src/server/http/requests.ts`, are checked against them with `bodyOf<T>()`.
 - It imports nothing outside itself, not even a package, so the browser can load all of it.
 
 ## src/cli
@@ -45,3 +45,13 @@ The agents' MCP server.
 - `test-shared/`: the helpers tests in two or more of its folders use, such as `mcpHarness`.
 - A tool imports `shared/` and `src/shared` only. It reaches the board through `ToolApi`, never the server's code.
 - Outside `src/mcp`, only `server.ts` and `tools/registry.ts` may be imported, by tests too.
+
+## src/server
+The board: the API, the database, and the loops that run agents.
+
+- `main.ts` (the entry) and `serve.ts` (which starts the API, the MCP server and the loops) at the root, with `testMcpPortEnv.ts` for the tests' port override. Nothing else.
+- A folder per concept: `nodes/`, `stages/`, `runs/`, `schedule/`, `improvements/`, `projects/`, `config/`. One level, no deeper.
+- Platform folders below them: `http/` (the app, and a routes file per concept), `db/` (connection, migrations, records), `os/` (processes and the server lock), and `shared/`, what two or more folders use.
+- Folders import only downward: `http`, then `runs`, `improvements` and `schedule`, then `nodes` and `projects`, then `config` and `stages`, then `db`, `os` and `shared`. A lower folder never imports a higher one: make the call from the higher folder.
+- `shared/` imports nothing else of the server's.
+- `db/migrations.ts` is append-only: move it whole, never split or edit a step.

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { TOOLS } from "../tools/registry.js";
-import { deleteProject } from "../../server/projects.js";
-import { closeRun, getRun } from "../../server/runs.js";
+import { deleteProject } from "../../server/projects/projects.js";
+import { closeRun, getRun } from "../../server/runs/runs.js";
 import type { MessageRow } from "../../shared/nodes/types.js";
 import type { SteerSession } from "../../shared/runs/types.js";
 import { mcpHarness, resultText, type McpHarness } from "../test-shared/mcpHarness.helpers.js";
