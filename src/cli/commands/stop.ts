@@ -3,7 +3,7 @@ import { apiPaths } from "../../shared/http/apiPaths.js";
 import { send } from "../shared/api.js";
 import { args, only } from "../shared/args.js";
 import type { Command } from "../shared/command.js";
-import { CliFailure } from "../shared/errors.js";
+import { CliFailure } from "../shared/cliFailure.js";
 
 const usage = ["aop stop <node>"];
 

@@ -1,15 +1,13 @@
-import { accessSync, constants, copyFileSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { accessSync, constants, existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { stringify } from "yaml";
 import { loadConfig } from "../../../server/config.js";
 import { ConfigError } from "../../../server/errors.js";
-import { aopHome, configPath, resolveConfigPath } from "../../../server/paths.js";
-import { loadStagesFile, promptFiles } from "../../../server/stages.js";
-import { parseYamlFile } from "../../../server/yamlFile.js";
+import { aopHome, configPath } from "../../../server/paths.js";
 import { MCP_PORT } from "../../../shared/http/mcpPort.js";
-import { ABOUT, expandPath, gatherSettings, InitFailure, lineReader, type Settings, type Values } from "./settings.js";
+import { configText } from "./configText.js";
+import { configSetting, copyDefaults, usesHomeFile } from "./defaultFiles.js";
+import { expandPath, gatherSettings, InitFailure, lineReader, type Values } from "./settings.js";
 
 /** What `aop init --help` adds under the CLI's usage line. */
 const FLAG_HELP = `Sets up AOP_HOME, or ~/.aop. Asks for each setting, unless a flag gives it.
@@ -36,7 +34,7 @@ export interface InitIo {
   usage: string;
 }
 
-const PACKAGE_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
+const PACKAGE_ROOT = resolve(import.meta.dirname, "../../../..");
 
 const TOOLS = ["claude", "copilot"] as const;
 type Tool = (typeof TOOLS)[number];
@@ -77,54 +75,7 @@ function repoAround(path: string): string | undefined {
   }
 }
 
-const yamlScalar = (value: string | number) => stringify(value, { lineWidth: 0 }).trimEnd();
 
-/** Wraps lines for config comments. */
-function comment(text: string): string {
-  const lines: string[] = [];
-  let line = "#";
-  for (const word of text.split(" ")) {
-    if (line.length + word.length + 1 > 90 && line !== "#") {
-      lines.push(line);
-      line = "#";
-    }
-    line += ` ${word}`;
-  }
-  return [...lines, line].join("\n");
-}
-
-export function configText(settings: Settings): string {
-  const outOfSandbox =
-    settings.out_of_sandbox_command === undefined
-      ? "# out_of_sandbox_command: claude"
-      : `out_of_sandbox_command: ${yamlScalar(settings.out_of_sandbox_command)}`;
-  return `# AOP machine config, shared by all projects. Written by \`aop init\`.
-# Relative paths start from this file's folder. \`~\` is your home folder.
-
-# Required. AOP appends \`-p\` and sends the prompt on stdin.
-${comment(ABOUT.agent_session_command)}
-agent_session_command: ${yamlScalar(settings.agent_session_command)}
-
-# Optional.
-${comment(ABOUT.out_of_sandbox_command)}
-${outOfSandbox}
-
-${comment(ABOUT.open_from)}
-open_from: ${yamlScalar(settings.open_from)}
-
-${comment(ABOUT.agent_timeout_minutes)}
-agent_timeout_minutes: ${settings.agent_timeout_minutes}
-
-${comment(ABOUT.stages)} It can live anywhere.
-stages: ${yamlScalar(settings.stages)}
-
-${comment(ABOUT.improvement_stages)} Leave it out to turn improvements off.
-improvement_stages: ./improvement_stages.yaml
-
-${comment(ABOUT.improvements_path)} Never config.yaml or a stages file.
-improvements_path: ${yamlScalar(settings.improvements_path)}
-`;
-}
 
 /** Creates the improvements folder, unless that would write into a git repo, which is the user's to do. */
 function ensureImprovementsFolder(path: string, say: (text: string) => void): void {
@@ -140,46 +91,9 @@ function ensureImprovementsFolder(path: string, say: (text: string) => void): vo
   say(`Created ${path}`);
 }
 
-/** The default improvement pipeline's files, relative to `defaults/`. */
-function improvementDefaults(defaults: string): string[] {
-  const { graph } = loadStagesFile(join(defaults, "improvement_stages.yaml"));
-  return ["improvement_stages.yaml", ...promptFiles(graph).map((prompt) => join("prompts", basename(prompt)))];
-}
 
-/**
- * Copies a default process into `home`, skipping any file already there: the work process, the
- * improvement pipeline, or both.
- */
-function copyDefaults(io: InitIo, home: string, say: (text: string) => void, which: { work: boolean; improvements: boolean }): void {
-  const defaults = join(io.packageRoot, "defaults");
-  const improvementFiles = improvementDefaults(defaults);
-  const workFiles = ["stages.yaml", ...readdirSync(join(defaults, "prompts")).map((name) => join("prompts", name))].filter(
-    (file) => !improvementFiles.includes(file),
-  );
-  const files = [...(which.work ? workFiles : []), ...(which.improvements ? improvementFiles : [])];
-  mkdirSync(join(home, "prompts"), { recursive: true });
-  for (const file of files) {
-    const target = join(home, file);
-    if (existsSync(target)) {
-      say(`Kept ${target}`);
-      continue;
-    }
-    copyFileSync(join(defaults, file), target);
-    say(`Wrote ${target}`);
-  }
-}
 
-/** Whether the config at `home` links `key` to `home/<file>`, so the default belongs there. */
-function usesHomeFile(home: string, key: string, file: string): boolean {
-  const value = configSetting(home, key);
-  return typeof value === "string" && resolveConfigPath(home, value) === join(home, file);
-}
 
-function configSetting(home: string, key: string): unknown {
-  const parsed = parseYamlFile(configPath(home));
-  if (!parsed.ok || typeof parsed.value !== "object" || parsed.value === null) return undefined;
-  return (parsed.value as Record<string, unknown>)[key];
-}
 
 async function init(argv: string[], io: InitIo): Promise<void> {
   let values: Values;
@@ -202,15 +116,17 @@ async function init(argv: string[], io: InitIo): Promise<void> {
         help: { type: "boolean", short: "h" },
       },
     }).values;
-    if ((values as { help?: boolean }).help) {
+    if (values.help === true) {
       io.output.write(`${io.usage}\n\n${FLAG_HELP}\n`);
       return;
     }
   } catch (error) {
-    throw new UsageFailure(`${(error as Error).message}\n${io.usage}`);
+    throw new UsageFailure(`${error instanceof Error ? error.message : String(error)}\n${io.usage}`);
   }
 
-  const say = (text: string) => io.output.write(`${text}\n`);
+  const say = (text: string) => {
+    io.output.write(`${text}\n`);
+  };
   const home = aopHome(io.env, io.cwd);
   const repo = repoAround(home);
   if (repo !== undefined) {
@@ -241,7 +157,7 @@ async function init(argv: string[], io: InitIo): Promise<void> {
   if (configExists) {
     say(`Keeping ${configFile}. Only adding missing files.`);
     const noImprovements = configSetting(home, "improvement_stages") === undefined;
-    copyDefaults(io, home, say, {
+    copyDefaults(io.packageRoot, home, say, {
       work: usesHomeFile(home, "stages", "stages.yaml"),
       improvements: noImprovements || usesHomeFile(home, "improvement_stages", "improvement_stages.yaml"),
     });
@@ -266,7 +182,7 @@ async function init(argv: string[], io: InitIo): Promise<void> {
       say(`Created ${createOpenFrom}`);
     }
     mkdirSync(home, { recursive: true });
-    copyDefaults(io, home, say, { work: settings.stages === "./stages.yaml", improvements: true });
+    copyDefaults(io.packageRoot, home, say, { work: settings.stages === "./stages.yaml", improvements: true });
     writeFileSync(configFile, configText(settings), { flag: "wx" });
     say(`Wrote ${configFile}`);
   }

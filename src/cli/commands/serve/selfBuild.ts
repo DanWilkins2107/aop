@@ -6,7 +6,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
 /** Set in the re-run process, so it serves instead of checking again. */
-export const SELF_BUILT_ENV = "AOP_SELF_BUILT";
+const SELF_BUILT_ENV = "AOP_SELF_BUILT";
 
 /** Everything the build reads, besides `src/` and `web/`. */
 const BUILD_INPUTS = ["package.json", "package-lock.json", "tsconfig.json", "tsconfig.build.json", "vite.config.ts", "docs/roadmap.md"];
@@ -53,25 +53,44 @@ function newestIn(dir: string): number {
   return newest;
 }
 
+interface Locked {
+  version: unknown;
+  optional: unknown;
+}
+
+const field = (value: unknown, key: string): unknown =>
+  typeof value === "object" && value !== null && key in value ? Reflect.get(value, key) : undefined;
+
+/** A lockfile's packages by path, or undefined if it can't be read. */
+function lockedPackages(file: string): Map<string, Locked> | undefined {
+  let lock: unknown;
+  try {
+    lock = JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    return undefined;
+  }
+  const packages = field(lock, "packages");
+  const paths = typeof packages === "object" && packages !== null ? Object.keys(packages) : [];
+  return new Map(
+    paths.map((path) => {
+      const entry = field(packages, path);
+      return [path, { version: field(entry, "version"), optional: field(entry, "optional") }];
+    }),
+  );
+}
+
 /** Whether `node_modules` has every package `package-lock.json` asks for, at its version. */
 function installed(root: string): boolean {
-  let lock, hidden;
-  try {
-    lock = JSON.parse(readFileSync(join(root, "package-lock.json"), "utf8"));
-  } catch {
-    return true; // No lockfile to compare against.
-  }
-  try {
-    hidden = JSON.parse(readFileSync(join(root, "node_modules", ".package-lock.json"), "utf8"));
-  } catch {
-    return false;
-  }
-  const have: Record<string, { version?: string }> = hidden.packages ?? {};
-  for (const [path, entry] of Object.entries<{ version?: string; optional?: boolean }>(lock.packages ?? {})) {
+  const lock = lockedPackages(join(root, "package-lock.json"));
+  // No lockfile to compare against.
+  if (lock === undefined) return true;
+  const have = lockedPackages(join(root, "node_modules", ".package-lock.json"));
+  if (have === undefined) return false;
+  for (const [path, entry] of lock) {
     if (path === "") continue;
-    const got = have[path];
+    const got = have.get(path);
     // Optional packages for other platforms are never installed.
-    if (got === undefined ? !entry.optional : got.version !== entry.version) return false;
+    if (got === undefined ? entry.optional !== true : got.version !== entry.version) return false;
   }
   return true;
 }
@@ -80,8 +99,9 @@ function installed(root: string): boolean {
 export function checkBuild(root: string): BuildCheck {
   const install = !installed(root);
   const outputs = BUILD_OUTPUTS.map((file) => mtime(join(root, file)));
-  if (outputs.some((time) => time === null)) return { install, build: "no build yet" };
-  const built = Math.min(...(outputs as number[]));
+  const times = outputs.filter((time) => time !== null);
+  if (times.length < outputs.length) return { install, build: "no build yet" };
+  const built = Math.min(...times);
   const sources = Math.max(
     newestIn(join(root, "src")),
     newestIn(join(root, "web")),
@@ -128,7 +148,9 @@ export async function serveFreshBuild(mainFile: string, argv: string[], env: Nod
       console.error(error);
       resolve(1);
     });
-    child.on("exit", (status) => resolve(status ?? 1));
+    child.on("exit", (status) => {
+      resolve(status ?? 1);
+    });
   });
   process.exitCode = code;
   return true;

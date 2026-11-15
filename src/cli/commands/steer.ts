@@ -4,7 +4,7 @@ import { apiPaths } from "../../shared/http/apiPaths.js";
 import { send, serverUrl } from "../shared/api.js";
 import { args, only } from "../shared/args.js";
 import type { Command } from "../shared/command.js";
-import { CliFailure } from "../shared/errors.js";
+import { CliFailure } from "../shared/cliFailure.js";
 
 const usage = ["aop steer <node> [--no-sandbox]"];
 
@@ -28,8 +28,12 @@ export const steer: Command = {
       env: { ...c.env, AOP_URL: serverUrl(c), AOP_RUN_ID: session.steer_id },
     });
     return new Promise<number>((done, fail) => {
-      child.once("error", (error) => fail(new CliFailure(`Couldn't open the session: ${error.message}`)));
-      child.once("exit", (code) => done(code ?? 1));
+      child.once("error", (error) => {
+        fail(new CliFailure(`Couldn't open the session: ${error.message}`));
+      });
+      child.once("exit", (code) => {
+        done(code ?? 1);
+      });
     });
   },
 };

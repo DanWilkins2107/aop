@@ -6,7 +6,8 @@ import { DEFAULT_PORT } from "../shared/http/defaultPort.js";
 import { MCP_PORT } from "../shared/http/mcpPort.js";
 import { COMMANDS, HUMAN_COMMANDS } from "./commands/registry.js";
 import type { CliIo, Ctx } from "./shared/command.js";
-import { CliFailure, UsageError } from "./shared/errors.js";
+import { CliFailure } from "./shared/cliFailure.js";
+import { UsageError } from "./shared/errors.js";
 
 const USAGE = `aop: agent orchestration platform
 
@@ -28,12 +29,19 @@ async function run(c: Ctx, argv: string[]): Promise<number | void> {
   }
   const command = COMMANDS.find((candidate) => candidate.name === name);
   if (command === undefined) throw new UsageError(`Unknown command "${name}"\n\n${USAGE}`);
-  return command.run(c, rest);
+  const code = await command.run(c, rest);
+  return code;
 }
 
 /** Runs one `aop` command. A usage or command failure is printed and becomes the exit code; anything else is thrown. */
 export async function runCli(io: CliIo): Promise<void> {
-  const c: Ctx = { env: io.env, io, log: (text) => io.stdout.write(`${text}\n`) };
+  const c: Ctx = {
+    env: io.env,
+    io,
+    log: (text) => {
+      io.stdout.write(`${text}\n`);
+    },
+  };
   let code: number;
   try {
     code = (await run(c, io.argv)) ?? 0;
