@@ -11,16 +11,6 @@ import { parseYamlFile } from "../../../server/shared/yamlFile.js";
 import { MCP_PORT } from "../../../shared/http/mcpPort.js";
 import { ABOUT, expandPath, gatherSettings, InitFailure, lineReader, type Settings, type Values } from "./settings.js";
 
-/** What `aop init --help` adds under the CLI's usage line. */
-const FLAG_HELP = `Sets up AOP_HOME, or ~/.aop. Asks for each setting, unless a flag gives it.
-  --yes                Don't ask. Settings not given by flags use their defaults.
-  --fill-missing       Config exists: only add missing default files. Never overwrites.
-  --if-new             Config exists: say so and change nothing, without failing.
-  --stages <file>      Use your own stages file instead of the default setup.
-  --create-open-from   Create the open_from folder if it doesn't exist.
-  --improvements-path <dir>
-                       The folder improvements may change. Default: ~/.aop/skills.`;
-
 /** What `aop init` reads and writes, so tests can run it with a fake terminal, PATH and home. */
 export interface InitIo {
   input: NodeJS.ReadableStream;
@@ -199,13 +189,8 @@ async function init(argv: string[], io: InitIo): Promise<void> {
         "agent-timeout-minutes": { type: "string" },
         stages: { type: "string" },
         "improvements-path": { type: "string" },
-        help: { type: "boolean", short: "h" },
       },
     }).values;
-    if ((values as { help?: boolean }).help) {
-      io.output.write(`${io.usage}\n\n${FLAG_HELP}\n`);
-      return;
-    }
   } catch (error) {
     throw new UsageFailure(`${(error as Error).message}\n${io.usage}`);
   }

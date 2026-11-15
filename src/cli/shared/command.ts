@@ -15,6 +15,8 @@ export interface Ctx {
   env: NodeJS.ProcessEnv;
   io: CliIo;
   log: (text: string) => void;
+  /** Prints `value` as JSON, for `--json`. */
+  json: (value: unknown) => void;
 }
 
 /** How a command is used, one line per form. The help and the command's own usage errors both show it. */
@@ -24,6 +26,8 @@ export type Usage = readonly string[];
 export interface Command {
   name: string;
   usage: Usage;
+  /** What `--help` prints under the usage, if there's more to say. */
+  help?: string;
   /** Runs the command, and gives its exit code when it isn't 0. */
   run: (c: Ctx, argv: string[]) => Promise<number | void>;
 }

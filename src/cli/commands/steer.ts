@@ -27,9 +27,16 @@ export const steer: Command = {
       stdio: "inherit",
       env: { ...c.env, AOP_URL: serverUrl(c), AOP_RUN_ID: session.steer_id },
     });
+    // Ctrl+C and Ctrl+Break reach the session from the terminal, which decides what they do. This
+    // process only waits for it, so it doesn't exit and leave the session holding the terminal.
+    const wait = () => {};
+    const signals = ["SIGINT", "SIGBREAK"] as const;
+    for (const signal of signals) process.on(signal, wait);
     return new Promise<number>((done, fail) => {
       child.once("error", (error) => fail(new CliFailure(`Couldn't open the session: ${error.message}`)));
       child.once("exit", (code) => done(code ?? 1));
+    }).finally(() => {
+      for (const signal of signals) process.off(signal, wait);
     });
   },
 };

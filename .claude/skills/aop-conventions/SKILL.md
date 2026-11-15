@@ -13,6 +13,8 @@ A helper that tests in two or more folders use goes in a `test-shared/` folder, 
 
 `npm run typecheck` also runs oxlint and knip (unused files, exports and dependencies). They cover a folder once its layout is settled: take the folder out of `ignorePatterns` in `.oxlintrc.json` and `ignore` in `knip.json`, and fix what they find.
 
+The same lint caps size and complexity: 300 lines a file, 60 a function, complexity 10, depth 3, 4 parameters. `.tsx` functions get 100 lines; tests get 500 a file and no function cap. A folder that needs other numbers gets an `overrides` entry in `.oxlintrc.json`. Split code that breaks a limit rather than loosening it.
+
 ## src/shared
 What two or more of `src/server`, `src/cli`, `src/mcp` and `web/src` use. Tests don't count.
 
@@ -27,7 +29,7 @@ What two or more of `src/server`, `src/cli`, `src/mcp` and `web/src` use. Tests 
 The `aop` command, for humans.
 
 - `main.ts`: the bin, on the real process. It rebuilds a stale checkout before any command loads.
-- `cli.ts`: finds the command in the registry and runs it, and turns failures into exit codes (2 usage, 1 failure). Help comes from the commands' usage.
+- `cli.ts`: finds the command in the registry and runs it, and turns failures into exit codes (2 usage, 1 failure). Help, `<command> --help` and `--version` come from here, built from the commands' usage and `help`.
 - `commands/`: one file per command, named as the command, exporting a `Command` (name, usage, run), plus `registry.ts`, the `COMMANDS` list. A command stays one file until it alone needs a second, then becomes `commands/<name>/`, with `<name>.ts` as its entry. Keep the entry thin, and load heavy work inside `run`.
 - `shared/`: what two or more files of `src/cli` use: the API client, argument reading, errors, the `Command` type.
 - A command imports `shared/` and `src/shared` only, and reaches the board over HTTP. Only `commands/init/` and `commands/serve/` may import `src/server`.

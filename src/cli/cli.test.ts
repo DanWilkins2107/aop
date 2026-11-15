@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -37,12 +38,42 @@ describe("the commands", () => {
     expect(option.stderr).toContain("--bad");
     expect(option.stderr).toContain("Usage: aop logs <node> [--lines N]");
     const project = await aop(["project", "sideways"]);
-    expect(project.stderr).toBe("Usage: aop project add <path>\n");
-    for (const line of ["aop logs <node> [--lines N]", "aop project add <path>", "aop ps"]) {
+    expect(project.stderr).toBe("Usage: aop project add <path> [--json]\n");
+    for (const line of ["aop logs <node> [--lines N] [--json]", "aop project add <path> [--json]", "aop ps [--json]", "aop <command> --help", "aop --version"]) {
       expect(help).toContain(`\n  ${line}\n`);
     }
     expect(help).not.toContain("aop context");
     expect(help).toContain(`Agents use AOP's MCP server at http://127.0.0.1:${MCP_PORT}/mcp.\n`);
+  });
+
+  it("--version prints the package's version", async () => {
+    const { version } = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as { version: string };
+    for (const flag of ["--version", "-v"]) {
+      const res = await aop([flag]);
+      expect(res.code, flag).toBe(0);
+      expect(res.stdout, flag).toBe(`${version}\n`);
+    }
+  });
+
+  it("a command's --help, or help <command>, prints its usage without running it", async () => {
+    // No server answers, so running the command would fail.
+    const env = { AOP_URL: "http://127.0.0.1:1" };
+    for (const args of [["ps", "--help"], ["ps", "-h"], ["help", "ps"]]) {
+      const res = await aop(args, { env });
+      expect(res.code, args.join(" ")).toBe(0);
+      expect(res.stdout, args.join(" ")).toBe("Usage: aop ps [--json]\n");
+    }
+    // After `--`, it's an argument, not a request for help.
+    expect((await aop(["logs", "--", "--help"], { env })).code).toBe(1);
+    const unknown = await aop(["help", "nonsense"]);
+    expect(unknown.code).toBe(2);
+    expect(unknown.stderr).toContain('Unknown command "nonsense"');
+  });
+
+  it("--json prints what the server answered", async () => {
+    const res = await aop(["ps", "--json"]);
+    expect(res.code).toBe(0);
+    expect(JSON.parse(res.stdout)).toEqual([]);
   });
 
   it("says when the server can't be reached", async () => {

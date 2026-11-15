@@ -17,9 +17,7 @@ export function sharedUseProblems(sources: Record<string, string>, { shared, use
   for (const [file, text] of Object.entries(sources)) {
     const user = users.find((folder) => within(file, folder));
     if (user === undefined || isTest(file)) continue;
-    for (const { specifier, names } of importsOf(text)) {
-      const target = importedFile(file, specifier);
-      if (target === null || !within(target, shared)) continue;
+    for (const { specifier, names, target } of sharedImports(file, text, shared)) {
       if (names === null) problems.push(`${file}: imports ${specifier} without naming what it takes: import from ${shared} by name`);
       for (const name of names ?? []) {
         const key = `${target}#${name}`;
@@ -27,7 +25,19 @@ export function sharedUseProblems(sources: Record<string, string>, { shared, use
       }
     }
   }
+  return [...problems, ...unsharedExports(sources, shared, usersOf)];
+}
 
+/** The imports in `file` that reach the shared folder, with the file each one reaches. */
+function sharedImports(file: string, text: string, shared: string) {
+  return importsOf(text)
+    .map((found) => ({ ...found, target: importedFile(file, found.specifier) }))
+    .filter(({ target }) => target !== null && within(target, shared));
+}
+
+/** The shared exports that fewer than two user folders import, unless other shared code uses them too. */
+function unsharedExports(sources: Record<string, string>, shared: string, usersOf: Map<string, Set<string>>): string[] {
+  const problems: string[] = [];
   const sharedFiles = Object.entries(sources).filter(([file]) => within(file, shared) && !isTest(file));
   const sharedCode = sharedFiles.map(([, text]) => withoutComments(text)).join("\n");
   for (const [file, text] of sharedFiles) {

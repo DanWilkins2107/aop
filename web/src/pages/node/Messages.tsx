@@ -6,6 +6,7 @@ import type { StagesView } from "../../../../src/shared/stages/types.js";
 import { CaptureImprovement } from "../../components/CaptureImprovement.js";
 import { api } from "../../lib/api.js";
 import { FormError, useFormError } from "../../components/FormError.js";
+import { Markdown } from "../../components/Markdown.js";
 import { messageVisits, type StageVisit, type VisitEntry } from "../../lib/messageVisits.js";
 import { humanize, timeAgo, toTarget } from "../../lib/format.js";
 import { accentOf, stageColor } from "../../lib/stageStyle.js";
@@ -102,7 +103,9 @@ function Visit({
                 </button>
               ) : null}
             </div>
-            <div className="message-body">{message.body}</div>
+            <div className="message-body">
+              <Markdown source={message.body} />
+            </div>
             {capturing === message.id ? (
               <CaptureImprovement key={message.id} sourceMessageId={message.id} onClose={() => setCapturing(null)} />
             ) : null}
