@@ -1,7 +1,8 @@
 /** What a file's path below a folder must match, by that folder. Files outside every folder aren't checked. */
 export type Layout = Record<string, RegExp>;
 
-const TEST = /\.test\.ts$/;
+/** A test, as `<name>.test.ts`, or `<name>.<aspect>.test.ts` when one file has more than one. Both test `<name>.ts`. */
+const TEST = /(\.\w+)?\.test\.ts$/;
 
 /** The files that sit where their folder's layout doesn't allow, and the tests that aren't beside what they test. */
 export function placementProblems(files: string[], layout: Layout): string[] {

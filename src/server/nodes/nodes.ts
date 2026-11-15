@@ -1,4 +1,4 @@
-// Everything a caller does with nodes, in one place, so `api.ts` can use it as `nodes.*`. The rules
+// Everything a caller does with nodes, in one place, so `http/nodeRoutes.ts` can use it as `nodes.*`. The rules
 // live in the modules re-exported here: `stageMachine.ts` (every stage change and stage action),
 // `claims.ts`, `messages.ts` (messages and links), `edges.ts`, `nodeViews.ts` (views and holders)
 // and `nodeCore.ts` (what they share). Events are read here.

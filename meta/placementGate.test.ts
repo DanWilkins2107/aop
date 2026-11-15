@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { placementProblems } from "./placementGate.js";
 
-const LAYOUT = { "src/area": /^(one|two)\/\w+(\.test)?\.ts$/ };
+const LAYOUT = { "src/area": /^(one|two)\/\w+(\.\w+)?(\.test)?\.ts$/ };
 const NOT_ALLOWED = `not where src/area's layout allows (${LAYOUT["src/area"].source})`;
 
 describe("placementProblems", () => {
@@ -20,6 +20,12 @@ describe("placementProblems", () => {
   it("rejects a test with no file beside it to test", () => {
     expect(placementProblems(["src/area/one/thing.test.ts", "src/area/two/thing.ts"], LAYOUT)).toEqual([
       "src/area/one/thing.test.ts: tests no file beside it",
+    ]);
+  });
+
+  it("takes a test named for an aspect as testing the file its name starts with", () => {
+    expect(placementProblems(["src/area/one/thing.ts", "src/area/one/thing.recovery.test.ts", "src/area/two/other.recovery.test.ts"], LAYOUT)).toEqual([
+      "src/area/two/other.recovery.test.ts: tests no file beside it",
     ]);
   });
 
