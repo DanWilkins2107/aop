@@ -9,9 +9,24 @@
     "vitest/valid-expect": ["error", { "maxArgs": 2 }],
     "typescript/prefer-readonly-parameter-types": "off",
     "eslint/require-unicode-regexp": "off",
-    "eslint/max-lines-per-function": "off",
-    "eslint/max-lines": "off",
-    "eslint/max-depth": "off",
-    "eslint/max-nested-callbacks": "off"
-  }
+    "eslint/max-nested-callbacks": "off",
+    "eslint/max-lines": ["error", { "max": 300, "skipBlankLines": true, "skipComments": true }],
+    "eslint/max-lines-per-function": ["error", { "max": 60, "skipBlankLines": true, "skipComments": true }],
+    "eslint/complexity": ["error", { "max": 10 }],
+    "eslint/max-depth": ["error", { "max": 3 }],
+    "eslint/max-params": ["error", { "max": 4 }]
+  },
+  "overrides": [
+    {
+      "files": ["**/*.tsx"],
+      "rules": { "eslint/max-lines-per-function": ["error", { "max": 100, "skipBlankLines": true, "skipComments": true }] }
+    },
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx"],
+      "rules": {
+        "eslint/max-lines-per-function": "off",
+        "eslint/max-lines": ["error", { "max": 500, "skipBlankLines": true, "skipComments": true }]
+      }
+    }
+  ]
 }

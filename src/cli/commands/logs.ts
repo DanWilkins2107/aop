@@ -2,12 +2,12 @@ import type { LogTail } from "../../shared/runs/types.js";
 import type { NodeView } from "../../shared/nodes/types.js";
 import { apiPaths } from "../../shared/http/apiPaths.js";
 import { send } from "../shared/api.js";
-import { args, only } from "../shared/args.js";
+import { args, JSON_OPTION, only } from "../shared/args.js";
 import type { Command } from "../shared/command.js";
 import { CliFailure } from "../shared/cliFailure.js";
 import { usageError } from "../shared/errors.js";
 
-const usage = ["aop logs <node> [--lines N]"];
+const usage = ["aop logs <node> [--lines N] [--json]"];
 
 /** How much of a log `aop logs` prints unless asked for more or less. */
 const DEFAULT_LOG_LINES = 50;
@@ -20,13 +20,17 @@ export const logs: Command = {
   name: "logs",
   usage,
   async run(c, argv) {
-    const { values, positionals } = args(argv, usage, { lines: { type: "string" } });
+    const { values, positionals } = args(argv, usage, { lines: { type: "string" }, ...JSON_OPTION });
     const id = only(positionals, usage);
     const lines = values.lines === undefined ? DEFAULT_LOG_LINES : Number(values.lines);
     if (!Number.isInteger(lines) || lines < 1) throw usageError(usage, "--lines must be a whole number above 0");
     const node = await send<NodeView>(c, "GET", apiPaths.node(id));
     if (node.last_run_id === null) throw new CliFailure(`${id} has had no runs yet`);
     const tail = await send<LogTail>(c, "GET", `${apiPaths.run(node.last_run_id, "tail")}?lines=${lines}`);
+    if (values.json === true) {
+      c.json(tail);
+      return;
+    }
     if (tail.lines.length === 0) {
       c.log(`The log for ${node.last_run_id} is empty so far.`);
       return;

@@ -8,6 +8,7 @@ import type { StagesView } from "../../../src/shared/stages/types.js";
 import { GLOBAL_STAGES } from "../lib/globalStages.js";
 import { ClaimMark } from "../components/ClaimMark.js";
 import { ErrorNotice } from "../components/ErrorNotice.js";
+import { Markdown } from "../components/Markdown.js";
 import { PipelineGraph } from "../components/PipelineGraph.js";
 import { ancestorsOf } from "../lib/ancestry.js";
 import { api, loadProjectGraph } from "../lib/api.js";
@@ -177,7 +178,11 @@ export function NodePage() {
               stages.yaml.
             </p>
           ) : null}
-          {node.stage === "invalidated" ? <p className="meta-note">Invalidated: {node.invalidation_reason}</p> : null}
+          {node.stage === "invalidated" ? (
+            <div className="meta-note">
+              Invalidated: <Markdown inline source={node.invalidation_reason ?? ""} />
+            </div>
+          ) : null}
           {byParent ? (
             <p className="meta-note">
               Invalidated by parent {node.invalidated_ancestors.map(nodeLink)}. Restoring{" "}

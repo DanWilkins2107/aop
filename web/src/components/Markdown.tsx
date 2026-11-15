@@ -50,7 +50,13 @@ function renderBlock(block: Block, index: number): ReactNode {
   }
 }
 
-/** Renders markdown as React text nodes only, so HTML in the source is shown, never run. */
-export function Markdown({ source }: { source: string }) {
-  return <div className="markdown">{parseMarkdown(source).map(renderBlock)}</div>;
+/**
+ * Renders markdown as React text nodes only, so HTML in the source is shown, never run.
+ * `inline` puts a single paragraph in a span, so a one-line reason can follow other text on its line.
+ */
+export function Markdown({ source, inline = false }: { source: string; inline?: boolean }) {
+  const blocks = parseMarkdown(source);
+  const only = blocks.length === 1 ? blocks[0] : undefined;
+  if (inline && only?.kind === "paragraph") return <span className="markdown">{renderInline(only.children)}</span>;
+  return <div className="markdown">{blocks.map(renderBlock)}</div>;
 }

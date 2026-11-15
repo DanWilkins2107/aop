@@ -11,11 +11,10 @@ export function publicSurfaceProblems(sources: Record<string, string>, surfaces:
     for (const [, specifier] of text.matchAll(IMPORT)) {
       if (!specifier!.startsWith(".")) continue;
       const target = path.posix.join(path.posix.dirname(file), specifier!).replace(/\.js$/, ".ts");
-      for (const [folder, open] of Object.entries(surfaces)) {
-        if (target.startsWith(`${folder}/`) && !file.startsWith(`${folder}/`) && !open.includes(target)) {
-          problems.push(`${file}: imports ${specifier}, which isn't one of ${folder}'s public files (${open.join(", ")})`);
-        }
-      }
+      const closed = Object.entries(surfaces).filter(
+        ([folder, open]) => target.startsWith(`${folder}/`) && !file.startsWith(`${folder}/`) && !open.includes(target),
+      );
+      for (const [folder, open] of closed) problems.push(`${file}: imports ${specifier}, which isn't one of ${folder}'s public files (${open.join(", ")})`);
     }
   }
   return problems;
