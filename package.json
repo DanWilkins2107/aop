@@ -21,7 +21,7 @@
     "dev:web": "vite",
     "build": "vite build && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit && tsc --noEmit -p web && npm run lint",
-    "lint": "oxlint --type-aware --deny-warnings && knip",
+    "lint": "oxlint --type-aware --deny-warnings && oxlint -c .oxlintrc.caps.json --deny-warnings src/server web/src && knip",
     "test": "vitest run",
     "test:server": "vitest run src/server",
     "test:web": "vitest run test/web",

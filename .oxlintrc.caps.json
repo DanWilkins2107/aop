@@ -1,0 +1,57 @@
+{
+  // The size caps, for all code. src/server and web/src, which .oxlintrc.json skips, get only these. Each
+  // file override after the migrations one parks a file over a cap at its size when the caps came in:
+  // lower a number when the file shrinks, and never raise one or add a file.
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [],
+  "categories": {"correctness": "off"},
+  "ignorePatterns": ["dist"],
+  "rules": {
+    "eslint/max-lines": ["error", {"max": 300, "skipBlankLines": true, "skipComments": true}],
+    "eslint/max-lines-per-function": ["error", {"max": 60, "skipBlankLines": true, "skipComments": true}],
+    "eslint/complexity": ["error", {"max": 10}],
+    "eslint/max-depth": ["error", {"max": 3}],
+    "eslint/max-params": ["error", {"max": 4}]
+  },
+  "overrides": [
+    {"files": ["**/*.tsx"], "rules": {"eslint/max-lines-per-function": ["error", {"max": 100, "skipBlankLines": true, "skipComments": true}]}},
+    {"files": ["**/*.test.ts", "**/*.test.tsx"], "rules": {"eslint/max-lines-per-function": "off", "eslint/max-lines": ["error", {"max": 500, "skipBlankLines": true, "skipComments": true}]}},
+    {"files": ["src/server/**/migrations.ts"], "rules": {"eslint/max-lines": "off"}},
+    {"files": ["src/server/config/config.ts"], "rules": {"eslint/complexity": ["error", {"max": 17}], "eslint/max-params": ["error", {"max": 7}]}},
+    {"files": ["src/server/db/db.test.ts"], "rules": {"eslint/max-lines": ["error", {"max": 597, "skipBlankLines": true, "skipComments": true}]}},
+    {"files": ["src/server/http/api.test.ts"], "rules": {"eslint/max-lines": ["error", {"max": 710, "skipBlankLines": true, "skipComments": true}]}},
+    {"files": ["src/server/http/api.ts"], "rules": {"eslint/max-lines-per-function": ["error", {"max": 101, "skipBlankLines": true, "skipComments": true}], "eslint/max-params": ["error", {"max": 5}]}},
+    {"files": ["src/server/http/nodeRoutes.ts"], "rules": {"eslint/max-lines-per-function": ["error", {"max": 84, "skipBlankLines": true, "skipComments": true}]}},
+    {"files": ["src/server/http/server.test.ts"], "rules": {"eslint/max-params": ["error", {"max": 5}]}},
+    {"files": ["src/server/improvements/improvements.test.ts"], "rules": {"eslint/max-lines": ["error", {"max": 514, "skipBlankLines": true, "skipComments": true}]}},
+    {"files": ["src/server/nodes/branches.ts"], "rules": {"eslint/complexity": ["error", {"max": 12}], "eslint/max-params": ["error", {"max": 5}]}},
+    {"files": ["src/server/nodes/messages.ts"], "rules": {"eslint/max-params": ["error", {"max": 5}]}},
+    {"files": ["src/server/nodes/nodeViews.test.ts"], "rules": {"eslint/complexity": ["error", {"max": 11}]}},
+    {"files": ["src/server/nodes/nodeViews.ts"], "rules": {"eslint/complexity": ["error", {"max": 17}], "eslint/max-lines-per-function": ["error", {"max": 81, "skipBlankLines": true, "skipComments": true}], "eslint/max-params": ["error", {"max": 5}]}},
+    {"files": ["src/server/nodes/stageMachine.test.ts"], "rules": {"eslint/max-lines": ["error", {"max": 648, "skipBlankLines": true, "skipComments": true}]}},
+    {"files": ["src/server/nodes/stageMachine.ts"], "rules": {"eslint/complexity": ["error", {"max": 11}], "eslint/max-lines": ["error", {"max": 510, "skipBlankLines": true, "skipComments": true}]}},
+    {"files": ["src/server/os/osProcesses.ts"], "rules": {"eslint/complexity": ["error", {"max": 13}], "eslint/max-lines": ["error", {"max": 403, "skipBlankLines": true, "skipComments": true}]}},
+    {"files": ["src/server/runs/agentOutput.ts"], "rules": {"eslint/complexity": ["error", {"max": 25}], "eslint/max-depth": ["error", {"max": 5}]}},
+    {"files": ["src/server/runs/context.ts"], "rules": {"eslint/complexity": ["error", {"max": 12}], "eslint/max-params": ["error", {"max": 5}]}},
+    {"files": ["src/server/runs/orchestrator.test.ts"], "rules": {"eslint/max-lines": ["error", {"max": 550, "skipBlankLines": true, "skipComments": true}]}},
+    {"files": ["src/server/runs/orchestrator.ts"], "rules": {"eslint/complexity": ["error", {"max": 13}], "eslint/max-lines": ["error", {"max": 547, "skipBlankLines": true, "skipComments": true}], "eslint/max-params": ["error", {"max": 7}]}},
+    {"files": ["src/server/runs/runs.ts"], "rules": {"eslint/complexity": ["error", {"max": 19}], "eslint/max-params": ["error", {"max": 5}]}},
+    {"files": ["src/server/schedule/scheduler.ts"], "rules": {"eslint/complexity": ["error", {"max": 13}]}},
+    {"files": ["src/server/serve.ts"], "rules": {"eslint/complexity": ["error", {"max": 19}], "eslint/max-lines-per-function": ["error", {"max": 72, "skipBlankLines": true, "skipComments": true}]}},
+    {"files": ["src/server/stages/stages.ts"], "rules": {"eslint/complexity": ["error", {"max": 54}], "eslint/max-depth": ["error", {"max": 5}], "eslint/max-lines": ["error", {"max": 344, "skipBlankLines": true, "skipComments": true}], "eslint/max-lines-per-function": ["error", {"max": 131, "skipBlankLines": true, "skipComments": true}]}},
+    {"files": ["web/src/components/PipelineGraph.tsx"], "rules": {"eslint/max-lines-per-function": ["error", {"max": 118, "skipBlankLines": true, "skipComments": true}]}},
+    {"files": ["web/src/lib/diff.ts"], "rules": {"eslint/complexity": ["error", {"max": 22}]}},
+    {"files": ["web/src/lib/eventText.ts"], "rules": {"eslint/complexity": ["error", {"max": 50}], "eslint/max-lines-per-function": ["error", {"max": 90, "skipBlankLines": true, "skipComments": true}]}},
+    {"files": ["web/src/lib/live.ts"], "rules": {"eslint/max-lines-per-function": ["error", {"max": 74, "skipBlankLines": true, "skipComments": true}]}},
+    {"files": ["web/src/lib/markdown.ts"], "rules": {"eslint/complexity": ["error", {"max": 22}]}},
+    {"files": ["web/src/lib/messageVisits.ts"], "rules": {"eslint/complexity": ["error", {"max": 11}], "eslint/max-depth": ["error", {"max": 4}]}},
+    {"files": ["web/src/lib/stageGraph.ts"], "rules": {"eslint/complexity": ["error", {"max": 16}], "eslint/max-lines-per-function": ["error", {"max": 119, "skipBlankLines": true, "skipComments": true}]}},
+    {"files": ["web/src/pages/GraphPage.tsx"], "rules": {"eslint/complexity": ["error", {"max": 21}], "eslint/max-lines-per-function": ["error", {"max": 164, "skipBlankLines": true, "skipComments": true}]}},
+    {"files": ["web/src/pages/ImprovementsPage.tsx"], "rules": {"eslint/complexity": ["error", {"max": 19}]}},
+    {"files": ["web/src/pages/NodePage.tsx"], "rules": {"eslint/complexity": ["error", {"max": 26}], "eslint/max-lines-per-function": ["error", {"max": 105, "skipBlankLines": true, "skipComments": true}]}},
+    {"files": ["web/src/pages/ProcessPage.tsx"], "rules": {"eslint/complexity": ["error", {"max": 18}]}},
+    {"files": ["web/src/pages/ProjectSettingsPage.tsx"], "rules": {"eslint/complexity": ["error", {"max": 12}]}},
+    {"files": ["web/src/pages/node/MovingOn.tsx"], "rules": {"eslint/complexity": ["error", {"max": 16}]}},
+    {"files": ["web/src/pages/node/Runs.tsx"], "rules": {"eslint/complexity": ["error", {"max": 12}]}}
+  ]
+}
