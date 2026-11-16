@@ -427,6 +427,39 @@ BEGIN
 END;
 `,
   },
+  {
+    // Where a node is inside a `subflow:` or `parallel:` stage. A `flow` row runs a type, and is on one
+    // of its stages, with how often each has been entered. A `stage` row is one agent stage, run by one
+    // run at a time. Children belong to the flow they're under, or to the node itself when
+    // `parent_id` is null. `path` names the branch, such as `build/reviews/review_tests`, and
+    // `outcome` is set once it has finished. Rows go when the node leaves the stage.
+    sql: `
+CREATE TABLE branches (
+  id         TEXT PRIMARY KEY NOT NULL,
+  created_at TEXT NOT NULL,
+  node_id    TEXT NOT NULL REFERENCES nodes(id) ON DELETE RESTRICT,
+  parent_id  TEXT REFERENCES branches(id) ON DELETE CASCADE,
+  path       TEXT NOT NULL CHECK (length(path) BETWEEN 1 AND 2000),
+  kind       TEXT NOT NULL CHECK (kind IN ('flow', 'stage')),
+  type       TEXT CONSTRAINT branches_type_on_flows CHECK ((type IS NOT NULL) = (kind = 'flow')),
+  stage      TEXT NOT NULL CHECK (length(stage) > 0),
+  loops      TEXT NOT NULL DEFAULT '{}'
+    CONSTRAINT branches_loops_object CHECK (json_valid(loops) AND json_type(loops) = 'object'),
+  outcome    TEXT CONSTRAINT branches_outcome_not_blank CHECK (outcome IS NULL OR length(outcome) > 0),
+  UNIQUE (node_id, path)
+) STRICT;
+CREATE INDEX branches_parent ON branches(parent_id) WHERE parent_id IS NOT NULL;
+
+-- A run on a branch. The branch row can be gone, once its flow has moved on, so there's no foreign
+-- key. A node has one running run of its own, or one per branch.
+ALTER TABLE runs ADD COLUMN branch_id TEXT;
+ALTER TABLE runs ADD COLUMN branch TEXT
+  CONSTRAINT runs_branch_with_id CHECK ((branch IS NULL) = (branch_id IS NULL) AND (branch IS NULL OR length(branch) > 0));
+DROP INDEX runs_one_running_per_node;
+CREATE UNIQUE INDEX runs_one_running_per_node ON runs(node_id) WHERE status = 'running' AND branch_id IS NULL;
+CREATE UNIQUE INDEX runs_one_running_per_branch ON runs(branch_id) WHERE status = 'running' AND branch_id IS NOT NULL;
+`,
+  },
 ];
 
 export interface Migration extends Step {
