@@ -11,18 +11,16 @@ stages:
   review_tests: { turn: agent, prompt: ./prompts/review_tests.md }
   review_style: { turn: agent, prompt: ./prompts/review_style.md }
   pr_review:    { turn: human }
-  stuck:        { turn: human }
 types:
   dev:
     start: build
     stages:
-      build:     { subflow: build_and_review, next: { done: pr_review, exhausted: stuck } }
+      build:     { subflow: build_and_review, next: { done: pr_review } }
       pr_review: { next: { approved: done } }
-      stuck:     { next: { retry: build } }
   build_and_review:
     start: implement
     stages:
-      implement: { next: { done: reviews } }
+      implement: { next: { done: reviews, give_up: done } }
       reviews:
         parallel: [review_tests, review_style]
         gate: all_pass
