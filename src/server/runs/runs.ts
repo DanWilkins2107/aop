@@ -34,6 +34,10 @@ export interface RunRow {
   timed_out: 0 | 1;
   /** 1 once a clean shutdown has begun stopping the run. See `markShuttingDown`. */
   shutting_down: 0 | 1;
+  /** The branch the run works, inside a sub-workflow or parallel stage. Null for the node's own run. */
+  branch_id: string | null;
+  /** That branch's path, such as `build/reviews/review_tests`. */
+  branch: string | null;
 }
 
 /** A process AOP started. Stays until AOP knows the process is gone, whatever happens to its run. */
@@ -172,6 +176,38 @@ export function beginRun(db: Db, node: NodeRow, id: string, logPath: string, for
     appendEvent(db, node.id, "system", "run_started", { run_id: id, stage: node.stage });
   })();
   return getRun(db, id) as RunRow;
+}
+
+/**
+ * Opens a run on one branch of a node. Branch runs share the node's agent claim: the first takes it,
+ * and `endRun` gives it up after the last. Refused, with nothing written, if anything else holds it.
+ */
+export function beginBranchRun(
+  db: Db,
+  node: NodeRow,
+  run: { id: string; branchId: string; branch: string; stage: string; logPath: string },
+  format: OutputFormat = "text",
+): RunRow {
+  db.transaction(() => {
+    const claimedBy = (db.prepare("SELECT claimed_by FROM nodes WHERE id = ?").get(node.id) as Pick<NodeRow, "claimed_by">).claimed_by;
+    if (claimedBy === null) {
+      db.prepare("UPDATE nodes SET claimed_by = 'agent' WHERE id = ?").run(node.id);
+      appendEvent(db, node.id, "system", "claim_taken", { holder: "agent", run_id: run.id });
+    } else if (claimedBy !== "agent" || otherRunningRuns(db, node.id, run.id).some((other) => other.branch_id === null)) {
+      throw refused(`Node ${node.id} is already claimed, so no run can start on it`);
+    }
+    db.prepare(
+      `INSERT INTO runs (id, created_at, node_id, stage, status, log_path, output_format, branch_id, branch)
+       VALUES (?, ?, ?, ?, 'running', ?, ?, ?, ?)`,
+    ).run(run.id, now(), node.id, run.stage, run.logPath, format, run.branchId, run.branch);
+    appendEvent(db, node.id, "system", "run_started", { run_id: run.id, stage: run.stage, branch: run.branch });
+  })();
+  return getRun(db, run.id) as RunRow;
+}
+
+/** The node's running runs other than this one. */
+export function otherRunningRuns(db: Db, nodeId: string, runId: string): RunRow[] {
+  return db.prepare("SELECT * FROM runs WHERE node_id = ? AND status = 'running' AND id <> ?").all(nodeId, runId) as RunRow[];
 }
 
 /**

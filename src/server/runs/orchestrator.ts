@@ -13,7 +13,18 @@ import { buildPrompt } from "./context.js";
 import type { Db } from "../db/db.js";
 import { ConfigError, refused } from "../shared/errors.js";
 import { isFolder } from "./fsUtil.js";
-import { getNodeRow, graphsOf, holdersOf, markFailed, startableNodes, type NodeRow, type NodeView, getNode } from "../nodes/nodes.js";
+import {
+  getNodeRow,
+  graphsOf,
+  holdersOf,
+  markFailed,
+  startableBranches,
+  startableNodes,
+  type BranchRow,
+  type NodeRow,
+  type NodeView,
+  getNode,
+} from "../nodes/nodes.js";
 import {
   type Identity,
   killConfirmed,
@@ -31,6 +42,7 @@ import { newId } from "../db/records.js";
 import { appendToLog, logPathFor, openLog } from "./runLog.js";
 import {
   agentReported,
+  beginBranchRun,
   beginRun,
   closeRun,
   decideRunEnd,
@@ -40,6 +52,7 @@ import {
   identitiesOf,
   listProcesses,
   markShuttingDown,
+  otherRunningRuns,
   recordProcess,
   recordUsage,
   releaseAgentClaim,
@@ -189,6 +202,10 @@ export class Orchestrator {
         else this.startGracePeriod(active, run);
       } else if (holdersOf(this.db, active.nodeId).some((holder) => holder.via === "invalidated_parent")) {
         void this.stop(active, "held");
+      } else if (run.branch_id !== null && getNodeRow(this.db, active.nodeId).claimed_by === "human") {
+        // A human stopped one of the node's branches, which hands them the node. The rest stop too,
+        // and every unfinished branch starts again once they let it go.
+        void this.stop(active, "moved_on");
       }
     }
   }
@@ -210,17 +227,25 @@ export class Orchestrator {
       if (error instanceof ConfigError) return;
       throw error;
     }
-    for (const node of startableNodes(this.db, graphsOf(config))) {
+    const graphs = graphsOf(config);
+    for (const node of startableNodes(this.db, graphs)) {
       if (!this.closingProjects.has(node.project_id)) this.launch(node, config);
+    }
+    for (const { node, branch } of startableBranches(this.db, graphs)) {
+      if (!this.closingProjects.has(node.project_id)) this.launch(node, config, branch);
     }
   }
 
-  private launch(node: NodeRow, config: AopConfig): void {
+  /** Starts an agent on the node's own stage, or on one of its branches. */
+  private launch(node: NodeRow, config: AopConfig, branch?: BranchRow): void {
     const id = newId();
     const { command, format } = headlessCommand(config.agent_session_command);
     let run: RunRow;
     try {
-      run = beginRun(this.db, node, id, logPathFor(id), format);
+      run =
+        branch === undefined
+          ? beginRun(this.db, node, id, logPathFor(id), format)
+          : beginBranchRun(this.db, node, { id, branchId: branch.id, branch: branch.path, stage: branch.stage, logPath: logPathFor(id) }, format);
     } catch (error) {
       // Nothing was written, so the node is as it was. Other launches carry on.
       logFailure(error);
@@ -232,9 +257,9 @@ export class Orchestrator {
     let child: ChildProcessWithoutNullStreams;
     try {
       const cwd = nodeStartPath(this.db, node, config);
-      appendToLog(run.log_path, `[aop] run ${id} on node ${node.id}, stage ${node.stage}, at ${run.created_at}\n[aop] ${command}\n[aop] in ${cwd}\n`);
+      appendToLog(run.log_path, `[aop] run ${id} on node ${node.id}, ${branch === undefined ? `stage ${node.stage}` : `branch ${branch.path}`}, at ${run.created_at}\n[aop] ${command}\n[aop] in ${cwd}\n`);
       if (!isFolder(cwd)) throw new Error(`The start folder doesn't exist: ${cwd}`);
-      prompt = buildPrompt(this.db, config, node, id);
+      prompt = buildPrompt(this.db, config, node, id, branch?.stage);
       // The command is the user's own string, so it may need a shell. Nothing from a node goes in
       // it: the node's context, with its ID and the run's, goes in on stdin.
       child = spawn(command, {
@@ -268,7 +293,7 @@ export class Orchestrator {
     }
     this.db.transaction(() => {
       closeRun(this.db, run, "failed", null);
-      markFailed(this.db, getNodeRow(this.db, run.node_id), { reason, runId: run.id });
+      markFailed(this.db, getNodeRow(this.db, run.node_id), { reason: onBranch(run, reason), runId: run.id });
     })();
     this.changes.notify(nodesNotice(this.db, run.node_id));
   }
@@ -422,16 +447,25 @@ export class Orchestrator {
     const then = decision.then;
     switch (then.kind) {
       case "none":
+        // A branch that reported leaves the node on its stage, so the claim is still the runs'.
+        if (run.branch_id !== null) this.releaseBranchClaim(run, "next");
         return;
       case "release_claim":
-        releaseAgentClaim(this.db, run.node_id, then.via);
+        if (run.branch_id !== null) this.releaseBranchClaim(run, then.via);
+        else releaseAgentClaim(this.db, run.node_id, then.via);
         return;
       case "hand_to_human":
         handClaimToHuman(this.db, run.node_id);
         return;
       case "mark_failed":
-        markFailed(this.db, getNodeRow(this.db, run.node_id), { reason: then.reason, runId: run.id });
+        // A branch going wrong fails the whole node, which stops its other branches.
+        markFailed(this.db, getNodeRow(this.db, run.node_id), { reason: onBranch(run, then.reason), runId: run.id });
     }
+  }
+
+  /** Branch runs share the node's claim, so the last of them to end gives it up. */
+  private releaseBranchClaim(run: RunRow, via: Parameters<typeof releaseAgentClaim>[2]): void {
+    if (otherRunningRuns(this.db, run.node_id, run.id).length === 0) releaseAgentClaim(this.db, run.node_id, via);
   }
 
   /**
@@ -628,6 +662,11 @@ export class Orchestrator {
       this.db.transaction(() => releaseAgentClaim(this.db, id, "restart"))();
     }
   }
+}
+
+/** A reason about a run, naming its branch if it has one. */
+function onBranch(run: RunRow, reason: string): string {
+  return run.branch === null ? reason : `Branch ${run.branch}: ${reason}`;
 }
 
 /** Resolves when the output has ended, or soon after exit if a leftover child is holding it open. */

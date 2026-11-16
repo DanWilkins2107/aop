@@ -163,9 +163,9 @@ function improvementSections(db: Db, nodeId: string): string[] {
   ];
 }
 
-/** Everything a launched agent gets on stdin. Throws if the stage's prompt can't be read. */
-export function buildPrompt(db: Db, config: AopConfig, node: NodeRow, runId: string): string {
-  const stage = promptStage(node);
+/** Everything a launched agent gets on stdin, with its branch's stage prompt on a branch. Throws if the stage's prompt can't be read. */
+export function buildPrompt(db: Db, config: AopConfig, node: NodeRow, runId: string, branchStage?: string): string {
+  const stage = branchStage ?? promptStage(node);
   const promptFile = graphFor(graphsOf(config), node).stages.get(stage)?.prompt;
   if (promptFile === undefined) throw new Error(`Stage "${stage}" has no prompt in its process file`);
   return [LOAD_SKILLS, nodeContext(db, node.id, runId), readFileSync(promptFile, "utf8").trimEnd()].join("\n\n") + "\n";
