@@ -15,10 +15,11 @@ export interface RouteContext {
   orchestrator(): Orchestrator;
   /** The orchestrator, if this server has one. */
   maybeOrchestrator: Orchestrator | undefined;
-  /** Records what a write touched, for its change notice. None recorded means anything. */
+  /**
+   * Records what a write touched that its events don't say, for its change notice: a project's own
+   * row, or everything. The nodes it appended events to are in the notice already.
+   */
   touch(c: Context, notice: ChangeNotice): void;
-  /** A change to these nodes, and so to their projects. */
-  touchedNodes(...nodeIds: string[]): ChangeNotice;
   /** A project's own row: its nodes' messages, events, links and edges are untouched unless `nodeIds` says. */
   touchedProject(projectId: string, nodeIds?: string[] | null): ChangeNotice;
 }

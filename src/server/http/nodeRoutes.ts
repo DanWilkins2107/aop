@@ -30,7 +30,7 @@ import {
 import { readBody, type RouteContext, runIdOf } from "./routeContext.js";
 import { at, routes } from "./routes.js";
 
-export function nodeRoutes({ app, db, touch, touchedNodes }: RouteContext): void {
+export function nodeRoutes({ app, db }: RouteContext): void {
   app.get(routes.projectAction("edges"), (c) => {
     const project = getProject(db, c.req.param("id"));
     return c.json(nodes.listProjectEdges(db, project.id));
@@ -43,10 +43,7 @@ export function nodeRoutes({ app, db, touch, touchedNodes }: RouteContext): void
   app.post(routes.projectAction("nodes"), async (c) => {
     const project = getProject(db, c.req.param("id"));
     const body = await readBody(c, createNodeBody);
-    const node = nodes.createNode(db, project.id, body);
-    // A parent gets an edge, and an event saying so.
-    touch(c, touchedNodes(node.id, ...(body.parent_id === undefined ? [] : [body.parent_id])));
-    return c.json(node, 201);
+    return c.json(nodes.createNode(db, project.id, body), 201);
   });
   app.get(routes.node, (c) => c.json(nodes.getNode(db, c.req.param("id"))));
   app.patch(routes.node, async (c) =>
@@ -116,16 +113,12 @@ export function nodeRoutes({ app, db, touch, touchedNodes }: RouteContext): void
   app.get(routes.nodeAction("edges"), (c) =>
     c.json(nodes.listEdges(db, c.req.param("id"), c.req.query("include_removed") === "true")),
   );
-  app.post(routes.nodeAction("edges"), async (c) => {
-    const edge = nodes.addEdge(db, c.req.param("id"), await readBody(c, edgeBody));
-    touch(c, touchedNodes(edge.source_id, edge.target_id));
-    return c.json(edge, 201);
-  });
-  app.delete(routes.edge, async (c) => {
-    const edge = nodes.removeEdge(db, c.req.param("id"), (await readBody(c, actorBody, true)).actor);
-    touch(c, touchedNodes(edge.source_id, edge.target_id));
-    return c.json(edge);
-  });
+  app.post(routes.nodeAction("edges"), async (c) =>
+    c.json(nodes.addEdge(db, c.req.param("id"), await readBody(c, edgeBody)), 201),
+  );
+  app.delete(routes.edge, async (c) =>
+    c.json(nodes.removeEdge(db, c.req.param("id"), (await readBody(c, actorBody, true)).actor)),
+  );
 
   // Events
   app.get(routes.nodeAction("events"), (c) => c.json(nodes.listEvents(db, c.req.param("id"))));

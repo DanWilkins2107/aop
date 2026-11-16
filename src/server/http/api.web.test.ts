@@ -204,6 +204,13 @@ describe("change events", () => {
     expect((await post(`/nodes/${first!.id}/edges`, { target_id: second!.id, kind: "blocks" })).status).toBe(201);
     expect(await stream.events(3)).toEqual(["ready", "change", "change"]);
     expect(stream.notices()[1]).toEqual({ project_ids: [projectId], node_ids: [first!.id, second!.id] });
+
+    // A child's parent gets an event too, so it's named without its route saying so.
+    await new Promise((wait) => setTimeout(wait, 100));
+    const child = (await (await post(`/projects/${projectId}/nodes`, { type: "dev", title: "C", parent_id: first!.id })).json()) as NodeView;
+    expect(await stream.events(4)).toEqual(["ready", "change", "change", "change"]);
+    const third = stream.notices()[2] as { node_ids: string[] };
+    expect([...third.node_ids].sort()).toEqual([first!.id, child.id].sort());
   });
 
   it("stops listening when the client goes away", async () => {
