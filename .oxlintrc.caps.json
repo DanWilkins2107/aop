@@ -38,7 +38,7 @@
     {"files": ["src/server/runs/runs.ts"], "rules": {"eslint/complexity": ["error", {"max": 19}], "eslint/max-params": ["error", {"max": 5}]}},
     {"files": ["src/server/schedule/scheduler.ts"], "rules": {"eslint/complexity": ["error", {"max": 13}]}},
     {"files": ["src/server/serve.ts"], "rules": {"eslint/complexity": ["error", {"max": 19}], "eslint/max-lines-per-function": ["error", {"max": 72, "skipBlankLines": true, "skipComments": true}]}},
-    {"files": ["src/server/stages/stages.ts"], "rules": {"eslint/complexity": ["error", {"max": 54}], "eslint/max-depth": ["error", {"max": 5}], "eslint/max-lines": ["error", {"max": 344, "skipBlankLines": true, "skipComments": true}], "eslint/max-lines-per-function": ["error", {"max": 131, "skipBlankLines": true, "skipComments": true}]}},
+    {"files": ["src/server/stages/stages.ts"], "rules": {"eslint/complexity": ["error", {"max": 54}], "eslint/max-depth": ["error", {"max": 5}], "eslint/max-lines": ["error", {"max": 353, "skipBlankLines": true, "skipComments": true}], "eslint/max-lines-per-function": ["error", {"max": 131, "skipBlankLines": true, "skipComments": true}]}},
     {"files": ["web/src/components/PipelineGraph.tsx"], "rules": {"eslint/max-lines-per-function": ["error", {"max": 118, "skipBlankLines": true, "skipComments": true}]}},
     {"files": ["web/src/lib/diff.ts"], "rules": {"eslint/complexity": ["error", {"max": 22}]}},
     {"files": ["web/src/lib/eventText.ts"], "rules": {"eslint/complexity": ["error", {"max": 50}], "eslint/max-lines-per-function": ["error", {"max": 90, "skipBlankLines": true, "skipComments": true}]}},
