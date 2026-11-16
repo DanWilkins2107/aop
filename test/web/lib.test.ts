@@ -676,6 +676,15 @@ describe("waiting and hidden cards", () => {
     expect(opacity(nodeAt("beta"))).toBe(1);
   });
 
+  it("borders blocked cards in red, and no other grey card", () => {
+    const border = (node: NodeView) => cardLook(node, null).border;
+    const blocked = border(nodeAt("beta", { blocked_by: ["x"] }));
+    expect(blocked).toBe("#e06666");
+    for (const node of [nodeAt("beta", { held: true }), nodeAt("broken_down", { turn: null }), nodeAt("beta", { invalidated_by_parent: true, blocked_by: ["x"] })]) {
+      expect(border(node)).not.toBe(blocked);
+    }
+  });
+
   it("drops the type on global stages only", () => {
     for (const stage of ["invalidated", "externally_blocked", "ask_human_question", "failed"]) {
       expect(cardType(nodeAt(stage))).toBeNull();

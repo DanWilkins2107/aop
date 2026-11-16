@@ -66,6 +66,8 @@ const INACTIVE_OPACITY = 0.7;
 const RECEDED_OPACITY = 0.45;
 /** Work in progress or waiting on a human, which the eye should find first. */
 const LIVE_BORDER_WIDTH = 2;
+/** Tells a blocked card apart from the other grey ones. */
+const BLOCKED_BORDER = "#e06666";
 
 /** The fill that means a human needs to act: the stage's own colour, without any alpha from config. */
 export const fillOf = (color: string) => mix(color, color, 0);
@@ -106,7 +108,9 @@ export function cardKind(node: NodeView): CardKind {
 
 export function cardLook(node: NodeView, stages: StagesView | null): CardLook {
   const color = node.stage_exists ? stageColor(node.stage, stages) : MISSING_STAGE_COLOR;
-  return lookOf(cardKind(node), color);
+  const kind = cardKind(node);
+  const look = lookOf(kind, color);
+  return kind === "inactive" && node.blocked_by.length > 0 ? { ...look, border: BLOCKED_BORDER } : look;
 }
 
 /**
