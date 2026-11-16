@@ -22,6 +22,7 @@ const KNOWN_KINDS: Record<EventKind, true> = {
   claim_released: true,
   run_started: true,
   run_ended: true,
+  branch_finished: true,
   link_added: true,
   edge_added: true,
   edge_removed: true,
@@ -136,7 +137,9 @@ export function describeEvent(event: EventView, titleOf: (id: string) => string)
     case "claim_released":
       return `Claim released by ${event.data.holder === "agent" ? "an agent run" : "a human"}`;
     case "run_started":
-      return `Agent run ${text(event.data.run_id).slice(0, 8)} started`;
+      return `Agent run ${text(event.data.run_id).slice(0, 8)} started${event.data.branch ? ` on ${text(event.data.branch)}` : ""}`;
+    case "branch_finished":
+      return `Branch ${text(event.data.branch)} finished: ${text(event.data.outcome)}`;
     case "run_ended": {
       const reason = event.data.reason;
       return `Agent run ${text(event.data.run_id).slice(0, 8)} ended: ${RUN_ENDINGS[reason] ?? text(reason)}`;

@@ -19,7 +19,7 @@ interface StageDef {
 }
 
 /** How a parallel group turns its branches' results into one outcome. */
-type Gate = "all_pass";
+export type Gate = "all_pass";
 
 interface ParallelGroup {
   /** Agent stages from the pool, or types run as sub-workflows. */
@@ -43,13 +43,33 @@ interface TypeDef {
 }
 
 /** The outcomes a parallel group can end with. */
-function groupOutcomes(gate: Gate | null): string[] {
+export function groupOutcomes(gate: Gate | null): string[] {
   return gate === "all_pass" ? ["pass", "fail"] : ["done"];
 }
 
 /** The outcomes a sub-workflow can end with: `done`, and `exhausted` once a `max_loops` runs out. */
 function subflowExits(type: TypeDef): string[] {
   return type.maxLoops.size > 0 ? ["done", "exhausted"] : ["done"];
+}
+
+/** What a stage of a type does when entered. */
+type Step =
+  | { kind: "agent" }
+  | { kind: "subflow"; type: string }
+  | { kind: "parallel"; branches: string[]; gate: "all_pass" | null };
+
+export function stepOf(graph: StageGraph, type: string, stage: string): Step {
+  const def = graph.types.get(type);
+  const subflow = def?.subflows.get(stage);
+  if (subflow !== undefined) return { kind: "subflow", type: subflow };
+  const group = def?.parallel.get(stage);
+  if (group !== undefined) return { kind: "parallel", branches: group.branches, gate: group.gate };
+  return { kind: "agent" };
+}
+
+/** Whether a node on this stage runs branches rather than an agent of its own. */
+export function runsBranches(graph: StageGraph, type: string, stage: string): boolean {
+  return stepOf(graph, type, stage).kind !== "agent";
 }
 
 /** A validated `stages.yaml`. Maps, so that names like "constructor" can't hit Object.prototype. */

@@ -31,6 +31,7 @@ export {
   unblock,
 } from "./stageMachine.js";
 export { claim, releaseClaim } from "./claims.js";
+export { startableBranches, type BranchRow } from "./branches.js";
 export { addLink, addMessage, listLinks, listMessages } from "./messages.js";
 export { addEdge, listEdges, listProjectEdges, removeEdge } from "./edges.js";
 

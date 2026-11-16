@@ -30,7 +30,10 @@ export interface EventDataByKind {
   claim_taken: { holder: "human" | "agent"; run_id?: string; via?: "stop" };
   /** `via` is set when AOP drops an agent's claim, rather than its holder releasing it. */
   claim_released: { holder: "human" | "agent"; via?: StageChangeVia | "held" | "shutdown" | "stop" | "restart" };
-  run_started: { run_id: string; stage: string };
+  /** `branch`: the path of the branch the run works, inside a sub-workflow or parallel stage. */
+  run_started: { run_id: string; stage: string; branch?: string };
+  /** A branch's run reported its outcome. Only that branch finished. */
+  branch_finished: { run_id: string; branch: string; outcome: string };
   run_ended: { run_id: string; reason: RunEndReason; exit_code: number | null };
   link_added: { link_id: string; kind: LinkRow["kind"]; url: string };
   edge_added: { edge_id: string; target_id: string; kind: EdgeRow["kind"] };

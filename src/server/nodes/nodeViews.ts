@@ -5,6 +5,7 @@ import { nextFireAt } from "../shared/cron.js";
 import type { Db } from "../db/db.js";
 import type { HolderVia, NodeRow, NodeView } from "../../shared/nodes/types.js";
 import { NON_BLOCKING_STAGES } from "../../shared/stages/nonBlockingStages.js";
+import { runsBranches } from "../stages/stages.js";
 import { availableOutcomes, currentGraphs, getNodeRow, graphFor, stageIsLive, turnOf, type Graphs } from "./nodeCore.js";
 
 /** Invalidated ancestors of a node. Derived at read time; being invalidated by a parent is never stored. */
@@ -242,7 +243,10 @@ function viewsIn(db: Db, rows: NodeRow[], everyNode: HolderState[], projectIds: 
   return rows.map((node) => deriveView(graphs, node, holders.get(node.id) ?? [], latestRuns.get(node.id)));
 }
 
-/** Nodes an agent should start on now: on an agent stage, unclaimed, not held, with no run still leaving. */
+/**
+ * Nodes an agent should start on now: on an agent stage, unclaimed, not held, with no run still leaving.
+ * A stage that runs branches starts them instead: see `startableBranches`.
+ */
 export function startableNodes(db: Db, graphs: Graphs): NodeRow[] {
   const rows = db
     .prepare(
@@ -251,7 +255,10 @@ export function startableNodes(db: Db, graphs: Graphs): NodeRow[] {
         ORDER BY rowid`,
     )
     .all() as NodeRow[];
-  const agentTurn = rows.filter((node) => turnOf(graphFor(graphs, node), node) === "agent");
+  const agentTurn = rows.filter((node) => {
+    const graph = graphFor(graphs, node);
+    return turnOf(graph, node) === "agent" && !runsBranches(graph, node.type, node.stage);
+  });
   if (agentTurn.length === 0) return [];
   // A holder can be any node in the project, claimed or not, so read every node of those projects.
   const projectIds = [...new Set(agentTurn.map((node) => node.project_id))];

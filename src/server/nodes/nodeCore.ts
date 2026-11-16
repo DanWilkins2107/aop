@@ -7,7 +7,7 @@ import { notFound } from "../shared/errors.js";
 import type { NodeRow, Turn } from "../../shared/nodes/types.js";
 import { isBuiltIn } from "../../shared/stages/isBuiltIn.js";
 import type { BuiltInStage } from "../../shared/stages/types.js";
-import { EMPTY_GRAPH, type StageGraph } from "../stages/stages.js";
+import { EMPTY_GRAPH, runsBranches, type StageGraph } from "../stages/stages.js";
 
 export function getNodeRow(db: Db, id: string): NodeRow {
   const node = db.prepare("SELECT * FROM nodes WHERE id = ?").get(id) as NodeRow | undefined;
@@ -65,6 +65,8 @@ export function turnOf(graph: StageGraph, node: NodeRow): Turn | null {
   if (HUMAN_TURN_STAGES.includes(node.stage)) return "human";
   if (AGENT_TURN_STAGES.includes(node.stage)) return "agent";
   if (!stageIsLive(graph, node.type, node.stage)) return null;
+  // Its branches are agent stages, run for it.
+  if (runsBranches(graph, node.type, node.stage)) return "agent";
   return graph.stages.get(node.stage)?.turn ?? null;
 }
 

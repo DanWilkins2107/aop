@@ -12,10 +12,14 @@ import { FINISHED_STAGES } from "../../shared/stages/finishedStages.js";
 import { isBuiltIn } from "../../shared/stages/isBuiltIn.js";
 import { appendEvent, newId, now, type Actor } from "../db/records.js";
 import type { StageGraph } from "../stages/stages.js";
-import { availableOutcomes, currentGraphs, getNodeRow, graphFor, stageIsLive, turnOf } from "./nodeCore.js";
+import { availableOutcomes, currentGraphs, getNodeRow, graphFor, stageIsLive, turnOf, type Graphs } from "./nodeCore.js";
 import { viewOf } from "./nodeViews.js";
 import { postMessage } from "./messages.js";
 import { addEdge } from "./edges.js";
+import { clearBranches, finishBranch } from "./branches.js";
+
+/** Changes that leave a node's branches in place: waiting on a human, and coming back from that. */
+const KEEPS_BRANCHES: readonly StageChangeVia[] = ["ask", "fail", "block", "invalidate", "answer", "retry", "unblock", "restore"];
 
 /** Built-ins entered only through an action of their own, which collects their state. */
 type OwnActionStage = Exclude<BuiltInStage, "done" | "broken_down" | "scheduled">;
@@ -154,6 +158,8 @@ function applyStageChange(db: Db, node: NodeRow, change: StageChange): void {
     ...change.detail,
   });
   if (dropsClaim) appendEvent(db, node.id, "system", "claim_released", { holder: "agent", via: change.via });
+  // Coming back from a human resumes the branches where they were. Anything else starts afresh.
+  if (!KEEPS_BRANCHES.includes(change.via)) clearBranches(db, node.id);
   if (change.keepsAgentClaim !== true) {
     db.prepare(
       `UPDATE runs SET left_via = ?, left_actor = ?, left_at = ?
@@ -173,20 +179,35 @@ function applyStageChange(db: Db, node: NodeRow, change: StageChange): void {
  * own node and only while the human's claim holds. It is never the agent run itself, so like a
  * caller with no run ID it gets only the check above.
  */
-function assertRunStillOnNode(db: Db, nodeId: string, runId?: string): void {
+function assertRunStillOnNode(db: Db, nodeId: string, runId?: string): RunOnNode | undefined {
   const steeredNode = runId === undefined ? undefined : openSteerSessionNode(db, runId);
   if (steeredNode !== undefined && steeredNode !== nodeId) {
     throw refused(`Steered session ${runId} is on node ${steeredNode}, so it can't move node ${nodeId}`);
   }
-  const run = db.prepare("SELECT id, left_via FROM runs WHERE node_id = ? AND status = 'running'").get(nodeId) as
-    | { id: string; left_via: string | null }
-    | undefined;
-  if (runId !== undefined && steeredNode === undefined && run?.id !== runId) {
+  const byId = runId !== undefined && steeredNode === undefined;
+  // A node has one run of its own, or one per branch, each of which names itself.
+  const run = (
+    byId
+      ? db.prepare("SELECT id, left_via, branch_id FROM runs WHERE id = ? AND node_id = ? AND status = 'running'").get(runId, nodeId)
+      : db.prepare("SELECT id, left_via, branch_id FROM runs WHERE node_id = ? AND status = 'running' AND branch_id IS NULL").get(nodeId)
+  ) as RunOnNode | undefined;
+  if (byId && run === undefined) {
     throw refused(`Agent run ${runId} isn't the run on node ${nodeId}, so it can't move it`);
   }
   if (run?.left_via != null) {
     throw refused("This agent run has already moved the node on, and is expected to exit");
   }
+  return run;
+}
+
+interface RunOnNode {
+  id: string;
+  left_via: string | null;
+  branch_id: string | null;
+}
+
+function assertNotBranch(run: RunOnNode | undefined, action: string): void {
+  if (run?.branch_id != null) throw refused(`Can't ${action} from a branch of a sub-workflow or parallel stage`);
 }
 
 /**
@@ -301,7 +322,11 @@ export function next(
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
     const graph = graphFor(graphs, node);
-    if (input.actor === "agent" || input.runId !== undefined) assertRunStillOnNode(db, nodeId, input.runId);
+    const run = input.actor === "agent" || input.runId !== undefined ? assertRunStillOnNode(db, nodeId, input.runId) : undefined;
+    if (run?.branch_id != null) {
+      branchNext(db, graphs, node, { runId: run.id, branchId: run.branch_id, outcome: input.outcome });
+      return;
+    }
     if (node.stage === "scheduled") {
       throw refused("Can't call next on a scheduled node: it stays there and creates children when it fires");
     }
@@ -311,30 +336,48 @@ export function next(
     if (input.actor === "agent" && turnOf(graph, node) === "human") {
       throw refused(`Stage "${node.stage}" is a human turn, so an agent can't report its outcome`);
     }
-    const outcomes = availableOutcomes(graphs, node);
-    const target = outcomes.get(input.outcome);
-    if (target === undefined) {
-      throw refused(`Outcome "${input.outcome}" isn't available at stage "${node.stage}" of type "${node.type}"`, {
-        available_outcomes: [...outcomes.keys()],
-      });
-    }
-
-    // Validation guarantees the target is a stage in this type, another type, done or broken_down.
-    const enteredType = graph.types.get(node.type)?.stages.has(target) ? undefined : graph.types.get(target);
-    const toType = enteredType ? target : node.type;
-    const toStage = enteredType ? enteredType.start : target;
-
-    assertCanEnter(db, node, toStage);
-    if (toStage === "broken_down") assertBlocksMoved(db, node);
-    applyStageChange(db, node, {
-      stage: toStage,
-      type: toType,
-      via: "next",
-      actor: input.actor,
-      detail: { outcome: input.outcome },
-    });
+    moveOn(db, graphs, node, { outcome: input.outcome, actor: input.actor });
   })();
   return viewOf(db, graphs, nodeId);
+}
+
+/** Takes one of the node's outcomes from its stage. */
+function moveOn(db: Db, graphs: Graphs, node: NodeRow, input: { outcome: string; actor: Actor }): void {
+  const graph = graphFor(graphs, node);
+  const outcomes = availableOutcomes(graphs, node);
+  const target = outcomes.get(input.outcome);
+  if (target === undefined) {
+    throw refused(`Outcome "${input.outcome}" isn't available at stage "${node.stage}" of type "${node.type}"`, {
+      available_outcomes: [...outcomes.keys()],
+    });
+  }
+
+  // Validation guarantees the target is a stage in this type, another type, done or broken_down.
+  const enteredType = graph.types.get(node.type)?.stages.has(target) ? undefined : graph.types.get(target);
+  const toType = enteredType ? target : node.type;
+  const toStage = enteredType ? enteredType.start : target;
+
+  assertCanEnter(db, node, toStage);
+  if (toStage === "broken_down") assertBlocksMoved(db, node);
+  applyStageChange(db, node, {
+    stage: toStage,
+    type: toType,
+    via: "next",
+    actor: input.actor,
+    detail: { outcome: input.outcome },
+  });
+}
+
+/**
+ * A branch's run reporting its outcome. Only that branch finishes, and its run leaves. Once that
+ * finishes the node's own stage, AOP moves the node on with the stage's outcome.
+ */
+function branchNext(db: Db, graphs: Graphs, node: NodeRow, input: { runId: string; branchId: string; outcome: string }): void {
+  const finished = finishBranch(db, graphFor(graphs, node), node, { branchId: input.branchId, outcome: input.outcome });
+  const run = db.prepare("SELECT branch FROM runs WHERE id = ?").get(input.runId) as { branch: string };
+  db.prepare("UPDATE runs SET left_via = 'next', left_actor = 'agent', left_at = ? WHERE id = ?").run(now(), input.runId);
+  appendEvent(db, node.id, "agent", "branch_finished", { run_id: input.runId, branch: run.branch, outcome: input.outcome });
+  if (finished !== null) moveOn(db, graphs, node, { outcome: finished, actor: "system" });
 }
 
 /**
@@ -571,7 +614,7 @@ export function splitStart(db: Db, nodeId: string, input: { runId?: string | und
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
     const graph = graphFor(graphs, node);
-    assertRunStillOnNode(db, nodeId, input.runId);
+    assertNotBranch(assertRunStillOnNode(db, nodeId, input.runId), "start a split");
     if (node.stage === "splitting") throw refused("The node is already splitting");
     assertAgentStage(graph, node, "start a split");
     applyStageChange(db, node, {
@@ -591,7 +634,7 @@ export function splitFinish(db: Db, nodeId: string, input: { runId?: string | un
   const graphs = currentGraphs();
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
-    assertRunStillOnNode(db, nodeId, input.runId);
+    assertNotBranch(assertRunStillOnNode(db, nodeId, input.runId), "finish a split");
     if (node.stage !== "splitting") {
       throw refused(`Can't finish a split: the node is at "${node.stage}", not splitting`);
     }
