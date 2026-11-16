@@ -2,7 +2,7 @@
 // a human or agent takes on a node is a function here: create, edit, next, move, ask, answer, fail,
 // retry, invalidate, restore, block, unblock, split and saving an improvement locally.
 
-import { openSteerSessionNode } from "./claims.js";
+import { endAgentTurn, endBranchTurn, openSteerSessionNode } from "./claims.js";
 import type { Db } from "../db/db.js";
 import { badRequest, refused } from "../shared/errors.js";
 import type { EventDataByKind } from "../../shared/events/types.js";
@@ -132,20 +132,14 @@ interface StageChange {
 /**
  * The only way a node's stage changes. Leaving a stage clears its `return_stage` and
  * `invalidation_reason`; the event keeps the previous state, which is what restore reads.
- * A human's claim survives. An agent's doesn't, because a stage change ends its run, and marking the
- * run here, in the same transaction, is how the orchestrator finds out.
+ * A human's claim survives. An agent's doesn't: see `endAgentTurn`.
  */
 function applyStageChange(db: Db, node: NodeRow, change: StageChange): void {
-  const dropsClaim = node.claimed_by === "agent" && change.keepsAgentClaim !== true;
-  db.prepare(
-    `UPDATE nodes SET stage = ?, type = ?, return_stage = ?, invalidation_reason = ?, claimed_by = ?
-      WHERE id = ?`,
-  ).run(
+  db.prepare("UPDATE nodes SET stage = ?, type = ?, return_stage = ?, invalidation_reason = ? WHERE id = ?").run(
     change.stage,
     change.type,
     change.returnStage ?? null,
     change.reason ?? null,
-    dropsClaim ? null : node.claimed_by,
     node.id,
   );
   appendEvent(db, node.id, change.actor, "stage_changed", {
@@ -157,15 +151,9 @@ function applyStageChange(db: Db, node: NodeRow, change: StageChange): void {
     to_type: change.type,
     ...change.detail,
   });
-  if (dropsClaim) appendEvent(db, node.id, "system", "claim_released", { holder: "agent", via: change.via });
+  if (change.keepsAgentClaim !== true) endAgentTurn(db, node.id, change.via, change.actor);
   // Coming back from a human resumes the branches where they were. Anything else starts afresh.
   if (!KEEPS_BRANCHES.includes(change.via)) clearBranches(db, node.id);
-  if (change.keepsAgentClaim !== true) {
-    db.prepare(
-      `UPDATE runs SET left_via = ?, left_actor = ?, left_at = ?
-        WHERE node_id = ? AND status = 'running' AND left_via IS NULL`,
-    ).run(change.via, change.actor, now(), node.id);
-  }
 }
 
 /**
@@ -375,7 +363,7 @@ function moveOn(db: Db, graphs: Graphs, node: NodeRow, input: { outcome: string;
 function branchNext(db: Db, graphs: Graphs, node: NodeRow, input: { runId: string; branchId: string; outcome: string }): void {
   const finished = finishBranch(db, graphFor(graphs, node), node, { branchId: input.branchId, outcome: input.outcome });
   const run = db.prepare("SELECT branch FROM runs WHERE id = ?").get(input.runId) as { branch: string };
-  db.prepare("UPDATE runs SET left_via = 'next', left_actor = 'agent', left_at = ? WHERE id = ?").run(now(), input.runId);
+  endBranchTurn(db, input.runId);
   appendEvent(db, node.id, "agent", "branch_finished", { run_id: input.runId, branch: run.branch, outcome: input.outcome });
   if (finished !== null) moveOn(db, graphs, node, { outcome: finished, actor: "system" });
 }

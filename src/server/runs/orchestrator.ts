@@ -39,6 +39,7 @@ import {
 } from "../os/osProcesses.js";
 import { nodeStartPath } from "../projects/projects.js";
 import { newId } from "../db/records.js";
+import { handClaimToHuman, releaseAgentClaim } from "../nodes/claims.js";
 import { appendToLog, logPathFor, openLog } from "./runLog.js";
 import {
   agentReported,
@@ -48,14 +49,12 @@ import {
   decideRunEnd,
   forgetProcess,
   getRun,
-  handClaimToHuman,
   identitiesOf,
   listProcesses,
   markShuttingDown,
   otherRunningRuns,
   recordProcess,
   recordUsage,
-  releaseAgentClaim,
   runningRuns,
   type ProcessRow,
   type RunEnding,

@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { listBranches, startableBranches } from "./branches.js";
 import { currentGraphs } from "./nodeCore.js";
 import { getNodeRow, markFailed, next, retry, startableNodes, type NodeView } from "./nodes.js";
-import { beginBranchRun, closeRun, getRun, otherRunningRuns, releaseAgentClaim } from "../runs/runs.js";
+import { beginBranchRun, closeRun, getRun, otherRunningRuns } from "../runs/runs.js";
+import { releaseAgentClaim } from "./claims.js";
 import { harness, type Harness } from "../../../test-shared/harness.js";
 
 const PROMPTS = ["implement", "review_tests", "review_style"];

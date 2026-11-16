@@ -5,6 +5,7 @@ import type { RunEndReason, RunView } from "../../shared/runs/types.js";
 import type { OutputFormat, Usage } from "./agentOutput.js";
 import type { Db } from "../db/db.js";
 import { refused } from "../shared/errors.js";
+import { takeAgentClaim } from "../nodes/claims.js";
 import type { NodeRow } from "../nodes/nodes.js";
 import type { Identity } from "../os/osProcesses.js";
 import { appendEvent, now, type Actor } from "../db/records.js";
@@ -167,9 +168,7 @@ export function decideRunEnd({ run, ending, reported, nodeExists }: RunEndInput)
  */
 export function beginRun(db: Db, node: NodeRow, id: string, logPath: string, format: OutputFormat = "text"): RunRow {
   db.transaction(() => {
-    const claimed = db.prepare("UPDATE nodes SET claimed_by = 'agent' WHERE id = ? AND claimed_by IS NULL").run(node.id);
-    if (claimed.changes !== 1) throw refused(`Node ${node.id} is already claimed, so no run can start on it`);
-    appendEvent(db, node.id, "system", "claim_taken", { holder: "agent", run_id: id });
+    takeAgentClaim(db, node.id, id);
     db.prepare(
       "INSERT INTO runs (id, created_at, node_id, stage, status, log_path, output_format) VALUES (?, ?, ?, ?, 'running', ?, ?)",
     ).run(id, now(), node.id, node.stage, logPath, format);
@@ -190,10 +189,8 @@ export function beginBranchRun(
 ): RunRow {
   db.transaction(() => {
     const claimedBy = (db.prepare("SELECT claimed_by FROM nodes WHERE id = ?").get(node.id) as Pick<NodeRow, "claimed_by">).claimed_by;
-    if (claimedBy === null) {
-      db.prepare("UPDATE nodes SET claimed_by = 'agent' WHERE id = ?").run(node.id);
-      appendEvent(db, node.id, "system", "claim_taken", { holder: "agent", run_id: run.id });
-    } else if (claimedBy !== "agent" || otherRunningRuns(db, node.id, run.id).some((other) => other.branch_id === null)) {
+    if (claimedBy === null) takeAgentClaim(db, node.id, run.id);
+    else if (claimedBy !== "agent" || otherRunningRuns(db, node.id, run.id).some((other) => other.branch_id === null)) {
       throw refused(`Node ${node.id} is already claimed, so no run can start on it`);
     }
     db.prepare(
@@ -231,26 +228,6 @@ export function closeRun(db: Db, run: RunRow, reason: EndReason, exitCode: numbe
     run.id,
   );
   appendEvent(db, run.node_id, "system", "run_ended", { run_id: run.id, reason, exit_code: exitCode });
-}
-
-/** Gives up an agent's claim, leaving the node where it is. */
-export function releaseAgentClaim(
-  db: Db,
-  nodeId: string,
-  via: NonNullable<EventDataByKind["claim_released"]["via"]>,
-): void {
-  const released = db.prepare("UPDATE nodes SET claimed_by = NULL WHERE id = ? AND claimed_by = 'agent'").run(nodeId);
-  if (released.changes > 0) appendEvent(db, nodeId, "system", "claim_released", { holder: "agent", via });
-}
-
-/**
- * A run a human stopped hands them the node. The node stays on its stage and isn't queued, because
- * the human's claim holds it, until they release that claim to start the stage again.
- */
-export function handClaimToHuman(db: Db, nodeId: string): void {
-  releaseAgentClaim(db, nodeId, "stop");
-  db.prepare("UPDATE nodes SET claimed_by = 'human' WHERE id = ? AND claimed_by IS NULL").run(nodeId);
-  appendEvent(db, nodeId, "human", "claim_taken", { holder: "human", via: "stop" });
 }
 
 export function recordProcess(db: Db, run: Pick<RunRow, "id" | "node_id">, pid: number, command: string): void {
