@@ -32,25 +32,20 @@ function problems(types: string): string[] {
   return [];
 }
 
-/** The outer type, running `build_and_review` with both its exits mapped. */
+/** The outer type, running `build_and_review`. */
 const DEV = `
   dev:
     start: build
     stages:
-      build:     { subflow: build_and_review, next: { done: pr_review, exhausted: failed_build } }
+      build:     { subflow: build_and_review, next: { done: pr_review } }
       pr_review: { next: { approved: done } }
-      failed_build: { subflow: fix, next: { done: pr_review } }
-  fix:
-    start: implement
-    stages:
-      implement: { next: { done: done } }
 `;
 
 const BUILD_AND_REVIEW = `
   build_and_review:
     start: implement
     stages:
-      implement: { next: { done: reviews } }
+      implement: { next: { done: reviews, give_up: done } }
       reviews:
         parallel: [review_tests, review_style]
         gate: all_pass
@@ -70,7 +65,13 @@ describe("sub-workflows in stages.yaml", () => {
 
     const view = describeStages(config.graph).types.find((type) => type.name === "build_and_review")!;
     expect(view.stages).toEqual([
-      { name: "implement", next: [{ outcome: "done", target: "reviews" }] },
+      {
+        name: "implement",
+        next: [
+          { outcome: "done", target: "reviews" },
+          { outcome: "give_up", target: "done" },
+        ],
+      },
       {
         name: "reviews",
         next: [
@@ -162,7 +163,7 @@ describe("sub-workflows in stages.yaml", () => {
     expect(found).toContain('type "dev", stage "done": "done" is a reserved built-in');
   });
 
-  it("makes a subflow stage map exactly the exits its type can reach", () => {
+  it("makes a subflow stage map exactly done", () => {
     const found = problems(`
   dev:
     start: build
@@ -176,9 +177,27 @@ describe("sub-workflows in stages.yaml", () => {
     stages:
       implement: { next: { done: done } }
 ${BUILD_AND_REVIEW}`).join("\n");
-    expect(found).toContain('stage "build": next must map "exhausted", which subflow "build_and_review" can end with');
     expect(found).toContain('stage "other": "exhausted" is not an outcome of subflow "fix", which ends with done');
     expect(found).toContain('stage "missing": subflow "nope" is not a type');
+  });
+
+  it("needs a way on once a max_loops stage can't be entered again", () => {
+    const found = problems(`
+  dev:
+    start: build
+    stages:
+      build:     { subflow: inner, next: { done: pr_review } }
+      pr_review: { next: { approved: done } }
+  inner:
+    start: implement
+    stages:
+      implement: { next: { done: reviews } }
+      reviews:   { parallel: [review_tests], gate: all_pass, max_loops: 2, next: { pass: done, fail: decide } }
+      decide:    { max_loops: 2, next: { done: reviews, skip: done } }
+`).join("\n");
+    expect(found).toContain('type "inner", stage "implement": every outcome targets a stage with max_loops');
+    expect(found).toContain('type "inner", stage "reviews": outcome "fail" targets "decide", which has max_loops');
+    expect(found).not.toContain('stage "decide"');
   });
 
   it("keeps sub-workflows to agent stages, their own targets and done, and out of a node's types", () => {

@@ -47,7 +47,7 @@ export interface TypeView {
     parallel?: string[];
     /** How the parallel branches' results become one outcome. */
     gate?: "all_pass";
-    /** How many times a loop may enter this stage. */
+    /** How many times this stage may be entered. After that, outcomes into it are refused. */
     max_loops?: number;
   }[];
 }
