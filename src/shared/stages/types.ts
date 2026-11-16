@@ -38,7 +38,18 @@ export interface StagesView {
 export interface TypeView {
   name: string;
   start: string;
-  stages: { name: string; next: { outcome: string; target: string }[] }[];
+  stages: {
+    name: string;
+    next: { outcome: string; target: string }[];
+    /** The type this stage runs as a sub-workflow. */
+    subflow?: string;
+    /** The agent stages or types this stage runs at once. */
+    parallel?: string[];
+    /** How the parallel branches' results become one outcome. */
+    gate?: "all_pass";
+    /** How many times a loop may enter this stage. */
+    max_loops?: number;
+  }[];
 }
 
 /** The process page: `stages.yaml` as far as it could be read, with every problem in the config. */
