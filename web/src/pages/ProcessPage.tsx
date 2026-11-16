@@ -22,7 +22,7 @@ function TypeList({ process }: { process: StagesView }) {
             Starts at {humanize(type.start)}
             {type.name === process.start ? ". New nodes enter this type" : ""}.
           </p>
-          <PipelineGraph type={type} />
+          <PipelineGraph type={type} types={process.types} />
         </li>
       ))}
     </ul>
@@ -104,11 +104,11 @@ export function ProcessPage() {
             </p>
           ))}
           <ul className="process-list">
-            {data.improvement_process.types.map((type) => (
+            {data.improvement_process.types.map((type, _index, types) => (
               <li key={type.name} className="process-type">
                 <h2>{humanize(type.name)}</h2>
                 <p className="setting-about">Starts at {humanize(type.start)}.</p>
-                <PipelineGraph type={type} />
+                <PipelineGraph type={type} types={types} />
               </li>
             ))}
           </ul>

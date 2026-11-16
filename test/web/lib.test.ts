@@ -294,6 +294,84 @@ describe("pipeline drawing", () => {
     for (const link of links) expect(link.points.length).toBeGreaterThan(0);
   });
 
+  describe("sub-workflows", () => {
+    const REVIEW: TypeView = {
+      name: "build_and_review",
+      start: "implement",
+      stages: [
+        { name: "implement", next: [{ outcome: "done", target: "reviews" }], max_loops: 3 },
+        {
+          name: "reviews",
+          parallel: ["review_tests", "review_style"],
+          gate: "all_pass",
+          next: [
+            { outcome: "pass", target: "done" },
+            { outcome: "fail", target: "implement" },
+          ],
+        },
+      ],
+    };
+    const DEV: TypeView = {
+      name: "dev",
+      start: "build",
+      stages: [
+        {
+          name: "build",
+          subflow: "build_and_review",
+          next: [
+            { outcome: "done", target: "pr_review" },
+            { outcome: "exhausted", target: "failed" },
+          ],
+        },
+        { name: "pr_review", next: [{ outcome: "approve", target: "done" }] },
+      ],
+    };
+    const types = [REVIEW, DEV];
+
+    it("draws a closed subflow stage as one box that can open", () => {
+      const { boxes, frames } = stageDrawing(DEV, null, null, { types });
+      expect(frames).toEqual([]);
+      expect(boxes.find((b) => b.name === "build")?.subflow).toBe("build_and_review");
+      expect(boxes.some((b) => b.name.startsWith("build/"))).toBe(false);
+    });
+
+    it("can't open a subflow whose type it isn't given", () => {
+      expect(stageDrawing(DEV, null, null).boxes.find((b) => b.name === "build")?.subflow).toBeUndefined();
+    });
+
+    it("opens a subflow into a frame round its type, linked through its start and exits", () => {
+      const { boxes, frames, links } = stageDrawing(DEV, null, null, { types, expanded: new Set(["build"]) });
+      const frame = frames.find((f) => f.name === "build")!;
+      expect(frame).toBeDefined();
+      expect(boxes.map((b) => b.name)).not.toContain("build");
+      for (const name of ["build/implement", "build/reviews", "build/done", "build/exhausted"]) {
+        const inner = boxes.find((b) => b.name === name)!;
+        expect(Math.abs(inner.x - frame.x) + inner.width / 2).toBeLessThanOrEqual(frame.width / 2);
+        expect(Math.abs(inner.y - frame.y) + inner.height / 2).toBeLessThanOrEqual(frame.height / 2);
+      }
+      const y = (name: string) => boxes.find((b) => b.name === name)!.y;
+      expect(y("build/implement")).toBeLessThan(y("build/reviews"));
+      expect(y("build/done")).toBeLessThan(y("pr_review"));
+      for (const id of ["build:done", "build:exhausted", "build/reviews:fail"]) {
+        expect(links.find((l) => l.id === id)!.points.length).toBeGreaterThan(0);
+      }
+    });
+
+    it("stacks a parallel group's branches above its gate bar", () => {
+      const { group } = stageDrawing(REVIEW, null, null).boxes.find((b) => b.name === "reviews")!;
+      expect(group?.branches.map((b) => b.label)).toEqual(["Review tests", "Review style"]);
+      expect(group!.branches[0]!.y).toBeLessThan(group!.branches[1]!.y);
+      expect(group!.branches[1]!.y).toBeLessThan(group!.gate.y);
+      expect(group!.gate.label).toBe("All pass");
+    });
+
+    it("dashes a loop back into a max_loops stage and labels its cap", () => {
+      const { links } = stageDrawing(REVIEW, null, null);
+      expect(links.find((l) => l.id === "reviews:fail")).toMatchObject({ dashed: true, label: "Fail ≤3" });
+      expect(links.find((l) => l.id === "implement:done")).toMatchObject({ dashed: false, label: "Done" });
+    });
+  });
+
   it("finds a node's original stage from return_stage, or else from its events", () => {
     expect(originalStage(nodeAt("failed", { return_stage: "beta" }), [])).toBe("beta");
     expect(originalStage(nodeAt("invalidated"), [created("alpha"), change("alpha", "beta"), change("beta", "invalidated")])).toBe("beta");
