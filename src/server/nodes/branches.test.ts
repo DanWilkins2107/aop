@@ -15,18 +15,16 @@ stages:
   review_tests: { turn: agent, prompt: ./prompts/review_tests.md }
   review_style: { turn: agent, prompt: ./prompts/review_style.md }
   pr_review:    { turn: human }
-  stuck:        { turn: human }
 types:
   dev:
     start: build
     stages:
-      build:     { subflow: build_and_review, next: { done: pr_review, exhausted: stuck } }
+      build:     { subflow: build_and_review, next: { done: pr_review } }
       pr_review: { next: { approved: done } }
-      stuck:     { next: { retry: build } }
   build_and_review:
     start: implement
     stages:
-      implement: { next: { done: reviews } }
+      implement: { next: { done: reviews, give_up: done } }
       reviews:
         parallel: [review_tests, review_style]
         gate: all_pass
@@ -113,7 +111,7 @@ describe("a sub-workflow with a gated parallel group", () => {
     expect(listBranches(h.db, node.id)).toEqual([]);
   });
 
-  it("loops back on a failed gate, and ends exhausted past max_loops", async () => {
+  it("loops back on a failed gate, and refuses outcomes into a stage past its max_loops", async () => {
     const node = await h.create("dev");
     const round = (outcomes: [string, string]) => {
       launch();
@@ -125,11 +123,11 @@ describe("a sub-workflow with a gated parallel group", () => {
 
     expect(round(["pass", "fail"]).stage).toBe("build");
     expect(branchesOf(node.id)["build"]).toMatchObject({ stage: "implement", loops: { implement: 2, reviews: 1 } });
-    // The third entry to reviews is past its max_loops of 2.
     expect(round(["fail", "pass"]).stage).toBe("build");
     launch();
-    const exhausted = report(node.id, "build/implement", "done");
-    expect(exhausted.stage).toBe("stuck");
+    // reviews has been entered its max_loops of 2, so implement can't go there again.
+    expect(() => report(node.id, "build/implement", "done")).toThrow(/isn't available on branch build\/implement/);
+    expect(report(node.id, "build/implement", "give_up").stage).toBe("pr_review");
   });
 
   it("refuses an outcome the branch can't end with", async () => {

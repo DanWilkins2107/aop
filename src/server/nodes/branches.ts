@@ -91,17 +91,29 @@ export function clearBranches(db: Db, nodeId: string): void {
   db.prepare("DELETE FROM branches WHERE node_id = ?").run(nodeId);
 }
 
-/** The outcomes a stage branch can finish with: its group's, or its flow's stage's own. */
+/**
+ * The outcomes a stage branch can finish with: its group's, or its flow's stage's own, less those into
+ * a stage already entered its `max_loops` times.
+ */
 function branchOutcomes(db: Db, graph: StageGraph, branch: BranchRow, nodeType: string, nodeStage: string): string[] {
-  const flow = branch.parent_id === null ? null : getBranch(db, branch.parent_id);
+  const flow = branch.parent_id === null ? null : (getBranch(db, branch.parent_id) as BranchRow);
   const type = flow?.type ?? nodeType;
   const stage = flow?.stage ?? nodeStage;
   const step = stepOf(graph, type, stage);
   if (step.kind === "parallel") return groupOutcomes(step.gate);
-  return [...(graph.types.get(type)?.stages.get(stage)?.keys() ?? [])];
+  const next = [...(graph.types.get(type)?.stages.get(stage) ?? [])];
+  if (flow === null) return next.map(([outcome]) => outcome);
+  return next.filter(([, target]) => !loopsRunOut(graph, flow, target)).map(([outcome]) => outcome);
 }
 
-/** A finished group's one outcome. Under `all_pass`, a flow branch passes by finishing with `done`. */
+/** Whether `flow` has entered `target` as many times as its `max_loops` allows. */
+function loopsRunOut(graph: StageGraph, flow: BranchRow, target: string): boolean {
+  const max = graph.types.get(flow.type as string)?.maxLoops.get(target);
+  const loops = JSON.parse(flow.loops) as Record<string, number>;
+  return max !== undefined && (loops[target] ?? 0) >= max;
+}
+
+/** A finished group's one outcome. Under `all_pass`, a flow branch passes by finishing. */
 function groupOutcome(gate: "all_pass" | null, children: BranchRow[]): string {
   if (gate === null) return "done";
   return children.every((child) => child.outcome === "pass" || child.outcome === "done") ? "pass" : "fail";
@@ -146,10 +158,7 @@ function settle(db: Db, graph: StageGraph, node: { id: string; type: string; sta
   return finished === null ? null : settle(db, graph, node, { ...flow, outcome: finished });
 }
 
-/**
- * Moves a flow on from its stage with `outcome`. Returns what the flow itself finished with: `done`,
- * or `exhausted` when a stage would be entered more times than its `max_loops`. Null if it carries on.
- */
+/** Moves a flow on from its stage with `outcome`. Returns `done` if the flow finished, null if it carries on. */
 function moveFlow(db: Db, graph: StageGraph, flow: BranchRow, outcome: string): string | null {
   const type = graph.types.get(flow.type as string);
   const target = type?.stages.get(flow.stage)?.get(outcome);
@@ -159,11 +168,9 @@ function moveFlow(db: Db, graph: StageGraph, flow: BranchRow, outcome: string): 
   db.prepare("DELETE FROM branches WHERE parent_id = ?").run(flow.id);
   if (target === "done") return "done";
 
+  if (loopsRunOut(graph, flow, target)) throw refused(`Branch ${flow.path}: stage "${target}" has run its max_loops`);
   const loops = JSON.parse(flow.loops) as Record<string, number>;
-  const entries = (loops[target] ?? 0) + 1;
-  const max = type.maxLoops.get(target);
-  if (max !== undefined && entries > max) return "exhausted";
-  loops[target] = entries;
+  loops[target] = (loops[target] ?? 0) + 1;
   db.prepare("UPDATE branches SET stage = ?, loops = ? WHERE id = ?").run(target, JSON.stringify(loops), flow.id);
   enter(db, graph, { nodeId: flow.node_id, flow: { ...flow, stage: target }, path: flow.path }, target);
   return null;

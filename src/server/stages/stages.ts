@@ -36,7 +36,7 @@ interface TypeDef {
   subflows: Map<string, string>;
   /** Stages that run their branches at once. */
   parallel: Map<string, ParallelGroup>;
-  /** Stages a loop re-enters: stage name to how many times it may be entered. */
+  /** Stages with `max_loops`: stage name to how many times it may be entered. */
   maxLoops: Map<string, number>;
   /** Whether a `subflow:` stage or a parallel branch runs this type. Such a type has only agent stages. */
   isSubflow: boolean;
@@ -47,10 +47,8 @@ export function groupOutcomes(gate: Gate | null): string[] {
   return gate === "all_pass" ? ["pass", "fail"] : ["done"];
 }
 
-/** The outcomes a sub-workflow can end with: `done`, and `exhausted` once a `max_loops` runs out. */
-function subflowExits(type: TypeDef): string[] {
-  return type.maxLoops.size > 0 ? ["done", "exhausted"] : ["done"];
-}
+/** The outcomes a sub-workflow can end with. */
+const SUBFLOW_EXITS = ["done"];
 
 /** What a stage of a type does when entered. */
 type Step =
@@ -281,6 +279,23 @@ function outcomeProblems(stageLabel: string, next: Map<string, string>, outcomes
   return problems;
 }
 
+/**
+ * Problems with a stage's outcomes into `max_loops` stages. Once such a stage has been entered its
+ * max times, outcomes into it are refused, so an agent stage needs another way on. A group's or a
+ * sub-workflow's outcome isn't chosen, so it can't lead into one.
+ */
+function loopProblems(stageLabel: string, type: TypeDef, next: Map<string, string>, ownStep: boolean): string[] {
+  const capped = [...next].filter(([, target]) => type.maxLoops.has(target));
+  if (capped.length === 0) return [];
+  if (ownStep) {
+    return capped.map(
+      ([outcome, target]) => `${stageLabel}: outcome "${outcome}" targets "${target}", which has max_loops, but this stage's outcome can't be refused`,
+    );
+  }
+  if (capped.length < next.size) return [];
+  return [`${stageLabel}: every outcome targets a stage with max_loops, so some outcome must lead elsewhere for when they run out`];
+}
+
 /** The types a type runs: through `subflow:` stages and parallel branches. */
 function typesRunBy(graph: StageGraph, type: TypeDef): string[] {
   const run = [...type.subflows.values()];
@@ -298,8 +313,7 @@ function subflowProblems(graph: StageGraph): string[] {
   for (const [name, type] of graph.types) {
     const label = `type "${name}"`;
     for (const [stageName, run] of type.subflows) {
-      const exits = subflowExits(graph.types.get(run)!);
-      problems.push(...outcomeProblems(`${label}, stage "${stageName}"`, type.stages.get(stageName)!, exits, `subflow "${run}"`));
+      problems.push(...outcomeProblems(`${label}, stage "${stageName}"`, type.stages.get(stageName)!, SUBFLOW_EXITS, `subflow "${run}"`));
     }
 
     if (!type.isSubflow) {
@@ -336,6 +350,7 @@ function subflowProblems(graph: StageGraph): string[] {
           problems.push(`${stageLabel}: outcome "${outcome}" targets "${target}", but a sub-workflow can only target its own stages or done`);
         }
       }
+      problems.push(...loopProblems(stageLabel, type, next, ownStep));
     }
     if (!finishes) problems.push(`${label}: runs as a sub-workflow, so some outcome must target done`);
   }
