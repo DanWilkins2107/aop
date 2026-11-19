@@ -23,7 +23,7 @@ function log(start: string) {
     },
     say(body: string, author: "human" | "agent" = "agent") {
       const id = `m${messages.length}`;
-      messages.push({ id, created_at: SAME_TIME, node_id: "n", stage, author, body });
+      messages.push({ id, created_at: SAME_TIME, node_id: "n", stage, author, body, branch: null });
       event("message_added", { message_id: id, stage });
     },
   };

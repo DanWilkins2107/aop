@@ -25,7 +25,8 @@ export interface EventDataByKind {
     /** AOP's own `fail`: the run that ended without reporting. */
     run_id?: string;
   };
-  message_added: { message_id: string; stage: string };
+  /** `branch` when a branch's run posted it. */
+  message_added: { message_id: string; stage: string; branch?: string };
   /** `run_id` when a run takes it; `via: "stop"` when stopping a run hands it to a human. */
   claim_taken: { holder: "human" | "agent"; run_id?: string; via?: "stop" };
   /** `via` is set when AOP drops an agent's claim, rather than its holder releasing it. */

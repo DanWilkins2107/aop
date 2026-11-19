@@ -53,6 +53,8 @@ export interface MessageRow {
   stage: string;
   author: Actor;
   body: string;
+  /** The branch whose run posted it, such as `build/reviews/review_tests`. Null for the node's own. */
+  branch: string | null;
 }
 
 export interface LinkRow {

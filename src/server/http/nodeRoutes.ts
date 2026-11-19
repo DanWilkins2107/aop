@@ -53,7 +53,7 @@ export function nodeRoutes({ app, db, touch, touchedNodes }: RouteContext): void
     c.json(nodes.editNode(db, c.req.param("id"), await readBody(c, editNodeBody))),
   );
 
-  app.get(routes.nodeAction("context"), (c) => c.text(nodeContext(db, c.req.param("id"))));
+  app.get(routes.nodeAction("context"), (c) => c.text(nodeContext(db, c.req.param("id"), runIdOf(c))));
   app.post(routes.nodeAction("steer"), async (c) =>
     c.json(prepareSteer(db, c.req.param("id"), await readBody(c, steerBody, true))),
   );
@@ -103,7 +103,7 @@ export function nodeRoutes({ app, db, touch, touchedNodes }: RouteContext): void
   // Messages
   app.get(routes.nodeAction("messages"), (c) => c.json(nodes.listMessages(db, c.req.param("id"))));
   app.post(routes.nodeAction("messages"), async (c) =>
-    c.json(nodes.addMessage(db, c.req.param("id"), await readBody(c, messageBody)), 201),
+    c.json(nodes.addMessage(db, c.req.param("id"), { ...(await readBody(c, messageBody)), runId: runIdOf(c) }), 201),
   );
 
   // Links

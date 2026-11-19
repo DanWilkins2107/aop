@@ -10,7 +10,7 @@ import { getNodeRow } from "./nodeCore.js";
 
 export type { EventView, MessageRow, NodeRow, NodeView };
 
-export { getNodeRow, graphFor, graphsOf, turnOf, type Graphs } from "./nodeCore.js";
+export { currentGraphs, getNodeRow, graphFor, graphsOf, turnOf, type Graphs } from "./nodeCore.js";
 export { getNode, holdersOf, listNodes, startableNodes, viewsOf } from "./nodeViews.js";
 export {
   answer,
@@ -31,7 +31,7 @@ export {
   unblock,
 } from "./stageMachine.js";
 export { claim, releaseClaim } from "./claims.js";
-export { startableBranches, type BranchRow } from "./branches.js";
+export { branchOfRun, startableBranches, type BranchRow } from "./branches.js";
 export { addLink, addMessage, listLinks, listMessages } from "./messages.js";
 export { addEdge, listEdges, listProjectEdges, removeEdge } from "./edges.js";
 

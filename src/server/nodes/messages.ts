@@ -6,19 +6,33 @@ import type { LinkRow, MessageRow } from "../../shared/nodes/types.js";
 import { appendEvent, newId, now, type Actor } from "../db/records.js";
 import { getNodeRow } from "./nodeCore.js";
 
-export function postMessage(db: Db, nodeId: string, stage: string, author: Actor, body: string): MessageRow {
-  const message: MessageRow = { id: newId(), created_at: now(), node_id: nodeId, stage, author, body };
+export function postMessage(
+  db: Db,
+  nodeId: string,
+  stage: string,
+  author: Actor,
+  body: string,
+  branch: string | null = null,
+): MessageRow {
+  const message: MessageRow = { id: newId(), created_at: now(), node_id: nodeId, stage, author, body, branch };
   db.prepare(
-    "INSERT INTO messages (id, created_at, node_id, stage, author, body) VALUES (?, ?, ?, ?, ?, ?)",
-  ).run(message.id, message.created_at, nodeId, stage, author, body);
-  appendEvent(db, nodeId, author, "message_added", { message_id: message.id, stage });
+    "INSERT INTO messages (id, created_at, node_id, stage, author, body, branch) VALUES (?, ?, ?, ?, ?, ?, ?)",
+  ).run(message.id, message.created_at, nodeId, stage, author, body, branch);
+  appendEvent(db, nodeId, author, "message_added", { message_id: message.id, stage, ...(branch === null ? {} : { branch }) });
   return message;
 }
 
-export function addMessage(db: Db, nodeId: string, input: { author: Actor; body: string }): MessageRow {
+/** The branch a run works on this node, if it's a branch's run. A message it posts is tagged with it. */
+function branchOfRun(db: Db, nodeId: string, runId: string | undefined): string | null {
+  if (runId === undefined) return null;
+  const run = db.prepare("SELECT branch FROM runs WHERE id = ? AND node_id = ?").get(runId, nodeId) as { branch: string | null } | undefined;
+  return run?.branch ?? null;
+}
+
+export function addMessage(db: Db, nodeId: string, input: { author: Actor; body: string; runId?: string | undefined }): MessageRow {
   return db.transaction(() => {
     const node = getNodeRow(db, nodeId);
-    return postMessage(db, node.id, node.stage, input.author, input.body);
+    return postMessage(db, node.id, node.stage, input.author, input.body, branchOfRun(db, node.id, input.runId));
   })();
 }
 

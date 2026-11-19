@@ -16,7 +16,7 @@ import { availableOutcomes, currentGraphs, getNodeRow, graphFor, stageIsLive, tu
 import { viewOf } from "./nodeViews.js";
 import { postMessage } from "./messages.js";
 import { addEdge } from "./edges.js";
-import { clearBranches, finishBranch } from "./branches.js";
+import { clearBranches, finishBranch, restartStepOf } from "./branches.js";
 
 /** Changes that leave a node's branches in place: waiting on a human, and coming back from that. */
 const KEEPS_BRANCHES: readonly StageChangeVia[] = ["ask", "fail", "block", "invalidate", "answer", "retry", "unblock", "restore"];
@@ -188,8 +188,8 @@ function assertRunStillOnNode(db: Db, nodeId: string, runId?: string): RunOnNode
   // A node has one run of its own, or one per branch, each of which names itself.
   const run = (
     byId
-      ? db.prepare("SELECT id, left_via, branch_id FROM runs WHERE id = ? AND node_id = ? AND status = 'running'").get(runId, nodeId)
-      : db.prepare("SELECT id, left_via, branch_id FROM runs WHERE node_id = ? AND status = 'running' AND branch_id IS NULL").get(nodeId)
+      ? db.prepare("SELECT id, left_via, branch_id, branch FROM runs WHERE id = ? AND node_id = ? AND status = 'running'").get(runId, nodeId)
+      : db.prepare("SELECT id, left_via, branch_id, branch FROM runs WHERE node_id = ? AND status = 'running' AND branch_id IS NULL").get(nodeId)
   ) as RunOnNode | undefined;
   if (byId && run === undefined) {
     throw refused(`Agent run ${runId} isn't the run on node ${nodeId}, so it can't move it`);
@@ -204,6 +204,15 @@ interface RunOnNode {
   id: string;
   left_via: string | null;
   branch_id: string | null;
+  branch: string | null;
+}
+
+/**
+ * A branch's run that asked or failed hands the whole node to a human, so the node's other runs stop
+ * now: marking them as left by the system, not the agent, means they get no grace period to exit.
+ */
+function stopOtherBranches(db: Db, nodeId: string, runId: string): void {
+  db.prepare("UPDATE runs SET left_actor = 'system' WHERE node_id = ? AND status = 'running' AND id <> ?").run(nodeId, runId);
 }
 
 function assertNotBranch(run: RunOnNode | undefined, action: string): void {
@@ -434,7 +443,7 @@ export function ask(db: Db, nodeId: string, input: { question: string; runId?: s
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
     const graph = graphFor(graphs, node);
-    assertRunStillOnNode(db, nodeId, input.runId);
+    const run = assertRunStillOnNode(db, nodeId, input.runId);
     assertAgentStage(graph, node, "ask");
     applyStageChange(db, node, {
       stage: "ask_human_question",
@@ -443,7 +452,12 @@ export function ask(db: Db, nodeId: string, input: { question: string; runId?: s
       via: "ask",
       actor: "agent",
     });
-    postMessage(db, node.id, "ask_human_question", "agent", input.question);
+    // From a branch, the answer restarts the step that asked: a whole parallel group, if it's in one.
+    if (run?.branch_id != null) {
+      stopOtherBranches(db, nodeId, run.id);
+      restartStepOf(db, graph, node, run.branch_id);
+    }
+    postMessage(db, node.id, "ask_human_question", "agent", input.question, run?.branch ?? null);
   })();
   return viewOf(db, graphs, nodeId);
 }
@@ -479,19 +493,23 @@ export function fail(
   db.transaction(() => {
     const node = getNodeRow(db, nodeId);
     const graph = graphFor(graphs, node);
-    if (input.actor === "agent" || input.runId !== undefined) assertRunStillOnNode(db, nodeId, input.runId);
+    const run = input.actor === "agent" || input.runId !== undefined ? assertRunStillOnNode(db, nodeId, input.runId) : undefined;
     assertAgentStage(graph, node, "fail");
+    const branch = run?.branch ?? null;
+    // From a branch, the whole node fails, with a reason that names the branch.
+    const reason = branch === null ? input.reason : `Branch ${branch}: ${input.reason ?? "its agent marked it failed"}`;
     applyStageChange(db, node, {
       stage: "failed",
       type: node.type,
       returnStage: node.stage,
       via: "fail",
       actor: input.actor,
-      ...(input.reason !== undefined ? { detail: { reason: input.reason } } : {}),
+      ...(reason !== undefined ? { detail: { reason } } : {}),
     });
+    if (run?.branch_id != null) stopOtherBranches(db, nodeId, run.id);
     // As with a question, an agent's reason goes on the node for the human who picks it up.
     if (input.actor === "agent" && input.reason !== undefined) {
-      postMessage(db, node.id, "failed", "agent", input.reason);
+      postMessage(db, node.id, "failed", "agent", input.reason, branch);
     }
   })();
   return viewOf(db, graphs, nodeId);

@@ -460,6 +460,12 @@ CREATE UNIQUE INDEX runs_one_running_per_node ON runs(node_id) WHERE status = 'r
 CREATE UNIQUE INDEX runs_one_running_per_branch ON runs(branch_id) WHERE status = 'running' AND branch_id IS NOT NULL;
 `,
   },
+  {
+    // The branch a message came from, such as `build/reviews/review_tests`, when a branch's run posted it.
+    sql: `
+ALTER TABLE messages ADD COLUMN branch TEXT CONSTRAINT messages_branch_not_blank CHECK (branch IS NULL OR length(branch) BETWEEN 1 AND 2000);
+`,
+  },
 ];
 
 export interface Migration extends Step {

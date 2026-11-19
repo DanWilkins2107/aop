@@ -10,7 +10,13 @@ export const context = defineTool({
     "work, and again after a split or a long task. Works on any node, such as one found by search.",
   input: {
     node_id: z.string().min(1).describe("The node to read. Your own node's ID is in your prompt."),
+    run_id: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe("Your run ID, from your prompt. On your own node, it shows the outcomes of the branch your run works, if it works one."),
   },
   annotations: { readOnlyHint: true },
-  run: ({ node_id }, api) => api.text(apiPaths.nodeAction(node_id, "context")),
+  run: ({ node_id, run_id }, api) => (run_id === undefined ? api : api.asRun(run_id)).text(apiPaths.nodeAction(node_id, "context")),
 });

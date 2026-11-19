@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { listBranches, startableBranches } from "./branches.js";
 import { currentGraphs } from "./nodeCore.js";
-import { getNodeRow, markFailed, next, retry, startableNodes, type NodeView } from "./nodes.js";
+import { addMessage, answer, ask, fail, getNodeRow, listMessages, markFailed, next, retry, startableNodes, type NodeView } from "./nodes.js";
+import { nodeContext } from "../runs/context.js";
 import { beginBranchRun, closeRun, getRun, otherRunningRuns, releaseAgentClaim } from "../runs/runs.js";
 import { harness, type Harness } from "../../../test-shared/harness.js";
 
@@ -183,5 +184,83 @@ describe("when a branch goes wrong", () => {
     const node = await h.create("checks");
     await h.post(node.id, "claim", { actor: "human" });
     expect(launch()).toEqual([]);
+  });
+});
+
+describe("tools from a branch's run", () => {
+  it("tags its messages with the branch, and shows them so in context", async () => {
+    const node = await h.create("checks");
+    launch();
+    addMessage(h.db, node.id, { author: "agent", body: "Tests look fine", runId: runs.get("run_checks/review_tests") });
+    addMessage(h.db, node.id, { author: "human", body: "Thanks" });
+    expect(listMessages(h.db, node.id).map((m) => m.branch)).toEqual(["run_checks/review_tests", null]);
+    expect(nodeContext(h.db, node.id)).toContain("[agent, run_checks, branch run_checks/review_tests, ");
+  });
+
+  it("gives context with the branch and its own outcomes", async () => {
+    const node = await h.create("dev");
+    launch();
+    const text = nodeContext(h.db, node.id, runs.get("build/implement"));
+    expect(text).toContain("Branch: build/implement, at stage implement.");
+    expect(text).toContain("- the `next` tool with outcome `done` moves your branch on to reviews");
+    expect(text).toContain("- the `next` tool with outcome `give_up` moves your branch on to done");
+    expect(text).not.toContain("split_start");
+    report(node.id, "build/implement", "done");
+    launch();
+    expect(nodeContext(h.db, node.id, runs.get("build/reviews/review_tests"))).toContain(
+      "- the `next` tool with outcome `fail` finishes your branch",
+    );
+    // Without the run, it's the node's own context.
+    expect(nodeContext(h.db, node.id)).not.toContain("Branch:");
+  });
+
+  it("asks for the whole node, stops the other branches, and re-runs the whole group once answered", async () => {
+    const node = await h.create("dev");
+    launch();
+    report(node.id, "build/implement", "done");
+    launch();
+    report(node.id, "build/reviews/review_tests", "pass");
+    const asking = runs.get("build/reviews/review_style")!;
+    ask(h.db, node.id, { question: "Which style guide?", runId: asking });
+
+    expect(getNodeRow(h.db, node.id)).toMatchObject({ stage: "ask_human_question", return_stage: "build" });
+    expect(listMessages(h.db, node.id).at(-1)).toMatchObject({ body: "Which style guide?", branch: "build/reviews/review_style" });
+    expect(getRun(h.db, asking)).toMatchObject({ left_via: "ask", left_actor: "agent" });
+    expect(branchesOf(node.id)).toMatchObject({
+      "build/reviews/review_tests": { outcome: null },
+      "build/reviews/review_style": { outcome: null },
+    });
+    // Asking doesn't count as another round.
+    expect(branchesOf(node.id)["build"]).toMatchObject({ loops: { implement: 1, reviews: 1 } });
+
+    exit(asking, "reported");
+    runs.clear();
+    answer(h.db, node.id, { answer: "Ours" });
+    expect(launch()).toEqual(["build/reviews/review_style", "build/reviews/review_tests"]);
+  });
+
+  it("stops the others without a grace period", async () => {
+    const node = await h.create("checks");
+    launch();
+    ask(h.db, node.id, { question: "?", runId: runs.get("run_checks/review_tests")! });
+    expect(getRun(h.db, runs.get("run_checks/quick_fix/implement")!)).toMatchObject({ left_via: "ask", left_actor: "system" });
+  });
+
+  it("fails the whole node with a reason naming the branch, and a retry restarts it", async () => {
+    const node = await h.create("checks");
+    launch();
+    report(node.id, "run_checks/review_tests", "done");
+    const failing = runs.get("run_checks/quick_fix/implement")!;
+    fail(h.db, node.id, { actor: "agent", reason: "No such API", runId: failing });
+
+    expect(getNodeRow(h.db, node.id)).toMatchObject({ stage: "failed", return_stage: "run_checks" });
+    expect(listMessages(h.db, node.id).at(-1)).toMatchObject({ body: "No such API", branch: "run_checks/quick_fix/implement" });
+    const event = h.db.prepare("SELECT data FROM events WHERE node_id = ? AND kind = 'stage_changed' ORDER BY rowid DESC").get(node.id) as { data: string };
+    expect(JSON.parse(event.data)).toMatchObject({ reason: "Branch run_checks/quick_fix/implement: No such API" });
+
+    exit(failing, "reported");
+    runs.clear();
+    retry(h.db, node.id);
+    expect(launch()).toEqual(["run_checks/quick_fix/implement"]);
   });
 });

@@ -6,7 +6,7 @@ import type { Db } from "../db/db.js";
 import { ConfigError } from "../shared/errors.js";
 import { relative } from "node:path";
 import { canonicalPath, getImprovement, listProposals } from "../improvements/improvements.js";
-import { getNode, graphFor, graphsOf, listLinks, listMessages, type NodeRow } from "../nodes/nodes.js";
+import { branchOfRun, currentGraphs, getNode, graphFor, graphsOf, listLinks, listMessages, type NodeRow } from "../nodes/nodes.js";
 import { isWithin } from "../shared/paths.js";
 import { getProject } from "../projects/projects.js";
 
@@ -63,8 +63,17 @@ export function nodeContext(db: Db, nodeId: string, runId?: string): string {
   const node = getNode(db, nodeId);
   const where = node.kind === "improvement" ? "none. This is an improvement to how agents work" : getProject(db, node.project_id).name;
 
+  const branch = runBranch(db, node, runId);
   const moves: string[] = [];
-  if (node.stage === "splitting") {
+  if (branch !== undefined) {
+    moves.push(
+      ...branch.moves.map(({ outcome, target }) =>
+        `- the \`next\` tool with outcome \`${outcome}\` ${target === null ? "finishes your branch" : `moves your branch on to ${target}`}`,
+      ),
+      "- the `ask` tool asks a human, and your step starts again with the answer. In a parallel group, the whole group starts again",
+      "- the `fail` tool with a reason stops every branch and marks this node failed, only when the work can't be done and asking won't help",
+    );
+  } else if (node.stage === "splitting") {
     moves.push(
       `A split is in progress, begun from ${node.return_stage}. Don't use the \`split_start\` tool again.`,
       "Any children listed above already exist, so carry on from them rather than recreating them.",
@@ -76,14 +85,16 @@ export function nodeContext(db: Db, nodeId: string, runId?: string): string {
   } else {
     moves.push(`This node is at ${node.stage}, where no agent tool moves it.`);
   }
-  if (node.turn === "agent") {
+  if (node.turn === "agent" && branch === undefined) {
     moves.push(
       "- the `ask` tool asks a human, and this stage starts again with the answer",
       "- the `fail` tool with a reason marks this node failed, only when the work can't be done and asking won't help",
     );
   }
 
-  const messages = listMessages(db, nodeId).map((m) => `[${m.author}, ${m.stage}, ${m.created_at}]\n${m.body}`);
+  const messages = listMessages(db, nodeId).map(
+    (m) => `[${m.author}, ${m.stage}${m.branch === null ? "" : `, branch ${m.branch}`}, ${m.created_at}]\n${m.body}`,
+  );
 
   return [
     `# ${node.title}`,
@@ -93,6 +104,9 @@ export function nodeContext(db: Db, nodeId: string, runId?: string): string {
     `Project: ${where}`,
     `Type: ${node.type}`,
     `Stage: ${node.stage}`,
+    ...(branch !== undefined
+      ? [`Branch: ${branch.path}, at stage ${branch.stage}. Your run works this branch only; your messages are tagged with it.`]
+      : []),
     ...(node.invalidation_reason !== null ? [`Invalidated because: ${node.invalidation_reason}`] : []),
     ...(node.invalidated_by_parent && node.stage !== "invalidated" ? ["Invalidated by a parent."] : []),
     ...(node.held ? ["Held: a parent is still splitting."] : []),
@@ -110,6 +124,14 @@ export function nodeContext(db: Db, nodeId: string, runId?: string): string {
   ]
     .join("\n")
     .trimEnd();
+}
+
+/** The branch `runId` works on this node, if it's one of the node's branch runs. */
+function runBranch(db: Db, node: NodeRow, runId: string | undefined): ReturnType<typeof branchOfRun> {
+  if (runId === undefined) return undefined;
+  const run = db.prepare("SELECT branch_id FROM runs WHERE id = ? AND node_id = ? AND status = 'running'").get(runId, node.id) as { branch_id: string | null } | undefined;
+  if (run?.branch_id == null) return undefined;
+  return branchOfRun(db, graphFor(currentGraphs(), node), node, run.branch_id);
 }
 
 const LOAD_SKILLS =
