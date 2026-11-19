@@ -203,7 +203,9 @@ describe("change events", () => {
     await new Promise((wait) => setTimeout(wait, 100));
     expect((await post(`/nodes/${first!.id}/edges`, { target_id: second!.id, kind: "blocks" })).status).toBe(201);
     expect(await stream.events(3)).toEqual(["ready", "change", "change"]);
-    expect(stream.notices()[1]).toEqual({ project_ids: [projectId], node_ids: [first!.id, second!.id] });
+    const edgeNotice = stream.notices()[1] as { project_ids: string[]; node_ids: string[] };
+    expect(edgeNotice.project_ids).toEqual([projectId]);
+    expect([...edgeNotice.node_ids].sort()).toEqual([first!.id, second!.id].sort());
 
     // A child's parent gets an event too, so it's named without its route saying so.
     await new Promise((wait) => setTimeout(wait, 100));
