@@ -2,13 +2,11 @@
 // names and their agent stages' prompts. Found without needing the config to be valid, so a broken
 // one can be fixed from the UI too.
 
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import type { ConfigFileKind, ConfigFileView, SaveConfigFileRequest } from "../../shared/config/types.js";
-import type { Db } from "../db/db.js";
-import { listProjects } from "../projects/projects.js";
 import { ApiError, badRequest, refused } from "../shared/errors.js";
-import { newId } from "../db/records.js";
 import { aopHome, configPath, isWithin, resolveConfigPath } from "../shared/paths.js";
 import { parseYamlFile } from "../shared/yamlFile.js";
 import { loadStagesFile, promptFiles, stagesSourceProblems } from "../stages/stages.js";
@@ -81,23 +79,29 @@ function problemsIn(file: EditableFile, content: string): string[] {
   return [];
 }
 
+/** A project's name and folder, so a save can refuse a file inside it. */
+export interface ProjectFolder {
+  name: string;
+  repo_path: string | null;
+}
+
 /**
  * Saves one of those files, if it still holds what was shown (`base`) and the new contents are valid
  * on their own. Never a file inside a project's folder.
  */
-export function saveConfigFile(db: Db, input: SaveConfigFileRequest, home: string = aopHome()): ConfigFileView {
+export function saveConfigFile(input: SaveConfigFileRequest, projects: ProjectFolder[], home: string = aopHome()): ConfigFileView {
   const path = resolve(input.path);
   const file = editableFiles(home).find((candidate) => candidate.path === path);
   if (file === undefined) {
     throw new ApiError(400, "path_not_allowed", `${path} isn't config.yaml, a process file it names or one of their prompts`);
   }
-  const project = listProjects(db).find((p) => p.repo_path !== null && isWithin(path, p.repo_path));
+  const project = projects.find((p) => p.repo_path !== null && isWithin(path, p.repo_path));
   if (project !== undefined) throw refused(`${path} is in project "${project.name}"'s folder, which AOP never writes to`);
   if (read(path) !== input.base) throw refused(`${path} has changed since it was shown. Nothing was saved. Reload it, then edit again`);
   const problems = problemsIn(file, input.content);
   if (problems.length > 0) throw badRequest(`Not saved: ${path} has problems`, problems);
 
-  const temp = `${path}.aop-${newId()}.tmp`;
+  const temp = `${path}.aop-${randomUUID()}.tmp`;
   try {
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(temp, input.content, { flag: "wx" });
