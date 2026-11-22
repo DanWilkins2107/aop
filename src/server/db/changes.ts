@@ -10,7 +10,7 @@ export const EVERYTHING: ChangeNotice = { project_ids: null, node_ids: null };
 const BURST_MS = 40;
 
 /** What two notices touched between them. */
-function mergeNotices(a: ChangeNotice, b: ChangeNotice): ChangeNotice {
+export function mergeNotices(a: ChangeNotice, b: ChangeNotice): ChangeNotice {
   const union = (x: string[] | null, y: string[] | null) => (x === null || y === null ? null : [...new Set([...x, ...y])]);
   return { project_ids: union(a.project_ids, b.project_ids), node_ids: union(a.node_ids, b.node_ids) };
 }
@@ -23,6 +23,26 @@ export function nodesNotice(db: Db, ...nodeIds: string[]): ChangeNotice {
     .all(JSON.stringify(ids)) as { project_id: string }[];
   if (rows.length < ids.length) return EVERYTHING;
   return { project_ids: [...new Set(rows.map((row) => row.project_id))], node_ids: ids };
+}
+
+/** Where the events log ends now, for `eventsNotice` to count from. */
+export function eventsMark(db: Db): number {
+  return (db.prepare("SELECT COALESCE(MAX(rowid), 0) AS mark FROM events").get() as { mark: number }).mark;
+}
+
+/**
+ * A change to every node an event since `mark` was appended to, and to the other end of each edge
+ * added or removed. Null if there were none. Every write appends its events, so a write's notice
+ * comes from them and no route has to list what it touched.
+ */
+export function eventsNotice(db: Db, mark: number): ChangeNotice | null {
+  const rows = db
+    .prepare(
+      `SELECT node_id AS id FROM events WHERE rowid > ?
+       UNION SELECT json_extract(data, '$.target_id') FROM events WHERE rowid > ? AND kind IN ('edge_added', 'edge_removed')`,
+    )
+    .all(mark, mark) as { id: string }[];
+  return rows.length === 0 ? null : nodesNotice(db, ...rows.map((row) => row.id));
 }
 
 export interface ChangeFeedOptions {

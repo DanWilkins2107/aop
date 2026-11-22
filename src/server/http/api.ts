@@ -15,7 +15,7 @@ import { apiPaths } from "../../shared/http/apiPaths.js";
 import { API_PREFIX } from "../../shared/http/apiPrefix.js";
 import type { ApiErrorBody, ApiErrorCode } from "../../shared/http/types.js";
 import { withConfigSnapshot } from "../config/config.js";
-import { ChangeFeed, EVERYTHING, nodesNotice, type ChangeNotice } from "../db/changes.js";
+import { ChangeFeed, EVERYTHING, eventsMark, eventsNotice, mergeNotices, type ChangeNotice } from "../db/changes.js";
 import type { Db } from "../db/db.js";
 import { openSteerSessionNode } from "../nodes/claims.js";
 import type { Orchestrator } from "../runs/orchestrator.js";
@@ -25,7 +25,7 @@ import { improvementRoutes } from "./improvementRoutes.js";
 import { nodeRoutes } from "./nodeRoutes.js";
 import { projectRoutes } from "./projectRoutes.js";
 import { type RouteContext, runIdOf } from "./routeContext.js";
-import { at, routes } from "./routes.js";
+import { at } from "./routes.js";
 import { runRoutes } from "./runRoutes.js";
 import { stageRoutes } from "./stageRoutes.js";
 
@@ -92,9 +92,10 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
     return;
   });
 
-  /** What each write touched, which its route records for the change notice. None recorded means anything. */
+  /** What each write touched beyond the nodes its events name, which its route records. */
   const touched = new WeakMap<Request, ChangeNotice>();
-  const isWrite = (c: Context) => !["GET", "HEAD"].includes(c.req.method) && c.res.status < 400;
+  const isRead = (c: Context) => ["GET", "HEAD"].includes(c.req.method);
+  const isWrite = (c: Context) => !isRead(c) && c.res.status < 400;
   // Some routes serve what agents and people wrote as text/plain (a node's context, a run's log).
   // Browsers must take the type as given, so none of it can ever run as a page on this origin.
   app.use(`${API_PREFIX}/*`, async (c, proceed) => {
@@ -120,30 +121,26 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
     const runId = runIdOf(c);
     if (
       runId !== undefined &&
-      !["GET", "HEAD"].includes(c.req.method) &&
+      !isRead(c) &&
       getRun(db, runId)?.status !== "running" &&
       openSteerSessionNode(db, runId) === undefined
     ) {
       throw refused(`Agent run ${runId} has ended, so it can't change anything. It should exit`);
     }
+    // Events other writes append meanwhile count too: a page refetching once more is harmless.
+    const mark = isRead(c) ? 0 : eventsMark(db);
     await proceed();
-    if (isWrite(c)) changes.notify(touched.get(c.req.raw) ?? EVERYTHING);
+    if (!isWrite(c)) return;
+    const notices = [touched.get(c.req.raw), eventsNotice(db, mark)].filter((notice) => notice != null);
+    // A write that appended no event and recorded nothing may have changed anything.
+    changes.notify(notices.length === 0 ? EVERYTHING : notices.reduce(mergeNotices));
   });
 
-  const touchedNodes = (...nodeIds: string[]): ChangeNotice => nodesNotice(db, ...nodeIds);
   /** A project's own row: its nodes' messages, events, links and edges are untouched unless `nodeIds` says. */
   const touchedProject = (projectId: string, nodeIds: string[] | null = []): ChangeNotice => ({
     project_ids: [projectId],
     node_ids: nodeIds,
   });
-
-  // A write to a node touches that node, unless its route recorded more.
-  const nodeWrite = async (c: Context, proceed: () => Promise<void>) => {
-    await proceed();
-    if (isWrite(c) && !touched.has(c.req.raw)) touched.set(c.req.raw, touchedNodes(c.req.param("id") ?? ""));
-  };
-  app.use(routes.node, nodeWrite);
-  app.use(`${routes.node}/*`, nodeWrite);
 
   app.onError((error, c) => {
     if (error instanceof ApiError) return errorResponse(c, error.status, error.code, error.message, error.details);
@@ -185,7 +182,6 @@ export function createApp(db: Db, options: AppOptions = {}): Hono {
     orchestrator,
     maybeOrchestrator: options.orchestrator,
     touch: (c, notice) => touched.set(c.req.raw, notice),
-    touchedNodes,
     touchedProject,
   };
   projectRoutes(context);

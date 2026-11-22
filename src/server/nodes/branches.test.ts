@@ -3,7 +3,8 @@ import { listBranches, startableBranches } from "./branches.js";
 import { currentGraphs } from "./nodeCore.js";
 import { addMessage, answer, ask, fail, getNodeRow, listMessages, markFailed, next, retry, startableNodes, type NodeView } from "./nodes.js";
 import { nodeContext } from "../runs/context.js";
-import { beginBranchRun, closeRun, getRun, otherRunningRuns, releaseAgentClaim } from "../runs/runs.js";
+import { beginBranchRun, closeRun, getRun, otherRunningRuns } from "../runs/runs.js";
+import { releaseAgentClaim } from "./claims.js";
 import { harness, type Harness } from "../../../test-shared/harness.js";
 
 const PROMPTS = ["implement", "review_tests", "review_style"];

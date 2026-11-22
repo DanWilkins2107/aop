@@ -13,7 +13,9 @@ A helper that tests in two or more folders use goes in a `test-shared/` folder, 
 
 `npm run typecheck` also runs oxlint and knip (unused files, exports and dependencies). They cover a folder once its layout is settled: take the folder out of `ignorePatterns` in `.oxlintrc.json` and `ignore` in `knip.json`, and fix what they find.
 
-The same lint caps size and complexity: 300 lines a file, 60 a function, complexity 10, depth 3, 4 parameters. `.tsx` functions get 100 lines; tests get 500 a file and no function cap. A folder that needs other numbers gets an `overrides` entry in `.oxlintrc.json`. `migrations.ts` has no file cap: it's append-only, so it only grows. Split code that breaks a limit rather than loosening it.
+Lint caps size and complexity everywhere, the ignored folders included: 300 lines a file, 60 a function, complexity 10, depth 3, 4 parameters. `.tsx` functions get 100 lines; tests get 500 a file and no function cap. They live in `.oxlintrc.caps.json`. `migrations.ts` has no file cap: it's append-only, so it only grows. Files that were already over a cap are parked there at their size then: lower a parked number when the file shrinks, and never raise one or park a new file. Split code that breaks a limit rather than loosening it.
+
+Every `UPDATE` to a column with an owner goes through its owning file, such as `nodes.claimed_by` through `claims.ts`. `meta/columnOwnerGate.meta.test.ts` lists the owners.
 
 ## src/shared
 What two or more of `src/server`, `src/cli`, `src/mcp` and `web/src` use. Tests don't count.

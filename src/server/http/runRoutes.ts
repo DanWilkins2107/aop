@@ -14,14 +14,10 @@ import { at, routes } from "./routes.js";
 const TAIL_LINES = 20;
 const MAX_TAIL_LINES = 200;
 
-export function runRoutes({ app, db, orchestrator, touch, touchedNodes }: RouteContext): void {
+export function runRoutes({ app, db, orchestrator }: RouteContext): void {
   app.get(at(apiPaths.agents), async (c) => c.json(await orchestrator().listAgents()));
   app.post(at(apiPaths.reap), async (c) => c.json(await orchestrator().reap()));
-  app.post(routes.run("stop"), async (c) => {
-    const node = await orchestrator().stopRun(c.req.param("id"));
-    touch(c, touchedNodes(node.id));
-    return c.json(node);
-  });
+  app.post(routes.run("stop"), async (c) => c.json(await orchestrator().stopRun(c.req.param("id"))));
   app.get(routes.nodeAction("runs"), (c) => {
     const node = getNodeRow(db, c.req.param("id"));
     return c.json(listRuns(db, node.id));
