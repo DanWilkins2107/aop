@@ -10,9 +10,7 @@ export function postMessage(
   db: Db,
   nodeId: string,
   stage: string,
-  author: Actor,
-  body: string,
-  branch: string | null = null,
+  { author, body, branch = null }: { author: Actor; body: string; branch?: string | null },
 ): MessageRow {
   const message: MessageRow = { id: newId(), created_at: now(), node_id: nodeId, stage, author, body, branch };
   db.prepare(
@@ -32,7 +30,7 @@ function branchOfRun(db: Db, nodeId: string, runId: string | undefined): string 
 export function addMessage(db: Db, nodeId: string, input: { author: Actor; body: string; runId?: string | undefined }): MessageRow {
   return db.transaction(() => {
     const node = getNodeRow(db, nodeId);
-    return postMessage(db, node.id, node.stage, input.author, input.body, branchOfRun(db, node.id, input.runId));
+    return postMessage(db, node.id, node.stage, { author: input.author, body: input.body, branch: branchOfRun(db, node.id, input.runId) });
   })();
 }
 

@@ -16,7 +16,7 @@ import { availableOutcomes, currentGraphs, getNodeRow, graphFor, stageIsLive, tu
 import { viewOf } from "./nodeViews.js";
 import { postMessage } from "./messages.js";
 import { addEdge } from "./edges.js";
-import { clearBranches, finishBranch, restartStepOf } from "./branches.js";
+import { branchReason, clearBranches, finishBranch, restartAskingBranch, stopOtherBranches } from "./branches.js";
 
 /** Changes that leave a node's branches in place: waiting on a human, and coming back from that. */
 const KEEPS_BRANCHES: readonly StageChangeVia[] = ["ask", "fail", "block", "invalidate", "answer", "retry", "unblock", "restore"];
@@ -193,14 +193,6 @@ interface RunOnNode {
   left_via: string | null;
   branch_id: string | null;
   branch: string | null;
-}
-
-/**
- * A branch's run that asked or failed hands the whole node to a human, so the node's other runs stop
- * now: marking them as left by the system, not the agent, means they get no grace period to exit.
- */
-function stopOtherBranches(db: Db, nodeId: string, runId: string): void {
-  db.prepare("UPDATE runs SET left_actor = 'system' WHERE node_id = ? AND status = 'running' AND id <> ?").run(nodeId, runId);
 }
 
 function assertNotBranch(run: RunOnNode | undefined, action: string): void {
@@ -433,19 +425,10 @@ export function ask(db: Db, nodeId: string, input: { question: string; runId?: s
     const graph = graphFor(graphs, node);
     const run = assertRunStillOnNode(db, nodeId, input.runId);
     assertAgentStage(graph, node, "ask");
-    applyStageChange(db, node, {
-      stage: "ask_human_question",
-      type: node.type,
-      returnStage: node.stage,
-      via: "ask",
-      actor: "agent",
-    });
+    applyStageChange(db, node, { stage: "ask_human_question", type: node.type, returnStage: node.stage, via: "ask", actor: "agent" });
     // From a branch, the answer restarts the step that asked: a whole parallel group, if it's in one.
-    if (run?.branch_id != null) {
-      stopOtherBranches(db, nodeId, run.id);
-      restartStepOf(db, graph, node, run.branch_id);
-    }
-    postMessage(db, node.id, "ask_human_question", "agent", input.question, run?.branch ?? null);
+    restartAskingBranch(db, graph, node, run);
+    postMessage(db, node.id, "ask_human_question", { author: "agent", body: input.question, branch: run?.branch ?? null });
   })();
   return viewOf(db, graphs, nodeId);
 }
@@ -460,7 +443,7 @@ export function answer(db: Db, nodeId: string, input: { answer: string }): NodeV
       throw refused(`Can't answer: the node is at "${node.stage}", not ask_human_question`);
     }
     const placement = returnPlacement(db, graph, node, node.return_stage);
-    postMessage(db, node.id, "ask_human_question", "human", input.answer);
+    postMessage(db, node.id, "ask_human_question", { author: "human", body: input.answer });
     applyStageChange(db, node, { ...placement, type: node.type, via: "answer", actor: "human" });
   })();
   return viewOf(db, graphs, nodeId);
@@ -483,9 +466,8 @@ export function fail(
     const graph = graphFor(graphs, node);
     const run = input.actor === "agent" || input.runId !== undefined ? assertRunStillOnNode(db, nodeId, input.runId) : undefined;
     assertAgentStage(graph, node, "fail");
-    const branch = run?.branch ?? null;
     // From a branch, the whole node fails, with a reason that names the branch.
-    const reason = branch === null ? input.reason : `Branch ${branch}: ${input.reason ?? "its agent marked it failed"}`;
+    const reason = branchReason(run?.branch ?? null, input.reason);
     applyStageChange(db, node, {
       stage: "failed",
       type: node.type,
@@ -494,10 +476,10 @@ export function fail(
       actor: input.actor,
       ...(reason !== undefined ? { detail: { reason } } : {}),
     });
-    if (run?.branch_id != null) stopOtherBranches(db, nodeId, run.id);
+    stopOtherBranches(db, nodeId, run);
     // As with a question, an agent's reason goes on the node for the human who picks it up.
     if (input.actor === "agent" && input.reason !== undefined) {
-      postMessage(db, node.id, "failed", "agent", input.reason, branch);
+      postMessage(db, node.id, "failed", { author: "agent", body: input.reason, branch: run?.branch ?? null });
     }
   })();
   return viewOf(db, graphs, nodeId);
@@ -584,7 +566,7 @@ export function block(db: Db, nodeId: string, input: { reason: string; actor: Ac
       actor: "human",
       detail: { reason: input.reason },
     });
-    postMessage(db, node.id, "externally_blocked", "human", input.reason);
+    postMessage(db, node.id, "externally_blocked", { author: "human", body: input.reason });
   })();
   return viewOf(db, graphs, nodeId);
 }

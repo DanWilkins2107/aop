@@ -91,23 +91,25 @@ export function clearBranches(db: Db, nodeId: string): void {
   db.prepare("DELETE FROM branches WHERE node_id = ?").run(nodeId);
 }
 
+/** The flow a branch sits under (null for the node itself), and the step that flow is on. */
+function placeOf(db: Db, graph: StageGraph, branch: BranchRow, node: { type: string; stage: string }) {
+  const flow = branch.parent_id === null ? null : (getBranch(db, branch.parent_id) as BranchRow);
+  const type = flow?.type ?? node.type;
+  const stage = flow?.stage ?? node.stage;
+  return { flow, type, stage, step: stepOf(graph, type, stage) };
+}
+
 /**
  * The outcomes a stage branch can finish with, each with the stage its flow moves on to, or null when
  * it just finishes the branch for its group: its group's, or its flow's stage's own, less those into a
  * stage already entered its `max_loops` times.
  */
-function branchMoves(db: Db, graph: StageGraph, branch: BranchRow, nodeType: string, nodeStage: string): { outcome: string; target: string | null }[] {
-  const flow = branch.parent_id === null ? null : (getBranch(db, branch.parent_id) as BranchRow);
-  const type = flow?.type ?? nodeType;
-  const stage = flow?.stage ?? nodeStage;
-  const step = stepOf(graph, type, stage);
-  if (step.kind === "parallel" || flow === null) {
-    const outcomes = step.kind === "parallel" ? groupOutcomes(step.gate) : [...(graph.types.get(type)?.stages.get(stage)?.keys() ?? [])];
-    return outcomes.map((outcome) => ({ outcome, target: null }));
-  }
-  return [...(graph.types.get(type)?.stages.get(stage) ?? [])]
-    .filter(([, target]) => !loopsRunOut(graph, flow, target))
-    .map(([outcome, target]) => ({ outcome, target }));
+function branchMoves(db: Db, graph: StageGraph, branch: BranchRow, node: { type: string; stage: string }): { outcome: string; target: string | null }[] {
+  const { flow, type, stage, step } = placeOf(db, graph, branch, node);
+  if (step.kind === "parallel") return groupOutcomes(step.gate).map((outcome) => ({ outcome, target: null }));
+  const next = [...(graph.types.get(type)?.stages.get(stage) ?? [])];
+  if (flow === null) return next.map(([outcome]) => ({ outcome, target: null }));
+  return next.filter(([, target]) => !loopsRunOut(graph, flow, target)).map(([outcome, target]) => ({ outcome, target }));
 }
 
 /** What a branch's run is working, for its `context` text. Undefined once the branch is gone. */
@@ -119,7 +121,7 @@ export function branchOfRun(
 ): { path: string; stage: string; moves: { outcome: string; target: string | null }[] } | undefined {
   const branch = getBranch(db, branchId);
   if (branch === undefined || branch.node_id !== node.id) return undefined;
-  return { path: branch.path, stage: branch.stage, moves: branchMoves(db, graph, branch, node.type, node.stage) };
+  return { path: branch.path, stage: branch.stage, moves: branchMoves(db, graph, branch, node) };
 }
 
 /** Whether `flow` has entered `target` as many times as its `max_loops` allows. */
@@ -148,7 +150,7 @@ export function finishBranch(
   const branch = getBranch(db, input.branchId);
   if (branch === undefined || branch.node_id !== node.id) throw refused("This branch has already moved on");
   if (branch.outcome !== null) throw refused(`Branch ${branch.path} has already finished with "${branch.outcome}"`);
-  const outcomes = branchMoves(db, graph, branch, node.type, node.stage).map(({ outcome }) => outcome);
+  const outcomes = branchMoves(db, graph, branch, node).map(({ outcome }) => outcome);
   if (!outcomes.includes(input.outcome)) {
     throw refused(`Outcome "${input.outcome}" isn't available on branch ${branch.path}`, { available_outcomes: outcomes });
   }
@@ -158,10 +160,7 @@ export function finishBranch(
 /** Records a branch's outcome, then whatever that finishes above it. */
 function settle(db: Db, graph: StageGraph, node: { id: string; type: string; stage: string }, branch: BranchRow): string | null {
   db.prepare("UPDATE branches SET outcome = ? WHERE id = ?").run(branch.outcome, branch.id);
-  const flow = branch.parent_id === null ? null : (getBranch(db, branch.parent_id) as BranchRow);
-  const type = flow?.type ?? node.type;
-  const stage = flow?.stage ?? node.stage;
-  const step = stepOf(graph, type, stage);
+  const { flow, step } = placeOf(db, graph, branch, node);
 
   let outcome = branch.outcome as string;
   if (step.kind === "parallel") {
@@ -193,17 +192,36 @@ function moveFlow(db: Db, graph: StageGraph, flow: BranchRow, outcome: string): 
 }
 
 /**
- * Sets the step a stage branch is in back to its start, for when that branch's run asked a human: a
- * parallel group re-runs whole, with every branch starting afresh. A lone stage needs nothing, as it
- * is still unfinished. Loop counts don't change. Call inside a transaction.
+ * A branch's run that asked or failed hands the whole node to a human, so the node's other runs stop
+ * now: marking them as left by the system, not the agent, means they get no grace period to exit.
  */
-export function restartStepOf(db: Db, graph: StageGraph, node: { id: string; type: string; stage: string }, branchId: string): void {
-  const branch = getBranch(db, branchId);
+export function stopOtherBranches(db: Db, nodeId: string, run: { id: string; branch_id: string | null } | undefined): void {
+  if (run?.branch_id == null) return;
+  db.prepare("UPDATE runs SET left_actor = 'system' WHERE node_id = ? AND status = 'running' AND id <> ?").run(nodeId, run.id);
+}
+
+/** A failure reason from a branch's run names the branch, as the whole node fails. */
+export function branchReason(branch: string | null, reason: string | undefined): string | undefined {
+  return branch === null ? reason : `Branch ${branch}: ${reason ?? "its agent marked it failed"}`;
+}
+
+/**
+ * For a branch's run that asked a human (any other run is left alone): stops the node's other runs, and sets the step the branch is
+ * in back to its start. A parallel group re-runs whole, with every branch starting afresh; a lone
+ * stage needs nothing, as it is still unfinished. Loop counts don't change. Call inside a transaction.
+ */
+export function restartAskingBranch(
+  db: Db,
+  graph: StageGraph,
+  node: { id: string; type: string; stage: string },
+  run: { id: string; branch_id: string | null } | undefined,
+): void {
+  if (run?.branch_id == null) return;
+  stopOtherBranches(db, node.id, run);
+  const branch = getBranch(db, run.branch_id);
   if (branch === undefined) return;
-  const flow = branch.parent_id === null ? null : (getBranch(db, branch.parent_id) as BranchRow);
-  const type = flow?.type ?? node.type;
-  const stage = flow?.stage ?? node.stage;
-  if (stepOf(graph, type, stage).kind !== "parallel") return;
+  const { flow, stage, step } = placeOf(db, graph, branch, node);
+  if (step.kind !== "parallel") return;
   db.prepare("DELETE FROM branches WHERE node_id = ? AND parent_id IS ?").run(node.id, flow?.id ?? null);
   if (flow === null) startBranches(db, graph, node);
   else enter(db, graph, { nodeId: node.id, flow, path: flow.path }, stage);
