@@ -1,6 +1,7 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { DEFAULT_PORT } from "./src/shared/http/defaultPort.js";
+import { overridesPlugin } from "./web/overridesPlugin.js";
 
 const DEV_PORT = 5173;
 const server = `http://127.0.0.1:${process.env["AOP_PORT"] ?? DEFAULT_PORT}`;
@@ -8,7 +9,7 @@ const ownOrigins = [`http://localhost:${DEV_PORT}`, `http://127.0.0.1:${DEV_PORT
 
 export default defineConfig({
   root: "web",
-  plugins: [react()],
+  plugins: [react(), overridesPlugin()],
   build: { outDir: "../dist/web", emptyOutDir: true },
   server: {
     host: "127.0.0.1",

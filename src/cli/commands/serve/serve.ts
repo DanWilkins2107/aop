@@ -1,9 +1,9 @@
 import type { Command } from "../../shared/command.js";
 import { usageError } from "../../shared/errors.js";
 
-const usage = ["aop serve [--port <port>]"];
+const usage = ["aop serve [--port <port>] [--agents <n>]"];
 
-/** Runs the server in this process. Before any command loads, `main.ts` rebuilds it if its sources are newer, with `selfBuild.ts`. */
+/** Runs the server in this process. Before any command loads, `main.ts` rebuilds it, with its extensions, using `selfBuild.ts`. */
 export const serve: Command = {
   name: "serve",
   usage,

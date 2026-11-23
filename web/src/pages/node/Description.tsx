@@ -2,10 +2,17 @@ import { useState } from "react";
 import type { NodeView } from "../../../../src/shared/nodes/types.js";
 import { FormError, useFormError } from "../../components/FormError.js";
 import { Markdown } from "../../components/Markdown.js";
+import { extendable } from "../../extendable/extendable.js";
 import { api } from "../../lib/api.js";
 import { useAction } from "../../lib/useAction.js";
 
-export function Description({ node, reload }: { node: NodeView; reload: () => Promise<void> }) {
+export const Description = extendable("aop.node.Description", 1, function Description({
+  node,
+  reload,
+}: {
+  node: NodeView;
+  reload: () => Promise<void>;
+}) {
   // Null while reading, so that live updates show through unless there's a draft to protect.
   const [draft, setDraft] = useState<string | null>(null);
   const { busy, error, run } = useAction(reload);
@@ -55,4 +62,4 @@ export function Description({ node, reload }: { node: NodeView; reload: () => Pr
       <FormError error={error} id={errorId} />
     </section>
   );
-}
+});

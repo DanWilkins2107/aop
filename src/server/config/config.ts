@@ -23,6 +23,8 @@ const settingsSchema = z.strictObject({
   project_stages: z.record(z.string().min(1), z.string().min(1)).optional(),
   improvement_stages: z.string().min(1).optional(),
   improvements_path: z.string().trim().min(1).default("./skills"),
+  // Compiled in by `aop serve`, which checks them. The server never reads them.
+  extensions: z.array(z.string().trim().min(1)).optional(),
 });
 
 type Settings = z.infer<typeof settingsSchema>;

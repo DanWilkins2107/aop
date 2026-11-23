@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode } from "react";
+import { extendable } from "../extendable/extendable.js";
 import { type Block, type Inline, parseMarkdown } from "../lib/markdown.js";
 
 function renderInline(nodes: Inline[]): ReactNode {
@@ -54,9 +55,15 @@ function renderBlock(block: Block, index: number): ReactNode {
  * Renders markdown as React text nodes only, so HTML in the source is shown, never run.
  * `inline` puts a single paragraph in a span, so a one-line reason can follow other text on its line.
  */
-export function Markdown({ source, inline = false }: { source: string; inline?: boolean }) {
+export const Markdown = extendable("aop.common.Markdown", 1, function Markdown({
+  source,
+  inline = false,
+}: {
+  source: string;
+  inline?: boolean;
+}) {
   const blocks = parseMarkdown(source);
   const only = blocks.length === 1 ? blocks[0] : undefined;
   if (inline && only?.kind === "paragraph") return <span className="markdown">{renderInline(only.children)}</span>;
   return <div className="markdown">{blocks.map(renderBlock)}</div>;
-}
+});

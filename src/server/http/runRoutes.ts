@@ -3,20 +3,29 @@
 import { apiPaths } from "../../shared/http/apiPaths.js";
 import type { LogTail } from "../../shared/runs/types.js";
 import { listBranchViews } from "../nodes/branchViews.js";
+import { EVERYTHING } from "../db/changes.js";
 import { getNodeRow } from "../nodes/nodes.js";
 import { readableLines } from "../runs/agentOutput.js";
 import { readLogEnd, readRunLog } from "../runs/runLog.js";
 import { getRun, listRuns } from "../runs/runs.js";
 import { badRequest, notFound } from "../shared/errors.js";
-import type { RouteContext } from "./routeContext.js";
+import { agentLimitBody } from "./requests.js";
+import { readBody, type RouteContext } from "./routeContext.js";
 import { at, routes } from "./routes.js";
 
 /** How much of a run's log the node page shows. */
 const TAIL_LINES = 20;
 const MAX_TAIL_LINES = 200;
 
-export function runRoutes({ app, db, orchestrator }: RouteContext): void {
+export function runRoutes({ app, db, orchestrator, touch }: RouteContext): void {
   app.get(at(apiPaths.agents), async (c) => c.json(await orchestrator().listAgents()));
+  app.get(at(apiPaths.agentLimit), (c) => c.json(orchestrator().agentLimit()));
+  app.put(at(apiPaths.agentLimit), async (c) => {
+    const { limit } = await readBody(c, agentLimitBody);
+    // Every page that shows the limit refetches, in every open tab.
+    touch(c, EVERYTHING);
+    return c.json(orchestrator().setAgentLimit(limit));
+  });
   app.post(at(apiPaths.reap), async (c) => c.json(await orchestrator().reap()));
   app.post(routes.run("stop"), async (c) => c.json(await orchestrator().stopRun(c.req.param("id"))));
   app.get(routes.nodeAction("runs"), (c) => {

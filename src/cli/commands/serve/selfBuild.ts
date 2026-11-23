@@ -1,25 +1,17 @@
-// `aop serve` from a git checkout rebuilds itself when the sources are newer than the build, so
-// updating AOP is `git pull` and a restart. An installed package has no sources, and skips all of it.
+// `aop serve` from a git checkout rebuilds itself, with the extensions `config.yaml` lists compiled
+// in, every time, so updating AOP or an extension is a restart. An installed package has no sources,
+// so it can't, and refuses to serve extensions.
 
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { aopHome } from "../../../server/shared/paths.js";
 import { noCwdLookupEnv } from "../../../shared/os/noCwdLookupEnv.js";
+import { buildExtensions } from "./extensionBuild.js";
+import { readExtensions } from "./extensions.js";
 
 /** Set in the re-run process, so it serves instead of checking again. */
 const SELF_BUILT_ENV = "AOP_SELF_BUILT";
-
-/** Everything the build reads, besides `src/` and `web/`. */
-const BUILD_INPUTS = ["package.json", "package-lock.json", "tsconfig.json", "tsconfig.build.json", "vite.config.ts", "docs/roadmap.md"];
-/** What the build writes. The oldest of them is when the last whole build finished. */
-const BUILD_OUTPUTS = ["dist/cli/main.js", "dist/server/main.js", "dist/web/index.html"];
-
-export interface BuildCheck {
-  /** `package-lock.json` asks for packages `node_modules` doesn't have. */
-  install: boolean;
-  /** Why the build is out of date, or null if it isn't. */
-  build: string | null;
-}
 
 /** The checkout `main.js` was built from, or null if it isn't running from a checkout's `dist/`. */
 export function sourceCheckout(mainFile: string): string | null {
@@ -27,31 +19,6 @@ export function sourceCheckout(mainFile: string): string | null {
   if (basename(dist) !== "dist") return null;
   const root = dirname(dist);
   return existsSync(join(root, "src")) && existsSync(join(root, ".git")) ? root : null;
-}
-
-function mtime(path: string): number | null {
-  try {
-    return statSync(path).mtimeMs;
-  } catch {
-    return null;
-  }
-}
-
-/** The newest modification time under `dir`, skipping `node_modules`. */
-function newestIn(dir: string): number {
-  let newest = mtime(dir) ?? 0;
-  let entries;
-  try {
-    entries = readdirSync(dir, { withFileTypes: true });
-  } catch {
-    return newest;
-  }
-  for (const entry of entries) {
-    if (entry.name === "node_modules") continue;
-    const path = join(dir, entry.name);
-    newest = Math.max(newest, entry.isDirectory() ? newestIn(path) : (mtime(path) ?? 0));
-  }
-  return newest;
 }
 
 interface Locked {
@@ -81,7 +48,7 @@ function lockedPackages(file: string): Map<string, Locked> | undefined {
 }
 
 /** Whether `node_modules` has every package `package-lock.json` asks for, at its version. */
-function installed(root: string): boolean {
+export function installed(root: string): boolean {
   const lock = lockedPackages(join(root, "package-lock.json"));
   // No lockfile to compare against.
   if (lock === undefined) return true;
@@ -96,21 +63,6 @@ function installed(root: string): boolean {
   return true;
 }
 
-/** What `root` needs before its build can be served. */
-export function checkBuild(root: string): BuildCheck {
-  const install = !installed(root);
-  const outputs = BUILD_OUTPUTS.map((file) => mtime(join(root, file)));
-  const times = outputs.filter((time) => time !== null);
-  if (times.length < outputs.length) return { install, build: "no build yet" };
-  const built = Math.min(...times);
-  const sources = Math.max(
-    newestIn(join(root, "src")),
-    newestIn(join(root, "web")),
-    ...BUILD_INPUTS.map((file) => mtime(join(root, file)) ?? 0),
-  );
-  return { install, build: sources > built ? "sources changed" : install ? "packages changed" : null };
-}
-
 function npm(root: string, args: string[]): boolean {
   // npm is `npm.cmd` on Windows, which only runs through a shell.
   const result = spawnSync("npm", args, {
@@ -123,18 +75,25 @@ function npm(root: string, args: string[]): boolean {
 }
 
 /**
- * Before `aop serve`: rebuild a stale checkout and re-run the fresh build, since this process has
- * already loaded the old one. Returns true if it took over (the caller must do nothing more).
+ * Before `aop serve`: rebuild the checkout with its extensions, then re-run the fresh build, since
+ * this process has already loaded the old one. Returns true if it took over (the caller must do
+ * nothing more).
  */
 export async function serveFreshBuild(mainFile: string, argv: string[], env: NodeJS.ProcessEnv): Promise<boolean> {
   if (env[SELF_BUILT_ENV] !== undefined) return false;
+  const listed = readExtensions(aopHome(env));
+  if (!listed.ok) return fail(["AOP won't serve, as its extensions have problems:", ...listed.problems].join("\n"));
   const root = sourceCheckout(mainFile);
-  if (root === null) return false;
-  const check = checkBuild(root);
-  if (check.build === null) return false;
+  if (root === null) {
+    return listed.extensions.length > 0 ? fail("Extensions are compiled into AOP, so it must run from a git checkout to use them.") : false;
+  }
 
-  console.error(`Building AOP (${check.build})…`);
-  if (check.install && !npm(root, ["install"])) return fail("`npm install` failed, so AOP wasn't rebuilt.");
+  console.error("Building AOP…");
+  if (!installed(root) && !npm(root, ["install"])) return fail("`npm install` failed, so AOP wasn't rebuilt.");
+  const problems = buildExtensions(root, listed.extensions, (line) => {
+    console.error(line);
+  });
+  if (problems.length > 0) return fail([...problems, "AOP won't serve without them. Fix it, or take it out of extensions: in config.yaml."].join("\n"));
   if (!npm(root, ["run", "build"])) return fail("The build failed, so AOP won't serve the old one. Fix it and run `aop serve` again.");
 
   const child = spawn(process.execPath, [...process.execArgv, mainFile, ...argv], {

@@ -5,7 +5,7 @@ import { describeConfig, loadConfig } from "../config/config.js";
 import { listConfigFiles, saveConfigFile } from "../config/configFiles.js";
 import { describeProcess } from "../config/processView.js";
 import { graphFor, graphsOf } from "../nodes/nodes.js";
-import { getProject } from "../projects/projects.js";
+import { getProject, listProjects } from "../projects/projects.js";
 import { describeStages, EMPTY_GRAPH } from "../stages/stages.js";
 import { configFileBody } from "./requests.js";
 import { readBody, type RouteContext } from "./routeContext.js";
@@ -27,5 +27,5 @@ export function stageRoutes({ app, db }: RouteContext): void {
 
   app.get(at(apiPaths.config), (c) => c.json(describeConfig()));
   app.get(at(apiPaths.configFiles), (c) => c.json(listConfigFiles()));
-  app.put(at(apiPaths.configFiles), async (c) => c.json(saveConfigFile(db, await readBody(c, configFileBody))));
+  app.put(at(apiPaths.configFiles), async (c) => c.json(saveConfigFile(await readBody(c, configFileBody), listProjects(db))));
 }
