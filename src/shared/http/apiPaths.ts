@@ -20,6 +20,8 @@ export const apiPaths = {
   events: "/events",
   agents: "/agents",
   reap: "/agents/reap",
+  /** How many agents may run at once. */
+  agentLimit: "/agents/limit",
   stages: "/stages",
   config: "/config",
   /** The files the settings and process pages edit. */

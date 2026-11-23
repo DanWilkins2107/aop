@@ -80,6 +80,13 @@ describe("starting the server", () => {
     expect(output()).toContain("Usage");
   });
 
+  it("refuses an agent limit that isn't a whole number", { timeout: 40_000 }, async () => {
+    const { env } = fakeUser();
+    const { output, exited } = run("src/server/main.ts", ["--agents=lots"], { ...env, AOP_HOME: makeHome() });
+    expect(await exited).toBe(2);
+    expect(output()).toContain("Invalid agent limit: lots");
+  });
+
   it("with the MCP port taken says so in one line, and exits", { timeout: 40_000 }, async () => {
     const { env } = fakeUser();
     // A port of the test's own, never MCP_PORT itself.
@@ -96,11 +103,12 @@ describe("starting the server", () => {
     }
   });
 
-  it("with a valid config runs with no projects", { timeout: 40_000 }, async () => {
+  it("with a valid config runs with no projects, and the agent limit it was given", { timeout: 40_000 }, async () => {
     const { env } = fakeUser();
-    const { output, exited } = run("src/server/main.ts", [], { ...env, AOP_HOME: makeHome() });
+    const { output, exited } = run("src/server/main.ts", ["--agents=2"], { ...env, AOP_HOME: makeHome() });
     const url = await urlFrom(output, exited);
     expect(await (await fetch(`${url}/api/projects`)).json()).toEqual([]);
+    expect(await (await fetch(`${url}/api/agents/limit`)).json()).toEqual({ limit: 2, running: 0 });
     expect(((await (await fetch(`${url}/api/stages`)).json()) as StagesView).start).toBe("triage");
   });
 });

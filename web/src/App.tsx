@@ -1,4 +1,5 @@
 import { Link, Route, Routes } from "react-router-dom";
+import { AgentLimit } from "./components/AgentLimit.js";
 import { useLiveStatus } from "./lib/live.js";
 import { AopSettingsPage } from "./pages/AopSettingsPage.js";
 import { GraphPage } from "./pages/GraphPage.js";
@@ -43,6 +44,7 @@ export function App() {
           AOP
         </Link>
         <span className="topbar-spacer" />
+        <AgentLimit />
         <Link to="/process" className="quiet-link">
           Process
         </Link>
