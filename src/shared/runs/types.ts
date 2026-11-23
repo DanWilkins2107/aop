@@ -5,6 +5,8 @@ export type RunEndReason = "reported" | "failed" | "stopped" | "held" | "shutdow
 export interface RunView {
   id: string;
   stage: string;
+  /** The branch it works, such as `build/reviews/review_tests`. Null for the node's own run. */
+  branch: string | null;
   started_at: string;
   ended_at: string | null;
   ending: "running" | "exited" | "failed" | "stopped" | "timed_out";

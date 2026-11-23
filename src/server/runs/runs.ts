@@ -284,6 +284,7 @@ export function listRuns(db: Db, nodeId: string): RunView[] {
   return rows.map((run) => ({
     id: run.id,
     stage: run.stage,
+    branch: run.branch,
     started_at: run.created_at,
     ended_at: run.ended_at,
     ending: endingOf(run),

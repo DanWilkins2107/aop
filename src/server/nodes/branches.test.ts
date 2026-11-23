@@ -5,6 +5,8 @@ import { addMessage, answer, ask, fail, getNodeRow, listMessages, markFailed, ne
 import { nodeContext } from "../runs/context.js";
 import { beginBranchRun, closeRun, getRun, otherRunningRuns } from "../runs/runs.js";
 import { releaseAgentClaim } from "./claims.js";
+import { listBranchViews } from "./branchViews.js";
+import { listRuns } from "../runs/runs.js";
 import { harness, type Harness } from "../../../test-shared/harness.js";
 
 const PROMPTS = ["implement", "review_tests", "review_style"];
@@ -263,5 +265,39 @@ describe("tools from a branch's run", () => {
     runs.clear();
     retry(h.db, node.id);
     expect(launch()).toEqual(["run_checks/quick_fix/implement"]);
+  });
+});
+
+describe("the node page's view of branches", () => {
+  it("shows each branch with its parent, its outcome, whether it's running, and its flow's rounds", async () => {
+    const node = await h.create("dev");
+    expect(listBranchViews(h.db, node.id)).toEqual([]);
+    launch();
+    report(node.id, "build/implement", "done");
+    launch();
+    report(node.id, "build/reviews/review_tests", "pass");
+
+    expect(listBranchViews(h.db, node.id)).toEqual([
+      {
+        path: "build",
+        parent: null,
+        kind: "flow",
+        type: "build_and_review",
+        stage: "reviews",
+        outcome: null,
+        running: false,
+        loops: [
+          { stage: "implement", entered: 1, max: null },
+          { stage: "reviews", entered: 1, max: 2 },
+        ],
+      },
+      { path: "build/reviews/review_tests", parent: "build", kind: "stage", type: null, stage: "review_tests", outcome: "pass", running: false, loops: [] },
+      { path: "build/reviews/review_style", parent: "build", kind: "stage", type: null, stage: "review_style", outcome: null, running: true, loops: [] },
+    ]);
+    expect(listRuns(h.db, node.id).map((run) => run.branch)).toEqual([
+      "build/reviews/review_style",
+      "build/reviews/review_tests",
+      "build/implement",
+    ]);
   });
 });

@@ -1,7 +1,8 @@
-// Agents, their runs and their logs.
+// Agents, their runs and their logs, and the branches a node's runs work.
 
 import { apiPaths } from "../../shared/http/apiPaths.js";
 import type { LogTail } from "../../shared/runs/types.js";
+import { listBranchViews } from "../nodes/branchViews.js";
 import { getNodeRow } from "../nodes/nodes.js";
 import { readableLines } from "../runs/agentOutput.js";
 import { readLogEnd, readRunLog } from "../runs/runLog.js";
@@ -22,6 +23,7 @@ export function runRoutes({ app, db, orchestrator }: RouteContext): void {
     const node = getNodeRow(db, c.req.param("id"));
     return c.json(listRuns(db, node.id));
   });
+  app.get(routes.nodeAction("branches"), (c) => c.json(listBranchViews(db, c.req.param("id"))));
   app.get(routes.run("log"), (c) => {
     const run = getRun(db, c.req.param("id"));
     if (!run) throw notFound(`No run ${c.req.param("id")}`);

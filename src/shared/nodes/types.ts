@@ -57,6 +57,26 @@ export interface MessageRow {
   branch: string | null;
 }
 
+/** One branch of a node's sub-workflow or parallel stage, for the node page. */
+export interface BranchView {
+  /** Such as `build/reviews/review_tests`. */
+  path: string;
+  /** The flow it sits under. Null for a branch of the node's own stage. */
+  parent: string | null;
+  /** `flow` runs a sub-workflow type; `stage` is one agent stage, which a run works. */
+  kind: "flow" | "stage";
+  /** The type a flow runs. Null on a stage. */
+  type: string | null;
+  /** A flow's current stage, or a stage branch's own. */
+  stage: string;
+  /** How it finished, such as `pass` or `fail`. Null while unfinished. */
+  outcome: string | null;
+  /** Whether a run is working it now. */
+  running: boolean;
+  /** A flow's rounds: how many times it has entered each stage, and that stage's `max_loops`, if any. */
+  loops: { stage: string; entered: number; max: number | null }[];
+}
+
 export interface LinkRow {
   id: string;
   created_at: string;

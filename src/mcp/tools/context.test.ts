@@ -16,7 +16,7 @@ describe("the context tool", () => {
   it("sends a run_id as the run's, which a run on no branch doesn't change", async () => {
     const m = await mcpHarness();
     const node = await m.create("dev");
-    expect(await m.text("context", { node_id: node.id, run_id: "some-run" })).toBe(nodeContext(m.db, node.id));
+    expect(await m.text("context", { node_id: node.id, run_id: "some-run" })).toBe(nodeContext(m.db, node.id, "some-run"));
   });
 
   it("fails with the API's message for an unknown node", async () => {
