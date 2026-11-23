@@ -2,9 +2,8 @@
 // in `osProcesses.ts`, and the `runs` and `agent_processes` rows in `runs.ts`.
 
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
-import type { WriteStream } from "node:fs";
 import { setTimeout as delay } from "node:timers/promises";
-import type { AgentProcessView, ReapResult } from "../../shared/runs/types.js";
+import type { AgentLimitView, AgentProcessView, ReapResult } from "../../shared/runs/types.js";
 import { noCwdLookupEnv } from "../../shared/os/noCwdLookupEnv.js";
 import { headlessCommand, StreamJsonUsage, type OutputFormat } from "./agentOutput.js";
 import { type ChangeFeed, nodesNotice } from "../db/changes.js";
@@ -40,7 +39,7 @@ import {
 import { nodeStartPath } from "../projects/projects.js";
 import { newId } from "../db/records.js";
 import { handClaimToHuman, releaseAgentClaim } from "../nodes/claims.js";
-import { appendToLog, logPathFor, openLog } from "./runLog.js";
+import { appendToLog, closeLogWhenDrained, logPathFor, openLog } from "./runLog.js";
 import {
   agentReported,
   beginBranchRun,
@@ -68,8 +67,6 @@ const RECONCILE_INTERVAL_MS = 5_000;
 const REAP_INTERVAL_MS = 30_000;
 /** Bounds waits on a process that should already be dying. */
 const STOP_WAIT_MS = 10_000;
-/** How long after exit to keep reading output that a leftover child might be holding open. */
-const OUTPUT_DRAIN_MS = 1_000;
 /** The longest a Node timer can wait. Anything above it fires at once. */
 const MAX_TIMER_MS = 2 ** 31 - 1;
 /** How long to look for what the launched shell started, and how often. */
@@ -99,6 +96,8 @@ export interface OrchestratorOptions {
   graceMs?: number;
   reconcileIntervalMs?: number;
   reapIntervalMs?: number;
+  /** The most agents to run at once, or null for no limit. */
+  agentLimit?: number | null;
 }
 
 /**
@@ -117,6 +116,7 @@ export class Orchestrator {
   private readonly closingProjects = new Set<string>();
   /** Clear-ups that outlive their run, which shutdown has to wait for. */
   private readonly background = new Set<Promise<unknown>>();
+  private limit: number | null;
   private mcpUrl = "";
   private running = false;
   /** Set for good by `shutdown`, which can come while `start` is still waiting on its first sweep. */
@@ -132,6 +132,18 @@ export class Orchestrator {
     this.graceMs = options.graceMs ?? DEFAULT_GRACE_MS;
     this.reconcileIntervalMs = options.reconcileIntervalMs ?? RECONCILE_INTERVAL_MS;
     this.reapIntervalMs = options.reapIntervalMs ?? REAP_INTERVAL_MS;
+    this.limit = options.agentLimit ?? null;
+  }
+
+  /** How many agents may run at once, and how many are running. Lowering it stops none: it only holds back new ones. */
+  agentLimit(): AgentLimitView {
+    return { limit: this.limit, running: this.active.size };
+  }
+
+  setAgentLimit(limit: number | null): AgentLimitView {
+    this.limit = limit;
+    this.kick();
+    return this.agentLimit();
   }
 
   /**
@@ -227,12 +239,15 @@ export class Orchestrator {
       throw error;
     }
     const graphs = graphsOf(config);
-    for (const node of startableNodes(this.db, graphs)) {
-      if (!this.closingProjects.has(node.project_id)) this.launch(node, config);
-    }
-    for (const { node, branch } of startableBranches(this.db, graphs)) {
-      if (!this.closingProjects.has(node.project_id)) this.launch(node, config, branch);
-    }
+    for (const node of startableNodes(this.db, graphs)) this.launchIfRoom(node, config);
+    for (const { node, branch } of startableBranches(this.db, graphs)) this.launchIfRoom(node, config, branch);
+  }
+
+  /** A node past the limit stays queued, and starts on a later reconcile once an agent has finished. */
+  private launchIfRoom(node: NodeRow, config: AopConfig, branch?: BranchRow): void {
+    // Runs being stopped count, because their processes are still using the machine.
+    if (this.limit !== null && this.active.size >= this.limit) return;
+    if (!this.closingProjects.has(node.project_id)) this.launch(node, config, branch);
   }
 
   /** Starts an agent on the node's own stage, or on one of its branches. */
@@ -666,20 +681,6 @@ export class Orchestrator {
 /** A reason about a run, naming its branch if it has one. */
 function onBranch(run: RunRow, reason: string): string {
   return run.branch === null ? reason : `Branch ${run.branch}: ${reason}`;
-}
-
-/** Resolves when the output has ended, or soon after exit if a leftover child is holding it open. */
-function closeLogWhenDrained(child: ChildProcessWithoutNullStreams, log: WriteStream, lastLine: string): Promise<void> {
-  return new Promise((done) => {
-    const close = () => {
-      clearTimeout(drain);
-      child.stdout.destroy();
-      child.stderr.destroy();
-      log.end(lastLine, () => done());
-    };
-    const drain = setTimeout(close, OUTPUT_DRAIN_MS);
-    child.once("close", close);
-  });
 }
 
 async function boundedWait(work: Promise<void>): Promise<void> {

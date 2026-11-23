@@ -44,6 +44,37 @@
 .topbar .quiet-link:hover {
   color: #f1f3f5;
 }
+.agent-limit {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 13px;
+  color: #adb5bd;
+  margin-right: 6px;
+}
+.agent-limit-label {
+  margin-right: 3px;
+  font-variant-numeric: tabular-nums;
+}
+.agent-limit button {
+  min-width: 22px;
+  padding: 0 5px;
+  line-height: 18px;
+  font-size: 13px;
+  color: #e9ecef;
+  background: #343a40;
+  border: 1px solid #495057;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.agent-limit button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.agent-limit-error {
+  color: #ff8787;
+  font-weight: 700;
+}
 .connection-notice {
   font-size: 12px;
   color: #adb5bd;
