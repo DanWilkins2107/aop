@@ -59,6 +59,23 @@ describe("PUT /api/config/files", () => {
     expect(readFileSync(path, "utf8")).toBe(CONFIG_YAML);
   });
 
+  it("never adds an extension, which only a human editing the file can", async () => {
+    const path = join(home(), "config.yaml");
+    const res = await save(path, `${CONFIG_YAML}extensions:\n  - ~/code/ext\n`, CONFIG_YAML);
+    expect(res.status).toBe(409);
+    expect(res.body.error.message).toContain("extensions:");
+    expect(readFileSync(path, "utf8")).toBe(CONFIG_YAML);
+  });
+
+  it("saves other settings when extensions are listed, leaving them alone", async () => {
+    const path = join(home(), "config.yaml");
+    const listed = `${CONFIG_YAML}extensions:\n  - ~/code/ext\n`;
+    writeFileSync(path, listed);
+    const edited = listed.replace("agent_timeout_minutes: 30", "agent_timeout_minutes: 45");
+    expect((await save(path, edited, listed)).status).toBe(200);
+    expect(readFileSync(path, "utf8")).toBe(edited);
+  });
+
   it("refuses a process file with problems", async () => {
     const path = join(home(), "stages.yaml");
     const res = await save(path, STAGES_YAML.replace("start: triage", "start: nowhere"), STAGES_YAML);
