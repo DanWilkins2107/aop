@@ -57,3 +57,13 @@ export interface SteerSession {
 export interface SteerRequest {
   no_sandbox?: boolean;
 }
+
+/** How many agents may run at once. Null is no limit. */
+export interface AgentLimitView {
+  limit: number | null;
+  running: number;
+}
+
+export interface AgentLimitRequest {
+  limit: number | null;
+}

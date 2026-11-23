@@ -24,7 +24,7 @@ import type {
   NodeView,
 } from "../../../src/shared/nodes/types.js";
 import type { AddProjectRequest, ProjectRow, UpdateProjectRequest } from "../../../src/shared/projects/types.js";
-import type { LogTail, RunView } from "../../../src/shared/runs/types.js";
+import type { AgentLimitRequest, AgentLimitView, LogTail, RunView } from "../../../src/shared/runs/types.js";
 import type { ScheduleRequest } from "../../../src/shared/schedule/types.js";
 import type {
   AnswerRequest,
@@ -120,6 +120,10 @@ export const api = {
     send<EdgeRow>("POST", apiPaths.nodeAction(sourceId, "edges"), { target_id: targetId, kind } satisfies EdgeRequest),
   runs: (id: string) => send<RunView[]>("GET", apiPaths.nodeAction(id, "runs")),
   logTail: (runId: string) => send<LogTail>("GET", apiPaths.run(runId, "tail")),
+  agentLimit: () => send<AgentLimitView>("GET", apiPaths.agentLimit),
+  /** Null is no limit. */
+  setAgentLimit: (limit: number | null) =>
+    send<AgentLimitView>("PUT", apiPaths.agentLimit, { limit } satisfies AgentLimitRequest),
   stopRun: (runId: string) => send<NodeView>("POST", apiPaths.run(runId, "stop")),
   removeEdge: (edgeId: string) => send<EdgeRow>("DELETE", apiPaths.edge(edgeId)),
 

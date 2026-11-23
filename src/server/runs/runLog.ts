@@ -1,7 +1,11 @@
 import { appendFileSync, closeSync, createWriteStream, fstatSync, mkdirSync, openSync, readSync, realpathSync, rmSync, type WriteStream } from "node:fs";
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { refused } from "../shared/errors.js";
 import { aopHome } from "../shared/paths.js";
+
+/** How long after exit to keep reading output that a leftover child might be holding open. */
+const OUTPUT_DRAIN_MS = 1_000;
 
 function logsFolder(): string {
   return join(aopHome(), "logs");
@@ -109,4 +113,18 @@ export function readLogEnd(path: string, bytes = TAIL_BYTES): string[] | null {
   } finally {
     closeSync(fd);
   }
+}
+
+/** Resolves when the output has ended, or soon after exit if a leftover child is holding it open. */
+export function closeLogWhenDrained(child: ChildProcessWithoutNullStreams, log: WriteStream, lastLine: string): Promise<void> {
+  return new Promise((done) => {
+    const close = () => {
+      clearTimeout(drain);
+      child.stdout.destroy();
+      child.stderr.destroy();
+      log.end(lastLine, () => done());
+    };
+    const drain = setTimeout(close, OUTPUT_DRAIN_MS);
+    child.once("close", close);
+  });
 }

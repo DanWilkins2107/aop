@@ -8,7 +8,7 @@ import { dirname, resolve } from "node:path";
 import type { ConfigFileKind, ConfigFileView, SaveConfigFileRequest } from "../../shared/config/types.js";
 import { ApiError, badRequest, refused } from "../shared/errors.js";
 import { aopHome, configPath, isWithin, resolveConfigPath } from "../shared/paths.js";
-import { parseYamlFile } from "../shared/yamlFile.js";
+import { parseYaml, parseYamlFile } from "../shared/yamlFile.js";
 import { loadStagesFile, promptFiles, stagesSourceProblems } from "../stages/stages.js";
 import { configSourceProblems } from "./config.js";
 
@@ -85,6 +85,13 @@ export interface ProjectFolder {
   repo_path: string | null;
 }
 
+/** `config.yaml`'s `extensions:` list in `source`, comparable as a string. */
+function extensionsIn(source: string | null): string {
+  const parsed = source === null ? null : parseYaml(source, "config.yaml");
+  const value = parsed?.ok === true && typeof parsed.value === "object" && parsed.value !== null ? Reflect.get(parsed.value, "extensions") : undefined;
+  return JSON.stringify(value ?? []);
+}
+
 /**
  * Saves one of those files, if it still holds what was shown (`base`) and the new contents are valid
  * on their own. Never a file inside a project's folder.
@@ -98,6 +105,10 @@ export function saveConfigFile(input: SaveConfigFileRequest, projects: ProjectFo
   const project = projects.find((p) => p.repo_path !== null && isWithin(path, p.repo_path));
   if (project !== undefined) throw refused(`${path} is in project "${project.name}"'s folder, which AOP never writes to`);
   if (read(path) !== input.base) throw refused(`${path} has changed since it was shown. Nothing was saved. Reload it, then edit again`);
+  // Extensions run as AOP, so only a human editing the file can add one.
+  if (file.kind === "config" && extensionsIn(input.content) !== extensionsIn(input.base)) {
+    throw refused(`Not saved: extensions: in ${path} can only be changed by editing the file itself, then restarting \`aop serve\``);
+  }
   const problems = problemsIn(file, input.content);
   if (problems.length > 0) throw badRequest(`Not saved: ${path} has problems`, problems);
 

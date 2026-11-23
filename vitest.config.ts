@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config";
+import { overridesPlugin } from "./web/overridesPlugin.js";
 
 /** The files that start real processes (the server, fake agents, the CLI's entry point), and so are slow. */
 const INTEGRATION = [
@@ -21,6 +22,7 @@ const INTEGRATION = [
 ];
 
 export default defineConfig({
+  plugins: [overridesPlugin()],
   test: {
     // Points AOP_HOME at a temp dir before any test code runs.
     setupFiles: ["test-shared/setup.ts"],

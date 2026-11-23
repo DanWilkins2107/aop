@@ -24,24 +24,45 @@ class McpPortInUse extends Error {
   }
 }
 
-/** Runs the server and its agents in the foreground until it's told to stop. */
-export async function runServer(argv: string[], usage: string): Promise<void> {
-  let port: number;
+interface ServeOptions {
+  port: number;
+  /** The most agents to run at once, or null for no limit. The UI can change it while the server runs. */
+  agentLimit: number | null;
+}
+
+/** The options, or null after saying what's wrong with them. */
+function readOptions(argv: string[], usage: string): ServeOptions | null {
+  let values: { port?: string; agents?: string };
   try {
-    const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: { port: { type: "string" } } });
-    if (positionals.length > 0) throw new Error("Unexpected argument");
-    const portSetting = values.port ?? process.env["AOP_PORT"] ?? String(DEFAULT_PORT);
-    port = Number(portSetting);
-    if (!Number.isInteger(port) || port < 0 || port > 65535) {
-      console.error(`Invalid port: ${portSetting}`);
-      process.exitCode = 2;
-      return;
-    }
+    const parsed = parseArgs({ args: argv, allowPositionals: true, options: { port: { type: "string" }, agents: { type: "string" } } });
+    if (parsed.positionals.length > 0) throw new Error("Unexpected argument");
+    values = parsed.values;
   } catch {
     console.error(usage);
+    return null;
+  }
+  const portSetting = values.port ?? process.env["AOP_PORT"] ?? String(DEFAULT_PORT);
+  const port = Number(portSetting);
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+    console.error(`Invalid port: ${portSetting}`);
+    return null;
+  }
+  const agentLimit = values.agents === undefined ? null : Number(values.agents);
+  if (agentLimit !== null && (!Number.isInteger(agentLimit) || agentLimit < 0)) {
+    console.error(`Invalid agent limit: ${values.agents}. Give a whole number, 0 or more.`);
+    return null;
+  }
+  return { port, agentLimit };
+}
+
+/** Runs the server and its agents in the foreground until it's told to stop. */
+export async function runServer(argv: string[], usage: string): Promise<void> {
+  const options = readOptions(argv, usage);
+  if (options === null) {
     process.exitCode = 2;
     return;
   }
+  const { port, agentLimit } = options;
 
   let db: Db | undefined;
   let lock: ServerLock | undefined;
@@ -54,7 +75,7 @@ export async function runServer(argv: string[], usage: string): Promise<void> {
     lock = acquireServerLock();
     db = openDb();
     const changes = new ChangeFeed();
-    const orchestrator = new Orchestrator(db, { changes });
+    const orchestrator = new Orchestrator(db, { changes, agentLimit });
     const scheduler = new Scheduler(db, { changes });
     // Binding the port comes before touching any agent, so a second server on this port stops here.
     const server = await startServer(db, port, { changes, orchestrator });
@@ -72,6 +93,7 @@ export async function runServer(argv: string[], usage: string): Promise<void> {
     const mcpUrl = `http://${HOSTNAME}:${mcp.port}${MCP_PATH}`;
     lock.setMcpUrl(mcpUrl);
     console.log(`AOP MCP listening on ${mcpUrl}`);
+    console.log(`Agent limit: ${agentLimit ?? "none"}`);
     console.log(`Config: ${configPath()}`);
     console.log(`Database: ${dbPath()}`);
 
