@@ -11,6 +11,8 @@ export const ENTRIES = { web: "web/index.tsx", server: "server/index.ts", cli: "
 
 export type EntryKind = keyof typeof ENTRIES;
 
+const KINDS: EntryKind[] = ["web", "server", "cli", "mcp"];
+
 export interface Extension {
   /** Its folder's name. */
   name: string;
@@ -27,7 +29,7 @@ const NAME = /^[a-z][a-z0-9-]*$/;
 export const SKIPPED = new Set([".git", "node_modules"]);
 
 /** The first link under `dir`, skipping `SKIPPED`, or null if it has none. */
-export function linkIn(dir: string): string | null {
+function linkIn(dir: string): string | null {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (SKIPPED.has(entry.name)) continue;
     const path = join(dir, entry.name);
@@ -60,7 +62,7 @@ function readOne(home: string, setting: unknown, index: number, problems: string
     problems.push(`${key}: ${link} is a link, which an extension can't have`);
     return null;
   }
-  const entries = (Object.keys(ENTRIES) as EntryKind[]).filter((kind) => existsSync(join(path, ENTRIES[kind])));
+  const entries = KINDS.filter((kind) => existsSync(join(path, ENTRIES[kind])));
   if (entries.length === 0) {
     problems.push(`${key}: ${path} has none of ${Object.values(ENTRIES).join(", ")}`);
     return null;

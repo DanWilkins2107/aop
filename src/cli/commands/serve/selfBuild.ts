@@ -82,8 +82,7 @@ function npm(root: string, args: string[]): boolean {
 export async function serveFreshBuild(mainFile: string, argv: string[], env: NodeJS.ProcessEnv): Promise<boolean> {
   if (env[SELF_BUILT_ENV] !== undefined) return false;
   const listed = readExtensions(aopHome(env));
-  if (!listed.ok) return fail(["AOP won't serve, as its extensions have problems:", ...listed.problems].join("
-"));
+  if (!listed.ok) return fail(["AOP won't serve, as its extensions have problems:", ...listed.problems].join("\n"));
   const root = sourceCheckout(mainFile);
   if (root === null) {
     return listed.extensions.length > 0 ? fail("Extensions are compiled into AOP, so it must run from a git checkout to use them.") : false;
@@ -91,9 +90,10 @@ export async function serveFreshBuild(mainFile: string, argv: string[], env: Nod
 
   console.error("Building AOP…");
   if (!installed(root) && !npm(root, ["install"])) return fail("`npm install` failed, so AOP wasn't rebuilt.");
-  const problems = buildExtensions(root, listed.extensions, (line) => console.error(line));
-  if (problems.length > 0) return fail([...problems, "AOP won't serve without them. Fix it, or take it out of extensions: in config.yaml."].join("
-"));
+  const problems = buildExtensions(root, listed.extensions, (line) => {
+    console.error(line);
+  });
+  if (problems.length > 0) return fail([...problems, "AOP won't serve without them. Fix it, or take it out of extensions: in config.yaml."].join("\n"));
   if (!npm(root, ["run", "build"])) return fail("The build failed, so AOP won't serve the old one. Fix it and run `aop serve` again.");
 
   const child = spawn(process.execPath, [...process.execArgv, mainFile, ...argv], {

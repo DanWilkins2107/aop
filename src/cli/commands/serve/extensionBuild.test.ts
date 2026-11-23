@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { z } from "zod";
 import { buildExtensions, extensionsDir } from "./extensionBuild.js";
 import type { Extension } from "./extensions.js";
 
@@ -36,10 +37,11 @@ function extension(name: string, files: Record<string, string>): Extension {
   return { name, path, entries };
 }
 
-const record = (root: string) => JSON.parse(readFileSync(join(extensionsDir(root), "extension-build.json"), "utf8")) as {
-  extensions: { name: string; entries: Record<string, string>; files: string[]; commit: string | null }[];
-  problems: string[];
-};
+const Record = z.object({
+  extensions: z.array(z.object({ name: z.string(), entries: z.record(z.string(), z.string()), files: z.array(z.string()), commit: z.string().nullable() })),
+  problems: z.array(z.string()),
+});
+const record = (root: string) => Record.parse(JSON.parse(readFileSync(join(extensionsDir(root), "extension-build.json"), "utf8")));
 
 describe("buildExtensions", { timeout: 60_000 }, () => {
   it("compiles server and web entries from a copy, and records them", () => {
@@ -52,14 +54,16 @@ describe("buildExtensions", { timeout: 60_000 }, () => {
       "node_modules/junk/index.js": "",
     });
     const log: string[] = [];
-    expect(buildExtensions(root, [ext], (line) => log.push(line))).toEqual([]);
+    expect(buildExtensions(root, [ext], (line) => {
+      log.push(line);
+    })).toEqual([]);
 
     const out = join(extensionsDir(root), "hello");
     expect(readFileSync(join(out, "server", "index.js"), "utf8")).toContain('from "./greet.js"');
     expect(existsSync(join(out, "web", "index.js"))).toBe(true);
     const [built] = record(root).extensions;
     expect(built).toMatchObject({ name: "hello", commit: null, entries: { web: "web/index.js", server: "server/index.js" } });
-    expect(built?.files.sort()).toEqual(["server/greet.ts", "server/index.ts", "web/index.tsx"]);
+    expect(built?.files.toSorted()).toEqual(["server/greet.ts", "server/index.ts", "web/index.tsx"]);
     expect(log.join("\n")).toContain("server/greet.ts");
   });
 
