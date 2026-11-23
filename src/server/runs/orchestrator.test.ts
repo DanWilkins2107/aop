@@ -255,7 +255,8 @@ describe("how a run ends", () => {
 
   it("running past the timeout: failed, and the process is gone", TIMEOUT, async () => {
     w = await world();
-    writeFileSync(join(w.home, "config.yaml"), readFileSync(join(w.home, "config.yaml"), "utf8").replace("agent_timeout_minutes: 5", "agent_timeout_minutes: 0.03"));
+    // Long enough for a loaded machine to start the agent and its child before the timeout kills it.
+    writeFileSync(join(w.home, "config.yaml"), readFileSync(join(w.home, "config.yaml"), "utf8").replace("agent_timeout_minutes: 5", "agent_timeout_minutes: 0.1"));
     const node = await w.create(directives(`pid ${w.file("agent.pid")}`, `child ${w.file("child.pid")}`, "hang"));
     const pid = await w.pidFrom("agent.pid");
     const child = await w.pidFrom("child.pid");
