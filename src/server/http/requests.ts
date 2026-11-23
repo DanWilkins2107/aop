@@ -7,7 +7,7 @@ import type { SaveConfigFileRequest } from "../../shared/config/types.js";
 import type { ApplyRequest, ImprovementRequest, ProposalRequest, WithdrawRequest } from "../../shared/improvements/types.js";
 import type { ActorRequest, CreateNodeRequest, EdgeRequest, EditNodeRequest, LinkRequest, MessageRequest } from "../../shared/nodes/types.js";
 import type { AddProjectRequest, UpdateProjectRequest } from "../../shared/projects/types.js";
-import type { SteerRequest } from "../../shared/runs/types.js";
+import type { AgentLimitRequest, SteerRequest } from "../../shared/runs/types.js";
 import type { ScheduleRequest } from "../../shared/schedule/types.js";
 import type { AnswerRequest, AskRequest, BlockRequest, FailRequest, InvalidateRequest, MoveRequest, NextRequest } from "../../shared/stages/types.js";
 
@@ -55,6 +55,7 @@ export const failBody = bodyOf<FailRequest>()(z.strictObject({ actor: actor.defa
 export const invalidateBody = bodyOf<InvalidateRequest>()(z.strictObject({ reason: nonBlank, actor: actor.default("human") }));
 export const actorBody = bodyOf<ActorRequest>()(z.strictObject({ actor: actor.default("human") }));
 export const steerBody = bodyOf<SteerRequest>()(z.strictObject({ no_sandbox: z.boolean().default(false) }));
+export const agentLimitBody = bodyOf<AgentLimitRequest>()(z.strictObject({ limit: z.number().int().min(0).nullable() }));
 export const blockBody = bodyOf<BlockRequest>()(z.strictObject({ reason: nonBlank, actor: actor.default("human") }));
 // No client sends a body to unblock or claim, so these two have no shared type.
 export const unblockBody = z.strictObject({ actor: actor.default("human") });

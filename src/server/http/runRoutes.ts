@@ -1,7 +1,6 @@
 // Agents, their runs and their logs.
 
 import { apiPaths } from "../../shared/http/apiPaths.js";
-import { z } from "zod";
 import type { LogTail } from "../../shared/runs/types.js";
 import { EVERYTHING } from "../db/changes.js";
 import { getNodeRow } from "../nodes/nodes.js";
@@ -9,14 +8,13 @@ import { readableLines } from "../runs/agentOutput.js";
 import { readLogEnd, readRunLog } from "../runs/runLog.js";
 import { getRun, listRuns } from "../runs/runs.js";
 import { badRequest, notFound } from "../shared/errors.js";
+import { agentLimitBody } from "./requests.js";
 import { readBody, type RouteContext } from "./routeContext.js";
 import { at, routes } from "./routes.js";
 
 /** How much of a run's log the node page shows. */
 const TAIL_LINES = 20;
 const MAX_TAIL_LINES = 200;
-
-const agentLimitBody = z.object({ limit: z.number().int().min(0).nullable() });
 
 export function runRoutes({ app, db, orchestrator, touch }: RouteContext): void {
   app.get(at(apiPaths.agents), async (c) => c.json(await orchestrator().listAgents()));
