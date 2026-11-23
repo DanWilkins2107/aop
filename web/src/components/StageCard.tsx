@@ -5,6 +5,7 @@ import type { NodeView } from "../../../src/shared/nodes/types.js";
 import type { StagesView } from "../../../src/shared/stages/types.js";
 import { CARD_HEIGHT, CARD_WIDTH } from "../lib/layout.js";
 import { cardKind, cardLook, cardName, cardType, stageLabel } from "../lib/stageStyle.js";
+import { extendable } from "../extendable/extendable.js";
 import { ClaimMark } from "./ClaimMark.js";
 
 export type StageCardNode = Node<
@@ -28,7 +29,12 @@ function usePanToFocused(x: number, y: number) {
   };
 }
 
-export function StageCard({ data, positionAbsoluteX, positionAbsoluteY }: NodeProps<StageCardNode>) {
+// React Flow remounts a card whose component changes, so this stays one value.
+export const StageCard = extendable("aop.graph.StageCard", 1, function StageCard({
+  data,
+  positionAbsoluteX,
+  positionAbsoluteY,
+}: NodeProps<StageCardNode>) {
   const { node, stages, onHide } = data;
   const look = cardLook(node, stages);
   const kind = cardKind(node);
@@ -73,4 +79,4 @@ export function StageCard({ data, positionAbsoluteX, positionAbsoluteY }: NodePr
       <Handle type="source" position={Position.Bottom} className="card-handle" isConnectable={false} />
     </div>
   );
-}
+});
